@@ -531,20 +531,21 @@ private fun TrackRow(
         )
         if (selectionMode) {
             // The overflow would be redundant while the contextual bar owns the actions.
-            Icon(
-                painter = painterResource(
-                    if (isSelected) R.drawable.ic_check else R.drawable.ic_close
-                ),
-                contentDescription = if (isSelected) "Selected" else "Not selected",
-                tint = if (isSelected) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                },
-                modifier = Modifier
-                    .padding(start = 8.dp)
-                    .size(24.dp),
-            )
+            // Unselected rows show *nothing* rather than an ✕: a cross reads as "remove",
+            // which is the opposite of "not selected". The space is reserved so rows
+            // don't shift as the selection changes.
+            if (isSelected) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_check),
+                    contentDescription = "Selected",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .padding(start = 8.dp)
+                        .size(24.dp),
+                )
+            } else {
+                Spacer(Modifier.padding(start = 8.dp).size(24.dp))
+            }
         } else {
             Box {
                 IconButton(onClick = { menu = true }) {

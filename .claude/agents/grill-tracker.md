@@ -89,12 +89,32 @@ defects that made whole features non-functional.
    playback, not navigation.** Verified: service runs, session is active, and it is the
    system's media-button session.
 
-### Verified working
-Video library + thumbnails (Coil `VideoFrameDecoder`), duration badges hidden when
-metadata is absent, audio library with embedded titles, `<unknown>` → "Unknown artist",
-`TITLE COLLATE NOCASE` ordering, album-art fallback, row overflow, audio player transport,
-**queue advance through 5 tracks**, live metadata updates on transition
-(`MediaMetadata` on the queue items), repeat toggle + active tint, equalizer entry point.
+### Verified working (device, API 35)
+Video library + Coil thumbnails; duration badge correctly hidden when MediaStore reports
+0; audio library with embedded titles, `<unknown>` → "Unknown artist", `COLLATE NOCASE`
+ordering, art fallback, row overflow; audio player transport; **queue advancing across
+tracks with metadata updating live**; repeat toggle + active tint; equalizer entry point.
+
+**Equalizer** — `audiofx` is permitted here. Band frequencies (60/230/910Hz, 3/14kHz) and
+preset names are **queried from hardware**, not assumed. "Applies to speaker" confirms live
+route detection. **No Preamp section appears**, i.e. `LoudnessEnhancer` construction failed
+and the EQ/bass/virtualizer stayed available — the per-effect independent gating working
+exactly as designed.
+
+**Mini-player** — appears for audio, persists across tabs and other screens, keeps showing
+while **paused** (the `PlaybackKind`-over-`isPlaying` decision, confirmed).
+
+**Multi-select** — long-press enters selection, contextual bar with count and actions,
+selected row tints. *Wart found and fixed:* unselected rows rendered an ✕ (`ic_close`),
+which reads as "remove" rather than "not selected"; now blank with reserved space.
+
+**Trash (end to end)** — the OS dialog reads "Allow … to **move this audio file to
+trash**?", proving `createTrashRequest` (not delete) and that the system supplies the
+confirmation. The correct file was removed, the list re-queried, and the file survives on
+disk as `/sdcard/Music/Rock/.trashed-…-track_rock.ogg` — recoverable, as designed.
+*(A discrepancy during testing looked like the wrong file being trashed; it was a bad
+assumption about embedded titles — `Alarm_Beep_01.ogg` is titled "Piezo Alarm". Selection
+resolves correctly.)*
 
 ### RESOLVED — notification (was open)
 **Cause: the session was never registered with the service.** `MediaSessionService` only
