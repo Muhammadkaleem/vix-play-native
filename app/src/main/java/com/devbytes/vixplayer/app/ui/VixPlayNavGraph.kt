@@ -154,6 +154,7 @@ fun VixPlayNavGraph() {
                 AudioPlayerScreen(
                     mediaStoreId = id,
                     onBack = { navController.popBackStack() },
+                    onEqualizerClick = { navController.navigate(EQUALIZER_ROUTE) },
                 )
             }
 

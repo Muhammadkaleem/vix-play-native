@@ -39,6 +39,7 @@ PRDs in `vix-play-docs/`, then implemented and logged in `CLAUDE.md`.
 | View | aspect Fit/Crop/Stretch, manual orientation override, immersive full-screen |
 | Extras | playback speed (persisted), Picture-in-Picture, sleep timer, screenshot |
 | Background | `MediaSessionService` + notification/lock-screen controls, audio focus (opt-in) |
+| Equalizer | multiband EQ, bass boost, virtualizer, preamp, saved presets, per-output profiles |
 
 **Audio** — library with Tracks / Albums / Artists / Folders tabs, full-screen player with seek,
 shuffle and repeat over ExoPlayer's native queue, and a persistent mini-player above the tabs.
@@ -46,25 +47,24 @@ shuffle and repeat over ExoPlayer's native queue, and a persistent mini-player a
 **Library shell** — video library, folder browser, search, history, settings hub, About.
 
 **Not yet built** — libass (full ASS/SSA fidelity) · subtitle online search · network streaming
-(SMB/FTP) · Chromecast · equalizer · playlists · private folder · Android TV.
+(SMB/FTP) · Chromecast · playlists · private folder · Android TV.
 
 ## Current grill
 
-**Subtitle styling — built, not yet device-verified.** Four presets (Netflix / Cinema / Minimal /
-Classic) plus size, position, colour, background, edge and font. One editor component hosted in two
-places — full-screen in Settings, and as a sheet over the player — both writing the same persisted
-style, so they can't disagree.
+**Equalizer — built, not yet device-verified.** Multiband EQ with bass boost, virtualizer and
+preamp, saved custom presets, and a separate profile per output route so headphones and speaker can
+hold different curves.
 
-This was previously listed as blocked on libass. That was wrong: Media3's `SubtitleView` exposes
-every property the PRD asks for, including the embedded-ASS override. libass only affects fidelity
-of embedded ASS rendering, which remains genuinely unbuilt.
+Band count, frequencies, level range and preset names are all read from the hardware rather than
+assumed — they vary by device. The app generates and owns its audio session id, which means effects
+bind once and can never be orphaned by a track change; the PRD's rebind edge case stops existing
+rather than being handled.
 
-Embedded styles are respected by default, so deliberately-styled releases render as authored. Text
-size is the one exception — it always applies, because "subtitles are too small" is the most common
-complaint and it would otherwise do nothing on the very files people complain about.
+This also fixed a reachability bug: `EqualizerScreen` had a route and a callback but nothing ever
+invoked it, so the screen was unreachable from anywhere in the app.
 
-> Five features now await a device run: background playback, the audio slice, the mini-player,
-> groupings, and this.
+> Six features now await a device run. The equalizer is the one that most needs it — audio effects
+> are restricted on some ROMs, and the graceful-disable path can only be confirmed on hardware.
 
 ## Next grill
 
@@ -72,5 +72,4 @@ Candidates, in rough priority order:
 
 1. **Share the screenshot** — small follow-up: plumb the saved MediaStore uri into a share intent.
 2. **Playlists (Step 7)** — needs a Room data model; would add the fifth audio tab.
-3. **Equalizer (Step 6)** — `EqualizerScreen` is still a stub; needs Android's `Equalizer` audio
-   effect bound to the player session.
+3. **Pinch-to-zoom / gesture remap UI (Step 7)** — needs a persisted gesture-binding model.

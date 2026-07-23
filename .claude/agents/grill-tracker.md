@@ -57,10 +57,11 @@ screen-by-screen through `/grill-me` sessions.
 | **Audio mini-player** | `PlaybackKind`-gated bar above the tabs; `MediaMetadata` moved onto the queue; ⚠️ not device-verified |
 | **Audio groupings** | Albums/Artists/Folders tabs, in-memory `groupBy`, in-place drill; ⚠️ not device-verified |
 | **Subtitle styling** | 4 presets + per-property, shared editor in Settings + player sheet; ⚠️ not device-verified |
+| **Equalizer** | full scope — bands/bass/virtualizer/preamp, saved presets, per-output; Room v2 migration; ⚠️ not device-verified |
 
 ## Current grill
 
-None in progress. **Five consecutive features are now built but unrun on hardware.** This is the largest untested surface the project has carried
+None in progress. **Six consecutive features are now built but unrun on hardware.** This is the largest untested surface the project has carried
 and it keeps growing; clear it before adding more.
 
 Device checklist:
@@ -80,6 +81,15 @@ Device checklist:
 - **Subtitle styling:** presets visibly change the captions; the size slider works on an
   ASS file even with the override toggle off (the deliberate asymmetry); Settings and the
   player sheet show the same values.
+- **Equalizer (needs hardware most):** effects are permitted at all on this device — if
+  not, the screen must show the explanation and NO controls; bands audibly change output;
+  settings survive a track change and an app restart; plugging in headphones swaps to that
+  route's profile; saving and re-applying a preset round-trips.
+- **Room migration 1 → 2:** *verified without hardware* — the hand-written DDL matches
+  Room's exported `schemas/…/2.json` exactly, so schema validation passes, and the
+  migration only adds tables (it never touches `playback_positions`), so resume history
+  is preserved by construction. Still worth a glance at Continue Watching after the
+  first upgrade, but this is no longer an open risk.
 
 ## Next grill
 
@@ -87,9 +97,7 @@ Device checklist:
    share intent, likely as an action on the confirmation pill.
 2. **Playlists (Step 7)** — needs Room entities (playlist + playlist_track), CRUD UI, and
    the `/playlists/{id}` route. Would add the deferred fifth audio tab.
-3. **Equalizer (Step 6)** — `EqualizerScreen` is a stub; needs Android's `Equalizer`
-   audio effect bound to the player's audio session id.
-4. **Pinch-to-zoom / gesture remap UI** — Step 7 polish; remap needs a persisted binding
+3. **Pinch-to-zoom / gesture remap UI** — Step 7 polish; remap needs a persisted binding
    model (`GestureModels.kt` in the PRD is aspirational, doesn't exist).
 
 ## Blocked

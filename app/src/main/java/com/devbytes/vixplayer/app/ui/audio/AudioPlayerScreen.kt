@@ -117,6 +117,14 @@ fun AudioPlayerScreen(
                         )
                     }
                 },
+                actions = {
+                    IconButton(onClick = onEqualizerClick) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_equalizer),
+                            contentDescription = "Equalizer",
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                 ),

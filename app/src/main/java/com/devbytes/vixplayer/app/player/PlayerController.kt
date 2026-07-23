@@ -1,6 +1,7 @@
 package com.devbytes.vixplayer.app.player
 
 import android.content.Context
+import android.media.AudioManager
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -52,7 +53,18 @@ data class QueueItem(
 @Singleton
 class PlayerController @Inject constructor(
     @ApplicationContext context: Context,
+    private val audioEffects: AudioEffects,
 ) {
+    /**
+     * The app generates and owns its audio session, rather than letting ExoPlayer pick
+     * one per track. Audio effects bind to this id once and stay bound: a session we own
+     * cannot be invalidated by a track change or queue transition, which removes the
+     * rebind problem entirely instead of handling it.
+     */
+    private val audioSessionId: Int =
+        (context.getSystemService(Context.AUDIO_SERVICE) as AudioManager)
+            .generateAudioSessionId()
+
     /** Read by the subtitle parser at parse time; see [OffsetSubtitleParserFactory]. */
     val subtitleOffset = SubtitleOffsetHolder()
 
@@ -78,6 +90,13 @@ class PlayerController @Inject constructor(
         // Pause when headphones are unplugged rather than blasting the speaker.
         .setHandleAudioBecomingNoisy(true)
         .build()
+        .apply { setAudioSessionId(this@PlayerController.audioSessionId) }
+
+    init {
+        // Safe on unsupported hardware: attach() swallows the failure and reports
+        // isSupported = false, which the UI renders as an explicit disabled state.
+        audioEffects.attach(audioSessionId)
+    }
 
     /**
      * Opens [uri], resetting every piece of per-file state in one place.
