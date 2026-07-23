@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 820" font-family="Inter, 'Segoe UI', system-ui, sans-serif">
+  <defs>
+    <linearGradient id="acc2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6D5BFF"/><stop offset="1" stop-color="#B24BFF"/></linearGradient>
+    <linearGradient id="t1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1E3A5F"/><stop offset="1" stop-color="#2AA7B0"/></linearGradient>
+    <linearGradient id="t2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5B2A6E"/><stop offset="1" stop-color="#C0466E"/></linearGradient>
+    <linearGradient id="scene2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#20243A"/><stop offset="1" stop-color="#141220"/></linearGradient>
+    <clipPath id="cE"><rect x="0" y="0" width="300" height="670" rx="34"/></clipPath>
+    <clipPath id="cF"><rect x="0" y="0" width="300" height="670" rx="34"/></clipPath>
+    <clipPath id="cG"><rect x="0" y="0" width="300" height="670" rx="34"/></clipPath>
+  </defs>
+
+  <rect width="1100" height="820" fill="#0A0B0E"/>
+  <text x="40" y="46" fill="#F2F3F5" font-size="26" font-weight="700">App Design — Screen Mockups (2)</text>
+  <text x="40" y="70" fill="#8A8D98" font-size="14">Browsing · subtitles · theming</text>
+
+  <!-- ===== PHONE E: FOLDER BROWSER ===== -->
+  <g transform="translate(40,92)">
+    <rect width="320" height="700" rx="42" fill="#000" stroke="#23252F" stroke-width="2"/>
+    <g transform="translate(10,15)" clip-path="url(#cE)">
+      <rect width="300" height="670" fill="#121316"/>
+      <text x="20" y="26" fill="#E7E8EC" font-size="12" font-weight="600">9:41</text>
+      <path d="M22,54 l-10,8 l10,8" fill="none" stroke="#fff" stroke-width="2"/>
+      <text x="42" y="66" fill="#F2F3F5" font-size="19" font-weight="700">Movies</text>
+      <g fill="#C9CBD3"><path d="M256,54 h18 M256,60 h18 M256,66 h12" stroke="#C9CBD3" stroke-width="2"/></g>
+      <!-- storage chips -->
+      <g transform="translate(20,84)">
+        <rect width="70" height="24" rx="12" fill="url(#acc2)"/><text x="35" y="16" fill="#fff" font-size="10" text-anchor="middle">Internal</text>
+        <rect x="80" width="60" height="24" rx="12" fill="#1C1D22"/><text x="110" y="16" fill="#A0A3AD" font-size="10" text-anchor="middle">SD card</text>
+        <rect x="150" width="86" height="24" rx="12" fill="#1C1D22"/><text x="193" y="16" fill="#A0A3AD" font-size="10" text-anchor="middle">Network</text>
+      </g>
+      <!-- breadcrumb -->
+      <text x="20" y="132" fill="#7E818C" font-size="10">Internal › Movies</text>
+      <!-- rows -->
+      <g transform="translate(20,146)">
+        <!-- folder -->
+        <rect width="260" height="46" rx="8" fill="#16171C"/><path d="M14,16 h14 l4,5 h16 v14 h-34 z" fill="#6D5BFF"/><text x="60" y="22" fill="#EDEEF0" font-size="12" font-weight="600">Marvel</text><text x="60" y="36" fill="#7E818C" font-size="9">24 videos</text>
+        <g transform="translate(0,54)"><rect width="260" height="46" rx="8" fill="#16171C"/><path d="M14,16 h14 l4,5 h16 v14 h-34 z" fill="#6D5BFF"/><text x="60" y="22" fill="#EDEEF0" font-size="12" font-weight="600">Christopher Nolan</text><text x="60" y="36" fill="#7E818C" font-size="9">8 videos</text></g>
+        <!-- files -->
+        <g transform="translate(0,108)"><rect width="260" height="50" rx="8" fill="#16171C"/><rect x="10" y="9" width="56" height="32" rx="5" fill="url(#t1)"/><polygon points="33,18 33,32 45,25" fill="#ffffffcc"/><text x="76" y="24" fill="#EDEEF0" font-size="11" font-weight="600">Interstellar.2014.mkv</text><text x="76" y="38" fill="#7E818C" font-size="9">2h 49m · 12.4 GB</text><rect x="76" y="42" width="60" height="3" rx="1.5" fill="url(#acc2)"/></g>
+        <g transform="translate(0,166)"><rect width="260" height="50" rx="8" fill="#16171C"/><rect x="10" y="9" width="56" height="32" rx="5" fill="url(#t2)"/><polygon points="33,18 33,32 45,25" fill="#ffffffcc"/><text x="76" y="24" fill="#EDEEF0" font-size="11" font-weight="600">Dune.Part.Two.mkv</text><text x="76" y="38" fill="#7E818C" font-size="9">2h 46m · 18.1 GB</text></g>
+        <g transform="translate(0,224)"><rect width="260" height="50" rx="8" fill="#16171C"/><rect x="10" y="9" width="56" height="32" rx="5" fill="#2A2C36"/><polygon points="33,18 33,32 45,25" fill="#ffffff88"/><text x="76" y="24" fill="#EDEEF0" font-size="11" font-weight="600">Sinners.2025.mp4</text><text x="76" y="38" fill="#7E818C" font-size="9">2h 18m · 9.2 GB</text></g>
+      </g>
+      <rect x="120" y="7" width="60" height="9" rx="4.5" fill="#000"/>
+    </g>
+    <text x="160" y="726" fill="#9A9DA8" font-size="13" text-anchor="middle" font-weight="600">Folder Browser</text>
+  </g>
+
+  <!-- ===== PHONE F: SUBTITLE MANAGER (sheet) ===== -->
+  <g transform="translate(390,92)">
+    <rect width="320" height="700" rx="42" fill="#000" stroke="#23252F" stroke-width="2"/>
+    <g transform="translate(10,15)" clip-path="url(#cF)">
+      <rect width="300" height="670" fill="url(#scene2)"/>
+      <circle cx="210" cy="120" r="40" fill="#ffffff10"/>
+      <rect width="300" height="670" fill="#00000099"/>
+      <!-- sheet -->
+      <g transform="translate(0,300)">
+        <rect width="300" height="370" rx="22" fill="#1A1B21"/>
+        <rect x="132" y="12" width="36" height="4" rx="2" fill="#3A3C46"/>
+        <text x="20" y="46" fill="#F2F3F5" font-size="16" font-weight="700">Subtitles</text>
+        <!-- tracks -->
+        <g transform="translate(20,64)">
+          <rect width="260" height="40" rx="8" fill="#232430"/><text x="14" y="25" fill="#A0A3AD" font-size="12">Off</text>
+          <g transform="translate(0,48)"><rect width="260" height="40" rx="8" fill="#6D5BFF22" stroke="url(#acc2)" stroke-width="1.5"/><text x="14" y="25" fill="#F2F3F5" font-size="12" font-weight="600">English (embedded)</text><path d="M236,20 l5,5 l9,-11" fill="none" stroke="#B39BFF" stroke-width="2.5"/></g>
+          <g transform="translate(0,96)"><rect width="260" height="40" rx="8" fill="#232430"/><text x="14" y="25" fill="#D7D9DF" font-size="12">Spanish.srt</text></g>
+        </g>
+        <!-- actions -->
+        <g transform="translate(20,224)" fill="#C9CBD3" font-size="10" text-anchor="middle">
+          <g transform="translate(30,0)"><rect x="-22" y="0" width="44" height="44" rx="10" fill="#232430"/><path d="M-8,22 h16 M0,14 v16 M-6,14 h12" stroke="#B39BFF" stroke-width="2" fill="none"/><text y="58">Load</text></g>
+          <g transform="translate(95,0)"><rect x="-22" y="0" width="44" height="44" rx="10" fill="#232430"/><circle cx="-2" cy="20" r="7" fill="none" stroke="#B39BFF" stroke-width="2"/><line x1="4" y1="26" x2="10" y2="32" stroke="#B39BFF" stroke-width="2"/><text y="58">Search</text></g>
+          <g transform="translate(160,0)"><rect x="-22" y="0" width="44" height="44" rx="10" fill="#232430"/><text y="26" fill="#B39BFF" font-size="14" font-weight="700">±</text><text y="58">Sync</text></g>
+          <g transform="translate(225,0)"><rect x="-22" y="0" width="44" height="44" rx="10" fill="#232430"/><text y="26" fill="#B39BFF" font-size="12" font-weight="700">Aa</text><text y="58">Style</text></g>
+        </g>
+      </g>
+    </g>
+    <text x="160" y="726" fill="#9A9DA8" font-size="13" text-anchor="middle" font-weight="600">Subtitle Manager</text>
+  </g>
+
+  <!-- ===== PHONE G: APPEARANCE / THEMING ===== -->
+  <g transform="translate(740,92)">
+    <rect width="320" height="700" rx="42" fill="#000" stroke="#23252F" stroke-width="2"/>
+    <g transform="translate(10,15)" clip-path="url(#cG)">
+      <rect width="300" height="670" fill="#121316"/>
+      <text x="20" y="26" fill="#E7E8EC" font-size="12" font-weight="600">9:41</text>
+      <path d="M22,54 l-10,8 l10,8" fill="none" stroke="#fff" stroke-width="2"/>
+      <text x="42" y="66" fill="#F2F3F5" font-size="19" font-weight="700">Appearance</text>
+      <!-- theme -->
+      <text x="20" y="98" fill="#C9CBD3" font-size="12" font-weight="600">Theme</text>
+      <g transform="translate(20,108)">
+        <rect width="58" height="72" rx="10" fill="#F2F3F5"/><text x="29" y="88" fill="#A0A3AD" font-size="9" text-anchor="middle">Light</text>
+        <g transform="translate(66,0)"><rect width="58" height="72" rx="10" fill="#1C1D22" stroke="url(#acc2)" stroke-width="2"/><text x="29" y="88" fill="#B39BFF" font-size="9" text-anchor="middle">Dark</text></g>
+        <g transform="translate(132,0)"><rect width="58" height="72" rx="10" fill="#000"/><text x="29" y="88" fill="#A0A3AD" font-size="9" text-anchor="middle">AMOLED</text></g>
+        <g transform="translate(198,0)"><rect width="58" height="72" rx="10" fill="#2A2440"/><circle cx="29" cy="30" r="12" fill="url(#acc2)"/><text x="29" y="88" fill="#A0A3AD" font-size="9" text-anchor="middle">Dynamic</text></g>
+      </g>
+      <!-- accent -->
+      <text x="20" y="222" fill="#C9CBD3" font-size="12" font-weight="600">Accent</text>
+      <g transform="translate(20,232)">
+        <circle cx="14" cy="14" r="14" fill="url(#acc2)" stroke="#fff" stroke-width="2"/>
+        <circle cx="52" cy="14" r="14" fill="#0A84FF"/><circle cx="90" cy="14" r="14" fill="#22C55E"/><circle cx="128" cy="14" r="14" fill="#FF5E62"/><circle cx="166" cy="14" r="14" fill="#F0B455"/><circle cx="204" cy="14" r="14" fill="#EC4899"/>
+      </g>
+      <!-- skin -->
+      <text x="20" y="298" fill="#C9CBD3" font-size="12" font-weight="600">Player skin</text>
+      <g transform="translate(20,308)" font-size="10" text-anchor="middle">
+        <rect width="60" height="26" rx="13" fill="url(#acc2)"/><text x="30" y="17" fill="#fff">Minimal</text>
+        <rect x="68" width="58" height="26" rx="13" fill="#1C1D22"/><text x="97" y="17" fill="#A0A3AD">Classic</text>
+        <rect x="134" width="56" height="26" rx="13" fill="#1C1D22"/><text x="162" y="17" fill="#A0A3AD">Cinema</text>
+        <rect x="198" width="44" height="26" rx="13" fill="#1C1D22"/><text x="220" y="17" fill="#A0A3AD">Pro</text>
+      </g>
+      <!-- toggles -->
+      <g transform="translate(20,356)">
+        <rect width="260" height="46" rx="10" fill="#16171C"/><text x="14" y="28" fill="#EDEEF0" font-size="12">Ambient backglow</text>
+        <rect x="216" y="14" width="34" height="18" rx="9" fill="url(#acc2)"/><circle cx="241" cy="23" r="7" fill="#fff"/>
+        <g transform="translate(0,54)"><rect width="260" height="46" rx="10" fill="#16171C"/><text x="14" y="28" fill="#EDEEF0" font-size="12">Adaptive fullscreen dim</text><rect x="216" y="14" width="34" height="18" rx="9" fill="url(#acc2)"/><circle cx="241" cy="23" r="7" fill="#fff"/></g>
+        <g transform="translate(0,108)"><rect width="260" height="46" rx="10" fill="#16171C"/><text x="14" y="28" fill="#EDEEF0" font-size="12">AMOLED pure black</text><rect x="216" y="14" width="34" height="18" rx="9" fill="#33343E"/><circle cx="225" cy="23" r="7" fill="#8A8D98"/></g>
+      </g>
+      <rect x="120" y="7" width="60" height="9" rx="4.5" fill="#000"/>
+    </g>
+    <text x="160" y="726" fill="#9A9DA8" font-size="13" text-anchor="middle" font-weight="600">Settings · Appearance</text>
+  </g>
+</svg>

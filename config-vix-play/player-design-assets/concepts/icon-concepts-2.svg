@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 760" font-family="Inter, 'Segoe UI', system-ui, sans-serif">
+  <defs>
+    <linearGradient id="gViolet" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6D5BFF"/><stop offset="1" stop-color="#B24BFF"/>
+    </linearGradient>
+    <linearGradient id="gCyanBlue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0A84FF"/><stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+    <linearGradient id="gWarm" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7A5BFF"/><stop offset="1" stop-color="#FF5E9A"/>
+    </linearGradient>
+    <linearGradient id="gDuo" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#22D3EE"/><stop offset="0.5" stop-color="#22D3EE"/>
+      <stop offset="0.5" stop-color="#8B5BFF"/><stop offset="1" stop-color="#B24BFF"/>
+    </linearGradient>
+    <linearGradient id="gGem" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8B5BFF"/><stop offset="1" stop-color="#C04BFF"/>
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <rect width="1000" height="760" fill="#0C0D11"/>
+  <text x="60" y="60" fill="#F2F3F5" font-size="30" font-weight="700">More Directions · 7–14</text>
+  <text x="60" y="90" fill="#8A8D98" font-size="15">Eight fresh ideas — built on speed, casting, quality &amp; the video/audio duality</text>
+
+  <!-- ROW 1 -->
+
+  <!-- 7 Motion Trail -->
+  <g transform="translate(60,150) scale(0.9)" filter="url(#soft)">
+    <rect width="200" height="200" rx="46" fill="url(#gViolet)"/>
+    <path d="M84,64 L84,136 L146,100 Z" fill="#fff" opacity="0.2" transform="translate(-46,0)"/>
+    <path d="M84,64 L84,136 L146,100 Z" fill="#fff" opacity="0.45" transform="translate(-24,0)"/>
+    <path d="M84,64 L84,136 L146,100 Z" fill="#fff" stroke="#fff" stroke-width="12" stroke-linejoin="round"/>
+  </g>
+  <text x="150" y="356" fill="#EDEEF0" font-size="15" font-weight="600" text-anchor="middle">7 · Motion Trail</text>
+  <text x="150" y="376" fill="#7E818C" font-size="12" text-anchor="middle">speed &amp; scrub</text>
+
+  <!-- 8 Orbit -->
+  <g transform="translate(293,150) scale(0.9)" filter="url(#soft)">
+    <rect width="200" height="200" rx="46" fill="#111218"/>
+    <ellipse cx="100" cy="100" rx="80" ry="40" fill="none" stroke="#3A3550" stroke-width="6" transform="rotate(-18 100 100)"/>
+    <circle cx="166" cy="66" r="10" fill="url(#gViolet)"/>
+    <path d="M84,72 L84,128 L132,100 Z" fill="url(#gViolet)" stroke="url(#gViolet)" stroke-width="12" stroke-linejoin="round"/>
+  </g>
+  <text x="383" y="356" fill="#EDEEF0" font-size="15" font-weight="600" text-anchor="middle">8 · Orbit</text>
+  <text x="383" y="376" fill="#7E818C" font-size="12" text-anchor="middle">stream &amp; cast</text>
+
+  <!-- 9 Pixel -->
+  <g transform="translate(526,150) scale(0.9)" filter="url(#soft)">
+    <rect width="200" height="200" rx="46" fill="url(#gCyanBlue)"/>
+    <path d="M66,66 L66,134 L118,100 Z" fill="#fff" stroke="#fff" stroke-width="10" stroke-linejoin="round"/>
+    <rect x="126" y="84" width="16" height="16" rx="4" fill="#fff" opacity="0.9"/>
+    <rect x="148" y="94" width="13" height="13" rx="3.5" fill="#fff" opacity="0.65"/>
+    <rect x="150" y="72" width="11" height="11" rx="3" fill="#fff" opacity="0.4"/>
+  </g>
+  <text x="616" y="356" fill="#EDEEF0" font-size="15" font-weight="600" text-anchor="middle">9 · Pixel</text>
+  <text x="616" y="376" fill="#7E818C" font-size="12" text-anchor="middle">frames &amp; quality</text>
+
+  <!-- 10 Liquid -->
+  <g transform="translate(759,150) scale(0.9)" filter="url(#soft)">
+    <rect width="200" height="200" rx="46" fill="url(#gWarm)"/>
+    <path d="M82,60 Q68,100 82,140 Q118,128 148,100 Q118,72 82,60 Z" fill="#fff"/>
+  </g>
+  <text x="849" y="356" fill="#EDEEF0" font-size="15" font-weight="600" text-anchor="middle">10 · Liquid</text>
+  <text x="849" y="376" fill="#7E818C" font-size="12" text-anchor="middle">playful &amp; modern</text>
+
+  <!-- ROW 2 -->
+
+  <!-- 11 Dial -->
+  <g transform="translate(60,480) scale(0.9)" filter="url(#soft)">
+    <rect width="200" height="200" rx="46" fill="#111218"/>
+    <circle cx="100" cy="100" r="72" fill="none" stroke="#262833" stroke-width="10" stroke-dasharray="4 13.1" stroke-linecap="round"/>
+    <circle cx="100" cy="100" r="72" fill="none" stroke="url(#gViolet)" stroke-width="10"
+            stroke-dasharray="4 13.1 4 13.1 4 13.1 4 13.1 4 13.1 4 13.1 4 13.1 4 500" stroke-linecap="round"
+            transform="rotate(-90 100 100)"/>
+    <path d="M84,74 L84,126 L128,100 Z" fill="#fff" stroke="#fff" stroke-width="10" stroke-linejoin="round"/>
+  </g>
+  <text x="150" y="686" fill="#EDEEF0" font-size="15" font-weight="600" text-anchor="middle">11 · Dial</text>
+  <text x="150" y="706" fill="#7E818C" font-size="12" text-anchor="middle">progress ring</text>
+
+  <!-- 12 Broadcast -->
+  <g transform="translate(293,480) scale(0.9)" filter="url(#soft)">
+    <rect width="200" height="200" rx="46" fill="url(#gViolet)"/>
+    <path d="M54,64 L54,136 L104,100 Z" fill="#fff" stroke="#fff" stroke-width="10" stroke-linejoin="round"/>
+    <path d="M120,80 A26 26 0 0 1 120,120" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" opacity="0.9"/>
+    <path d="M134,66 A44 44 0 0 1 134,134" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" opacity="0.55"/>
+    <path d="M148,52 A62 62 0 0 1 148,148" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" opacity="0.3"/>
+  </g>
+  <text x="383" y="686" fill="#EDEEF0" font-size="15" font-weight="600" text-anchor="middle">12 · Broadcast</text>
+  <text x="383" y="706" fill="#7E818C" font-size="12" text-anchor="middle">cast waves</text>
+
+  <!-- 13 Duo Split -->
+  <g transform="translate(526,480) scale(0.9)" filter="url(#soft)">
+    <rect width="200" height="200" rx="46" fill="#111218"/>
+    <path d="M78,62 L78,138 L144,100 Z" fill="url(#gDuo)"/>
+    <line x1="78" y1="100" x2="144" y2="100" stroke="#111218" stroke-width="4"/>
+  </g>
+  <text x="616" y="686" fill="#EDEEF0" font-size="15" font-weight="600" text-anchor="middle">13 · Duo Split</text>
+  <text x="616" y="706" fill="#7E818C" font-size="12" text-anchor="middle">video + audio</text>
+
+  <!-- 14 Gem -->
+  <g transform="translate(759,480) scale(0.9)" filter="url(#soft)">
+    <rect width="200" height="200" rx="46" fill="#111218"/>
+    <polygon points="100,28 172,100 100,172 28,100" fill="url(#gGem)"/>
+    <g stroke="#fff" stroke-opacity="0.28" stroke-width="3" fill="none">
+      <polygon points="100,52 148,100 100,148 52,100"/>
+      <line x1="100" y1="28" x2="100" y2="52"/>
+      <line x1="172" y1="100" x2="148" y2="100"/>
+      <line x1="100" y1="172" x2="100" y2="148"/>
+      <line x1="28" y1="100" x2="52" y2="100"/>
+    </g>
+    <path d="M88,80 L88,120 L120,100 Z" fill="#fff"/>
+  </g>
+  <text x="849" y="686" fill="#EDEEF0" font-size="15" font-weight="600" text-anchor="middle">14 · Gem</text>
+  <text x="849" y="706" fill="#7E818C" font-size="12" text-anchor="middle">premium facet</text>
+
+  <text x="60" y="742" fill="#5D606B" font-size="12">All on the Android squircle · check legibility at 48dp before committing (busier marks lose detail small)</text>
+</svg>

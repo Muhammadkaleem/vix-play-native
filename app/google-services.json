@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "119311830188",
+    "project_id": "devbytes-d260c",
+    "storage_bucket": "devbytes-d260c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:119311830188:android:abcc56596455f81bc6e309",
+        "android_client_info": {
+          "package_name": "com.devbytes.vixplayer.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAnp5Ebo8ogayKpVdGOC9GClCCvvlbgpVE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

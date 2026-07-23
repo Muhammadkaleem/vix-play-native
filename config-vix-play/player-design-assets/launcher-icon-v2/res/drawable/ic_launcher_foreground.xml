@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+
+    <!-- Orbit ring + satellite dot (rotated group), kept inside the 66dp safe circle -->
+    <group android:name="orbit" android:rotation="-18" android:pivotX="54" android:pivotY="54">
+        <path
+            android:strokeColor="#FF4A4560" android:strokeWidth="3.5"
+            android:fillColor="#00000000"
+            android:pathData="M27,54 a27,13.5 0 1 0 54,0 a27,13.5 0 1 0 -54,0"/>
+        <path
+            android:fillColor="#FFB24BFF"
+            android:pathData="M74.7,45.3 m-4.5,0 a4.5,4.5 0 1 0 9,0 a4.5,4.5 0 1 0 -9,0"/>
+    </group>
+
+    <!-- Play mark (gradient fill + stroke for rounded corners) -->
+    <path
+        android:pathData="M45,41 L45,67 L70,54 Z"
+        android:strokeWidth="5" android:strokeLineJoin="round">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear"
+                android:startX="45" android:startY="41" android:endX="70" android:endY="67">
+                <item android:offset="0" android:color="#FF6D5BFF"/>
+                <item android:offset="1" android:color="#FFB24BFF"/>
+            </gradient>
+        </aapt:attr>
+        <aapt:attr name="android:strokeColor">
+            <gradient android:type="linear"
+                android:startX="45" android:startY="41" android:endX="70" android:endY="67">
+                <item android:offset="0" android:color="#FF6D5BFF"/>
+                <item android:offset="1" android:color="#FFB24BFF"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>

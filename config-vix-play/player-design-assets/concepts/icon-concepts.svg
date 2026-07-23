@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 780" font-family="Inter, 'Segoe UI', system-ui, sans-serif">
+  <defs>
+    <linearGradient id="gViolet" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6D5BFF"/>
+      <stop offset="1" stop-color="#B24BFF"/>
+    </linearGradient>
+    <linearGradient id="gCyanBlue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0A84FF"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+    <linearGradient id="gWarm" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7A5BFF"/>
+      <stop offset="1" stop-color="#FF5E9A"/>
+    </linearGradient>
+    <linearGradient id="gApt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8B5BFF"/>
+      <stop offset="1" stop-color="#C04BFF"/>
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <rect width="1000" height="780" fill="#0C0D11"/>
+  <text x="60" y="62" fill="#F2F3F5" font-size="30" font-weight="700">Player — Launch Icon Concepts</text>
+  <text x="60" y="92" fill="#8A8D98" font-size="15">Android adaptive-icon shape · indigo/violet identity · recommended: Seek Arc</text>
+
+  <!-- ================= ROW 1 ================= -->
+
+  <!-- T1 Seek Arc (RECOMMENDED) -->
+  <g transform="translate(100,140)" filter="url(#soft)">
+    <rect width="200" height="200" rx="46" fill="url(#gViolet)"/>
+    <circle cx="100" cy="100" r="70" fill="none" stroke="#FFFFFF" stroke-opacity="0.9"
+            stroke-width="13" stroke-linecap="round"
+            stroke-dasharray="300 140" transform="rotate(128 100 100)"/>
+    <circle cx="100" cy="30" r="11" fill="#FFFFFF"/>
+    <path d="M78,66 L78,134 L138,100 Z" fill="#fff" stroke="#fff" stroke-width="14" stroke-linejoin="round"/>
+  </g>
+  <text x="200" y="378" fill="#EDEEF0" font-size="16" font-weight="600" text-anchor="middle">1 · Seek Arc ★</text>
+  <text x="200" y="400" fill="#7E818C" font-size="12.5" text-anchor="middle">play + scrub ring</text>
+
+  <!-- T2 Aperture -->
+  <g transform="translate(400,140)" filter="url(#soft)">
+    <rect width="200" height="200" rx="46" fill="#111218"/>
+    <polygon points="178,100 139,167.5 61,167.5 22,100 61,32.5 139,32.5" fill="url(#gApt)"/>
+    <!-- aperture blade lines -->
+    <g stroke="#111218" stroke-width="5" stroke-linecap="round">
+      <line x1="100" y1="100" x2="178" y2="100"/>
+      <line x1="100" y1="100" x2="139" y2="167.5"/>
+      <line x1="100" y1="100" x2="61" y2="167.5"/>
+      <line x1="100" y1="100" x2="22" y2="100"/>
+      <line x1="100" y1="100" x2="61" y2="32.5"/>
+      <line x1="100" y1="100" x2="139" y2="32.5"/>
+    </g>
+    <path d="M84,74 L84,126 L128,100 Z" fill="#111218" stroke="#111218" stroke-width="12" stroke-linejoin="round"/>
+  </g>
+  <text x="500" y="378" fill="#EDEEF0" font-size="16" font-weight="600" text-anchor="middle">2 · Aperture</text>
+  <text x="500" y="400" fill="#7E818C" font-size="12.5" text-anchor="middle">play cut from lens</text>
+
+  <!-- T3 Frame -->
+  <g transform="translate(700,140)" filter="url(#soft)">
+    <rect width="200" height="200" rx="46" fill="url(#gCyanBlue)"/>
+    <rect x="42" y="54" width="116" height="92" rx="20" fill="none" stroke="#fff" stroke-width="13"/>
+    <path d="M86,76 L86,124 L124,100 Z" fill="#fff" stroke="#fff" stroke-width="12" stroke-linejoin="round"/>
+  </g>
+  <text x="800" y="378" fill="#EDEEF0" font-size="16" font-weight="600" text-anchor="middle">3 · Frame</text>
+  <text x="800" y="400" fill="#7E818C" font-size="12.5" text-anchor="middle">viewport + play</text>
+
+  <!-- ================= ROW 2 ================= -->
+
+  <!-- T4 Wave (video + audio) -->
+  <g transform="translate(100,440)" filter="url(#soft)">
+    <rect width="200" height="200" rx="46" fill="url(#gViolet)"/>
+    <path d="M56,62 L56,138 L112,100 Z" fill="#fff" stroke="#fff" stroke-width="12" stroke-linejoin="round"/>
+    <g fill="#fff" stroke="#fff" stroke-width="0">
+      <rect x="122" y="82" width="11" height="36" rx="5.5"/>
+      <rect x="140" y="66" width="11" height="68" rx="5.5"/>
+      <rect x="158" y="76" width="11" height="48" rx="5.5"/>
+    </g>
+  </g>
+  <text x="200" y="678" fill="#EDEEF0" font-size="16" font-weight="600" text-anchor="middle">4 · Wave</text>
+  <text x="200" y="700" fill="#7E818C" font-size="12.5" text-anchor="middle">video + audio</text>
+
+  <!-- T5 Inverted / Light -->
+  <g transform="translate(400,440)" filter="url(#soft)">
+    <rect width="200" height="200" rx="46" fill="#F2F3F5"/>
+    <circle cx="100" cy="100" r="70" fill="none" stroke="url(#gViolet)"
+            stroke-width="13" stroke-linecap="round"
+            stroke-dasharray="300 140" transform="rotate(128 100 100)"/>
+    <circle cx="100" cy="30" r="11" fill="url(#gViolet)"/>
+    <path d="M78,66 L78,134 L138,100 Z" fill="url(#gViolet)"/>
+  </g>
+  <text x="500" y="678" fill="#EDEEF0" font-size="16" font-weight="600" text-anchor="middle">5 · Light variant</text>
+  <text x="500" y="700" fill="#7E818C" font-size="12.5" text-anchor="middle">Seek Arc, inverted</text>
+
+  <!-- T6 Filmstrip -->
+  <g transform="translate(700,440)" filter="url(#soft)">
+    <rect width="200" height="200" rx="46" fill="#111218"/>
+    <g fill="#2A2C36">
+      <rect x="20" y="40" width="16" height="20" rx="4"/>
+      <rect x="20" y="72" width="16" height="20" rx="4"/>
+      <rect x="20" y="104" width="16" height="20" rx="4"/>
+      <rect x="20" y="136" width="16" height="20" rx="4"/>
+      <rect x="164" y="40" width="16" height="20" rx="4"/>
+      <rect x="164" y="72" width="16" height="20" rx="4"/>
+      <rect x="164" y="104" width="16" height="20" rx="4"/>
+      <rect x="164" y="136" width="16" height="20" rx="4"/>
+    </g>
+    <path d="M82,66 L82,134 L142,100 Z" fill="url(#gWarm)" stroke="url(#gWarm)" stroke-width="14" stroke-linejoin="round"/>
+  </g>
+  <text x="800" y="678" fill="#EDEEF0" font-size="16" font-weight="600" text-anchor="middle">6 · Filmstrip</text>
+  <text x="800" y="700" fill="#7E818C" font-size="12.5" text-anchor="middle">film + play</text>
+
+  <text x="60" y="760" fill="#5D606B" font-size="12">Each rendered on the Android squircle mask · safe zone respected · scales down cleanly to 48dp</text>
+</svg>

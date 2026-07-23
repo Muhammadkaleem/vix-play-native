@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand -->
+    <color name="brand_gradient_start">#FF6D5BFF</color>
+    <color name="brand_gradient_end">#FFB24BFF</color>
+
+    <!-- Dark (default) -->
+    <color name="dark_background">#FF121316</color>
+    <color name="dark_surface">#FF16171C</color>
+    <color name="dark_sheet">#FF1C1D22</color>
+    <color name="dark_overlay">#FF1A1B1F</color>
+    <color name="dark_content_primary">#FFF2F3F5</color>
+    <color name="dark_content_secondary">#FFA0A3AD</color>
+    <color name="dark_content_disabled">#FF565863</color>
+    <color name="dark_accent">#FF8B5BFF</color>
+    <color name="dark_accent_pressed">#FF6D5BFF</color>
+    <color name="dark_on_accent">#FFFFFFFF</color>
+    <color name="dark_scrubber_track">#33FFFFFF</color>
+    <color name="dark_scrubber_buffer">#55FFFFFF</color>
+
+    <!-- AMOLED overrides -->
+    <color name="amoled_background">#FF000000</color>
+    <color name="amoled_sheet">#FF0A0A0A</color>
+
+    <!-- Light -->
+    <color name="light_background">#FFF7F7F8</color>
+    <color name="light_surface">#FFFFFFFF</color>
+    <color name="light_content_primary">#FF14151A</color>
+    <color name="light_content_secondary">#FF5B5E6B</color>
+    <color name="light_accent">#FF7A4BFF</color>
+
+    <!-- State -->
+    <color name="state_success">#FF3FBE72</color>
+    <color name="state_warning">#FFF0B455</color>
+    <color name="state_error">#FFFF6369</color>
+</resources>
