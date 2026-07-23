@@ -41,7 +41,7 @@ PRDs in `vix-play-docs/`, then implemented and logged in `CLAUDE.md`.
 | Background | `MediaSessionService` + notification/lock-screen controls, audio focus (opt-in) |
 | Equalizer | multiband EQ, bass boost, virtualizer, preamp, saved presets, per-output profiles |
 | Playlists | create/rename/delete, add from library, drag reorder, missing-file flagging |
-| Multi-select | long-press to select; add to queue, add to playlist, share |
+| Multi-select | long-press to select; add to queue, add to playlist, share, delete |
 
 **Audio** — library with Tracks / Albums / Artists / Folders / Playlists tabs, full-screen player
 with seek, shuffle and repeat over ExoPlayer's native queue, a persistent mini-player above the
@@ -54,23 +54,27 @@ tabs, and playlists with drag reorder.
 
 ## Current grill
 
-**Share the screenshot — built, not yet device-verified.** The save-confirmation pill now offers
-Share, handing the saved file to the system chooser.
+**Bulk delete — built, not yet device-verified. Destructive.** Deleting selected tracks, across the
+three flows Android requires: the OS confirmation dialog on API 30+, the recoverable-permission
+prompt on 29, and an app-provided dialog on 24–28 where the platform offers no confirmation at all.
 
-The pill lingers for 4s when there's something to share, rather than its usual ~1.2s flash — a
-notification you're meant to tap needs long enough to notice and reach. Failure messages keep the
-quick flash, since there's nothing to act on.
+The rule enforced throughout is that **no path deletes without at least one confirmation**. On API
+29 that can mean two prompts for one action; that redundancy is the right trade for something
+irreversible.
 
-Sharing hands over the URI that actually landed in the gallery rather than taking a second capture,
-so what you send is exactly what you saved.
+After a delete the app re-queries MediaStore rather than trusting what it asked to remove — the
+user can deselect items inside the system dialog, so the request isn't the outcome. Deleted tracks
+are also dropped from the active queue, so deleting what you're listening to skips onward instead
+of erroring.
 
-> Nine features now await a device run.
+> Ten features now await a device run, and this is the one where being wrong isn't recoverable.
+> Verify on files you can afford to lose.
 
 ## Next grill
 
 Candidates, in rough priority order:
 
-1. **Bulk delete** — the one multi-select action deliberately left out; needs
-   `createDeleteRequest` (API 30+), `RecoverableSecurityException` (29) and direct delete (24–28).
-2. **Lift multi-select to the video library / folder browser** — the selection primitive is ready.
-3. **Pinch-to-zoom / gesture remap UI (Step 7)** — needs a persisted gesture-binding model.
+1. **Lift multi-select to the video library / folder browser** — the selection primitive is ready.
+2. **Pinch-to-zoom / gesture remap UI (Step 7)** — needs a persisted gesture-binding model.
+3. **Trash instead of delete** — `createTrashRequest` (API 30+) is a recoverable soft-delete and a
+   better default than permanent removal.

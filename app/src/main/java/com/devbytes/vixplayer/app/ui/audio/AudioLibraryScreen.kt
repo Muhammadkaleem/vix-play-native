@@ -1,6 +1,8 @@
 package com.devbytes.vixplayer.app.ui.audio
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -33,6 +35,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -82,6 +85,23 @@ fun AudioLibraryScreen(
     var pendingTrack by remember { mutableStateOf<AudioTrack?>(null) }
     // True when the picker should target the whole selection rather than one track.
     var pickerForSelection by remember { mutableStateOf(false) }
+    // Only shown on API 24–28, where the platform provides no confirmation of its own.
+    var confirmDelete by remember { mutableStateOf(false) }
+    val message by viewModel.message.collectAsState()
+
+    // The system delete dialog reports back here; the ViewModel then re-queries.
+    val deleteConsent = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult(),
+    ) { result ->
+        viewModel.onDeleteConsentResult(result.resultCode == android.app.Activity.RESULT_OK)
+    }
+
+    message?.let { text ->
+        LaunchedEffect(text) {
+            android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_SHORT).show()
+            viewModel.consumeMessage()
+        }
+    }
 
     val selectionMode = selected.isNotEmpty()
     // Whatever list is on screen — the selection and its actions operate on this.
@@ -129,6 +149,25 @@ fun AudioLibraryScreen(
                             Icon(
                                 painter = painterResource(R.drawable.ic_share),
                                 contentDescription = "Share",
+                            )
+                        }
+                        IconButton(onClick = {
+                            if (viewModel.systemConfirmsDelete) {
+                                // The OS shows its own dialog; a second one would just
+                                // train people to dismiss without reading.
+                                viewModel.deleteSelection(visibleTracks) { sender ->
+                                    deleteConsent.launch(
+                                        androidx.activity.result.IntentSenderRequest
+                                            .Builder(sender).build()
+                                    )
+                                }
+                            } else {
+                                confirmDelete = true
+                            }
+                        }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_delete),
+                                contentDescription = "Delete",
                             )
                         }
                         IconButton(onClick = { viewModel.selectAll(visibleTracks) }) {
@@ -257,6 +296,31 @@ fun AudioLibraryScreen(
                 }
             }
         }
+    }
+
+    // Only reached on API 24–28: there is no system confirmation on that path, so this
+    // dialog is the sole thing standing between a tap and permanent deletion.
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete ${selected.size} files?") },
+            text = {
+                Text("This permanently removes them from this device. It can't be undone.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDelete = false
+                    viewModel.deleteSelection(visibleTracks) { sender ->
+                        deleteConsent.launch(
+                            androidx.activity.result.IntentSenderRequest.Builder(sender).build()
+                        )
+                    }
+                }) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) { Text("Cancel") }
+            },
+        )
     }
 
     // Playlist picker for the pending track, with an inline "new playlist" path so the

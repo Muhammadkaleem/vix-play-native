@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.devbytes.vixplayer.app.data.repository.AudioRepository
 import com.devbytes.vixplayer.app.data.repository.AudioTrack
 import com.devbytes.vixplayer.app.data.db.entity.Playlist
+import com.devbytes.vixplayer.app.data.repository.DeleteResult
+import com.devbytes.vixplayer.app.data.repository.MediaDeleter
 import com.devbytes.vixplayer.app.data.repository.PlaylistRepository
 import com.devbytes.vixplayer.app.player.PlayerController
 import com.devbytes.vixplayer.app.player.QueueItem
@@ -48,7 +50,20 @@ class AudioLibraryViewModel @Inject constructor(
     private val audioRepository: AudioRepository,
     private val playerController: PlayerController,
     private val playlistRepository: PlaylistRepository,
+    private val mediaDeleter: MediaDeleter,
 ) : ViewModel() {
+
+    /** One-shot message for the delete outcome; consumed by the screen. */
+    private val _message = MutableStateFlow<String?>(null)
+    val message: StateFlow<String?> = _message.asStateFlow()
+
+    fun consumeMessage() { _message.value = null }
+
+    /** True when the platform shows its own delete confirmation, so we shouldn't. */
+    val systemConfirmsDelete: Boolean get() = mediaDeleter.systemConfirms()
+
+    /** URIs pending deletion, kept so the queue can be reconciled after consent. */
+    private var pendingDeleteUris: List<String> = emptyList()
 
     /** Playlists, for the tab and for the add-to-playlist picker. */
     val playlists: StateFlow<List<Playlist>> = playlistRepository.observePlaylists()
@@ -180,6 +195,67 @@ class AudioLibraryViewModel @Inject constructor(
                 tracks = groupTracks,
             )
         }.sortedBy { it.name.lowercase() }
+    }
+
+    /**
+     * Deletes the current selection. Returns an IntentSender when the platform wants to
+     * confirm; the caller launches it and calls [onDeleteConsentResult] with the outcome.
+     */
+    fun deleteSelection(
+        visible: List<AudioTrack>,
+        onNeedsConsent: (android.content.IntentSender) -> Unit,
+    ) {
+        val tracks = selectedTracks(visible)
+        if (tracks.isEmpty()) return
+        pendingDeleteUris = tracks.map { it.uri.toString() }
+        viewModelScope.launch {
+            when (val result = mediaDeleter.delete(tracks.map { it.uri })) {
+                is DeleteResult.NeedsConsent -> onNeedsConsent(result.intentSender)
+                is DeleteResult.Deleted -> finishDelete(result.count)
+                is DeleteResult.Failed -> {
+                    _message.value = result.message
+                    clearSelection()
+                }
+            }
+        }
+    }
+
+    /** Called once the system dialog closes, whichever way the user answered. */
+    fun onDeleteConsentResult(granted: Boolean) {
+        if (!granted) {
+            _message.value = "Delete cancelled"
+            clearSelection()
+            pendingDeleteUris = emptyList()
+            return
+        }
+        finishDelete(pendingDeleteUris.size)
+    }
+
+    /**
+     * Re-queries MediaStore rather than trusting what we asked to delete: the user can
+     * deselect items in the system dialog, so the filesystem is the only honest source
+     * for what actually survived.
+     */
+    private fun finishDelete(requested: Int) {
+        val removed = pendingDeleteUris.toSet()
+        pendingDeleteUris = emptyList()
+        viewModelScope.launch {
+            val before = (_state.value as? AudioLibraryUiState.Loaded)?.tracks?.size ?: 0
+            val tracks = audioRepository.queryAllTracks()
+            _state.value =
+                if (tracks.isEmpty()) AudioLibraryUiState.Empty
+                else AudioLibraryUiState.Loaded(tracks)
+
+            val actuallyGone = (before - tracks.size).coerceAtLeast(0)
+            playerController.removeFromQueue(removed)
+            clearSelection()
+            _openGroup.value = null
+            _message.value = when {
+                actuallyGone == 0 -> "Nothing was deleted"
+                actuallyGone == 1 -> "1 file deleted"
+                else -> "$actuallyGone files deleted"
+            }
+        }
     }
 
     /**

@@ -170,6 +170,29 @@ class PlayerController @Inject constructor(
     }
 
     /**
+     * Drops [uris] from the active queue, skipping onward if one of them is playing.
+     *
+     * Without this, deleting the current track leaves the player holding a dead URI and
+     * surfaces as a playback error — which reads as a crash rather than a consequence of
+     * what the user just did.
+     */
+    fun removeFromQueue(uris: Set<String>) {
+        if (uris.isEmpty() || player.mediaItemCount == 0) return
+        // Walk backwards so removals don't shift the indices still to be checked.
+        for (index in player.mediaItemCount - 1 downTo 0) {
+            val itemUri = player.getMediaItemAt(index).localConfiguration?.uri?.toString()
+            if (itemUri != null && itemUri in uris) {
+                player.removeMediaItem(index)
+            }
+        }
+        if (player.mediaItemCount == 0) {
+            player.stop()
+            player.clearMediaItems()
+            _kind.value = PlaybackKind.NONE
+        }
+    }
+
+    /**
      * Frees decoders without destroying the instance. Used when the task is dismissed and
      * nothing is playing — the player must stay usable for when the user comes back, since
      * a released one would leave this singleton holding a dead object.
