@@ -68,6 +68,29 @@ class PlayerController @Inject constructor(
     }
 
     /**
+     * Opens a queue of [uris] starting at [startIndex].
+     *
+     * ExoPlayer's own playlist *is* the queue — shuffle order, repeat modes and
+     * prev/next transitions come from the engine rather than a parallel list that would
+     * have to be reconciled with it on every event.
+     *
+     * Replaces whatever was playing. There is one player, so starting audio stops any
+     * video — in practice `PlayerScreen` has already persisted its resume position when
+     * it left composition, so the interrupted video keeps its place in Continue Watching.
+     */
+    fun prepareQueue(uris: List<String>, startIndex: Int) {
+        if (uris.isEmpty()) return
+        subtitleOffset.offsetUs = 0L
+        player.setMediaItems(
+            uris.map { MediaItem.fromUri(it) },
+            startIndex.coerceIn(0, uris.lastIndex),
+            /* startPositionMs = */ 0L,
+        )
+        player.prepare()
+        player.playWhenReady = true
+    }
+
+    /**
      * Frees decoders without destroying the instance. Used when the task is dismissed and
      * nothing is playing — the player must stay usable for when the user comes back, since
      * a released one would leave this singleton holding a dead object.

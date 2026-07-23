@@ -40,31 +40,35 @@ PRDs in `vix-play-docs/`, then implemented and logged in `CLAUDE.md`.
 | Extras | playback speed (persisted), Picture-in-Picture, sleep timer, screenshot |
 | Background | `MediaSessionService` + notification/lock-screen controls, audio focus (opt-in) |
 
+**Audio** — tracks library (MediaStore, album art), full-screen player with seek, shuffle and
+repeat over ExoPlayer's native queue.
+
 **Library shell** — video library, folder browser, search, history, settings hub, About.
 
-**Not yet built** — libass styled ASS/SSA · subtitle online search · audio library + player ·
-network streaming (SMB/FTP) · Chromecast · equalizer · playlists · private folder · Android TV.
+**Not yet built** — libass styled ASS/SSA · subtitle online search · audio mini-player ·
+Albums/Artists/Playlists groupings · network streaming (SMB/FTP) · Chromecast · equalizer ·
+playlists · private folder · Android TV.
 
 ## Current grill
 
-**Background playback / `MediaSessionService` — built, not yet device-verified.** The `ExoPlayer`
-moved out of the composable into a Hilt `@Singleton` `PlayerController` so playback can outlive the
-Activity; `PlaybackService` hosts the `MediaSession` for notification, lock-screen and Bluetooth
-controls. Deliberately no `MediaController` — the app is single-process, and the session alone
-provides every PRD benefit without an async-null connection window.
+**Audio library + player (Tracks slice) — built, not yet device-verified.** A `MediaStore.Audio`
+query feeds a tracks list; tapping one queues the whole visible list from that point and opens a
+full-screen player with album art, seek, shuffle and repeat.
 
-Off by default: a video player that silently keeps playing after you background it is a battery
-complaint, not a feature. The `Background playback` switch now gives `PlaybackDefaultsScreen` its
-first real content.
+The queue *is* ExoPlayer's own playlist rather than a list maintained beside it, so shuffle order
+and repeat modes come from the engine and the UI can't drift out of sync with what's playing.
+Album art goes through Coil here — many distinct items, one image each, the exact inverse of the
+scrub-preview case that needed a dedicated provider.
 
-> Needs a device run to confirm the notification, foreground-service promotion, audio focus and
-> task-removal behaviour — none of that is exercised by a compile.
+> Two features now await a device run: this one, and background playback before it. Neither the
+> audio query, album-art resolution, queue transitions, nor the foreground service is exercised by
+> a compile.
 
 ## Next grill
 
 Candidates, in rough priority order:
 
-1. **Audio library + audio player** — both screens are placeholders, now blocked on UI work rather
-   than a missing engine. Needs MediaStore *audio* queries and a second player surface.
+1. **Audio mini-player** — persistent bar above the bottom nav so playback stays reachable after
+   leaving the player. Cross-cutting nav surface; has a PRD acceptance criterion.
 2. **Subtitle styling** — size/color/outline/position presets; blocked on libass for full ASS/SSA.
 3. **Share the screenshot** — small follow-up: plumb the saved MediaStore uri into a share intent.
