@@ -10,21 +10,30 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.devbytes.vixplayer.app.R
-import com.devbytes.vixplayer.app.ui.library.components.LibraryEmptyState
+import com.devbytes.vixplayer.app.ui.player.components.SubtitleStyleEditor
 
-/** Placeholder until subtitle configuration lands (Roadmap Step 3 — Subtitles). */
+/**
+ * Subtitle appearance defaults. Hosts the same editor the player sheet uses, writing the
+ * same DataStore-backed style, so the two can never disagree.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SubtitleDefaultsScreen(
     onBack: () -> Unit = {},
+    viewModel: SubtitleDefaultsViewModel = hiltViewModel(),
 ) {
+    val style by viewModel.style.collectAsState()
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Subtitle Defaults") },
+                title = { Text("Subtitles") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
@@ -39,10 +48,10 @@ fun SubtitleDefaultsScreen(
             )
         },
     ) { padding ->
-        LibraryEmptyState(
-            iconRes = R.drawable.ic_subtitles,
-            title = "Subtitle settings coming soon",
-            body = "Default language, styling, and encoding options arrive with subtitle support.",
+        SubtitleStyleEditor(
+            style = style,
+            onChange = { viewModel.setStyle(it) },
+            showPreview = true,
             modifier = Modifier.padding(padding),
         )
     }

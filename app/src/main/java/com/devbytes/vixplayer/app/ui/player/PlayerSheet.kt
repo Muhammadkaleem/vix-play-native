@@ -5,6 +5,7 @@ sealed class PlayerSheet {
     object Audio     : PlayerSheet()
     object Speed     : PlayerSheet()
     object SleepTimer : PlayerSheet()
+    object SubtitleStyle : PlayerSheet()
     object Cast      : PlayerSheet()
     object FileInfo  : PlayerSheet()
 }

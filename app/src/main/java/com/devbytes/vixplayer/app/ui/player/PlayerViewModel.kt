@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.devbytes.vixplayer.app.data.repository.MediaRepository
 import com.devbytes.vixplayer.app.data.repository.PlaybackRepository
 import com.devbytes.vixplayer.app.data.repository.SettingsRepository
+import com.devbytes.vixplayer.app.data.repository.SubtitleStyle
 import com.devbytes.vixplayer.app.data.repository.VideoFile
 import com.devbytes.vixplayer.app.player.PlayerController
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -34,6 +35,14 @@ class PlayerViewModel @Inject constructor(
     /** Opens a video, resetting per-file state. See [PlayerController.prepareFor]. */
     fun prepareFor(uri: String, subtitleOffsetMs: Long) =
         playerController.prepareFor(uri, subtitleOffsetMs)
+
+    /** Persisted subtitle appearance, shared with the Settings screen. */
+    val subtitleStyle: StateFlow<SubtitleStyle> = settingsRepository.subtitleStyle
+        .stateIn(viewModelScope, SharingStarted.Eagerly, SubtitleStyle.DEFAULT)
+
+    fun setSubtitleStyle(style: SubtitleStyle) {
+        viewModelScope.launch { settingsRepository.setSubtitleStyle(style) }
+    }
 
     /** Whether audio should keep playing once the app is backgrounded. */
     val backgroundPlayback: StateFlow<Boolean> = settingsRepository.backgroundPlayback

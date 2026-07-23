@@ -56,11 +56,11 @@ screen-by-screen through `/grill-me` sessions.
 | **Audio library + player** | Tracks slice — `AudioRepository`, ExoPlayer-native queue, shuffle/repeat; ⚠️ not device-verified |
 | **Audio mini-player** | `PlaybackKind`-gated bar above the tabs; `MediaMetadata` moved onto the queue; ⚠️ not device-verified |
 | **Audio groupings** | Albums/Artists/Folders tabs, in-memory `groupBy`, in-place drill; ⚠️ not device-verified |
+| **Subtitle styling** | 4 presets + per-property, shared editor in Settings + player sheet; ⚠️ not device-verified |
 
 ## Current grill
 
-None in progress. **Four consecutive features are now built but unrun on hardware**, each
-stacked on the one before. This is the largest untested surface the project has carried
+None in progress. **Five consecutive features are now built but unrun on hardware.** This is the largest untested surface the project has carried
 and it keeps growing; clear it before adding more.
 
 Device checklist:
@@ -77,16 +77,18 @@ Device checklist:
 - **Groupings:** Albums/Artists/Folders populate and their counts match the Tracks tab;
   drilling in and pressing system back returns to the grouping list, not out of the
   screen; playing from inside a group queues that group only.
+- **Subtitle styling:** presets visibly change the captions; the size slider works on an
+  ASS file even with the override toggle off (the deliberate asymmetry); Settings and the
+  player sheet show the same values.
 
 ## Next grill
 
-1. **Subtitle styling** — PRD wants presets (Netflix/Cinema/Minimal/Classic) plus
-   font/size/color/outline/box/position with live preview. Media3's `SubtitleView`
-   covers basic styling; full ASS/SSA fidelity is blocked on libass.
-2. **Share the screenshot** — small: plumb the saved MediaStore uri through and add a
+1. **Share the screenshot** — small: plumb the saved MediaStore uri through and add a
    share intent, likely as an action on the confirmation pill.
-3. **Playlists (Step 7)** — needs Room entities (playlist + playlist_track), CRUD UI, and
+2. **Playlists (Step 7)** — needs Room entities (playlist + playlist_track), CRUD UI, and
    the `/playlists/{id}` route. Would add the deferred fifth audio tab.
+3. **Equalizer (Step 6)** — `EqualizerScreen` is a stub; needs Android's `Equalizer`
+   audio effect bound to the player's audio session id.
 4. **Pinch-to-zoom / gesture remap UI** — Step 7 polish; remap needs a persisted binding
    model (`GestureModels.kt` in the PRD is aspirational, doesn't exist).
 
@@ -94,5 +96,7 @@ Device checklist:
 
 - **Cast (Step 6)** — needs the Cast SDK dependency added to `libs.versions.toml`.
   Still the last stub in `PlayerSheet` (`Text("Cast — Step 6")`).
-- **libass** — required for styled ASS/SSA; native/JNI integration, not yet started.
+- **libass** — required for full ASS/SSA *rendering fidelity* (karaoke, complex
+  positioning, effects). NOT required for user styling, which shipped via
+  `SubtitleView`/`CaptionStyleCompat`. Native/JNI integration, not yet started.
 - **Online subtitle search** — needs an OpenSubtitles client and API credentials.

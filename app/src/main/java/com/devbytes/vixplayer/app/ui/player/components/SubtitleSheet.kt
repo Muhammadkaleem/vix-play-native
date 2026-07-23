@@ -38,6 +38,7 @@ fun SubtitleSheet(
     onDisableSubtitles: () -> Unit,
     onLoadFromFile: () -> Unit,
     onSyncOffset: () -> Unit,
+    onStyle: () -> Unit,
     offsetMs: Long,
     modifier: Modifier = Modifier,
 ) {
@@ -125,6 +126,27 @@ fun SubtitleSheet(
                 text = formatSubtitleOffset(offsetMs),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onStyle)
+                .padding(horizontal = 20.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_subtitles),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp),
+            )
+            Spacer(Modifier.width(16.dp))
+            Text(
+                text = "Style",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
     }

@@ -113,7 +113,9 @@ import com.devbytes.vixplayer.app.ui.player.components.SpeedHud
 import com.devbytes.vixplayer.app.ui.player.components.SpeedSheet
 import com.devbytes.vixplayer.app.ui.player.components.ResumeChip
 import com.devbytes.vixplayer.app.ui.player.components.SubtitleSheet
+import com.devbytes.vixplayer.app.ui.player.components.SubtitleStyleEditor
 import com.devbytes.vixplayer.app.ui.player.components.SubtitleSyncHud
+import com.devbytes.vixplayer.app.ui.player.components.applySubtitleStyle
 import com.devbytes.vixplayer.app.ui.player.components.SubtitleTrackUi
 import com.devbytes.vixplayer.app.ui.theme.AmoledBackground
 import com.devbytes.vixplayer.app.ui.theme.OnScrim
@@ -193,6 +195,7 @@ fun PlayerScreen(
     // Never released here — only prepared, and paused on exit when appropriate.
     val player = viewModel.player
     val backgroundPlayback by viewModel.backgroundPlayback.collectAsState()
+    val subtitleStyle by viewModel.subtitleStyle.collectAsState()
 
     // Opening a video is one call so per-file state can't leak from the previous one.
     LaunchedEffect(Unit) { viewModel.prepareFor(uri, subtitleOffsetMs) }
@@ -919,6 +922,12 @@ fun PlayerScreen(
             onRelease = { it.player = null; playerView = null },
         )
 
+        // Push the persisted appearance onto Media3's SubtitleView; re-applied whenever
+        // the style changes so edits from the sheet land on the live subtitles.
+        LaunchedEffect(playerView, subtitleStyle) {
+            playerView?.subtitleView?.applySubtitleStyle(subtitleStyle)
+        }
+
         DoubleTapSeekOverlay(
             side = doubleTapSide,
             accumulatedMs = accumulatedSeekMs,
@@ -1098,6 +1107,13 @@ fun PlayerScreen(
                         currentSheet = null
                         showSyncHud = true
                     },
+                    onStyle = { currentSheet = PlayerSheet.SubtitleStyle },
+                )
+                is PlayerSheet.SubtitleStyle -> SubtitleStyleEditor(
+                    style = subtitleStyle,
+                    onChange = { viewModel.setSubtitleStyle(it) },
+                    // The real subtitles on the video are a better preview than a sample.
+                    showPreview = false,
                 )
                 is PlayerSheet.Audio     -> AudioTrackSheet(
                     tracks = audioTracks,
