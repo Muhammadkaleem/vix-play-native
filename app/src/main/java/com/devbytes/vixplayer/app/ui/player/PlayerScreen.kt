@@ -200,12 +200,6 @@ fun PlayerScreen(
     // Opening a video is one call so per-file state can't leak from the previous one.
     LaunchedEffect(Unit) { viewModel.prepareFor(uri, subtitleOffsetMs) }
 
-    // Host the MediaSession while the player screen is live, so the notification and
-    // lock-screen controls exist. The service self-stops once nothing is playing.
-    LaunchedEffect(Unit) {
-        context.startService(Intent(context, PlaybackService::class.java))
-    }
-
     // Held so the screenshot capture can reach the video SurfaceView for PixelCopy.
     var playerView by remember { mutableStateOf<PlayerView?>(null) }
     val scope = rememberCoroutineScope()

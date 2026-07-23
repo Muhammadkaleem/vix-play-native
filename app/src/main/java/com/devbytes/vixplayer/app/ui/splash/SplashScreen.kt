@@ -67,8 +67,10 @@ fun SplashScreen(
     var showProgress by remember { mutableStateOf(false) }
 
     val launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { granted ->
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { results ->
+        // Entry is gated on the video permission; audio may be declined independently.
+        val granted = results[viewModel.requiredPermission] == true
         viewModel.onPermissionResult(granted)
         if (!granted) {
             val activity = context as? Activity
@@ -80,7 +82,7 @@ fun SplashScreen(
 
     // Splash owns the cold-start permission request — auto-request on entry if not granted.
     LaunchedEffect(Unit) {
-        if (!permissionGranted) launcher.launch(viewModel.requiredPermission)
+        if (!permissionGranted) launcher.launch(viewModel.requiredPermissions)
     }
 
     // Navigate as soon as the permission flips to granted.
@@ -200,7 +202,7 @@ fun SplashScreen(
                     }
                 } else {
                     Button(
-                        onClick = { launcher.launch(viewModel.requiredPermission) },
+                        onClick = { launcher.launch(viewModel.requiredPermissions) },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = DarkAccent,
                             contentColor = OnAccent,

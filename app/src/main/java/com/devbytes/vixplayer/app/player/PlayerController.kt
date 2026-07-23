@@ -1,6 +1,7 @@
 package com.devbytes.vixplayer.app.player
 
 import android.content.Context
+import android.content.Intent
 import android.media.AudioManager
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -52,7 +53,7 @@ data class QueueItem(
  */
 @Singleton
 class PlayerController @Inject constructor(
-    @ApplicationContext context: Context,
+    @ApplicationContext private val context: Context,
     private val audioEffects: AudioEffects,
 ) {
     /**
@@ -106,6 +107,7 @@ class PlayerController @Inject constructor(
      * previous video's subtitle offset silently applies to the next one.
      */
     fun prepareFor(uri: String, subtitleOffsetMs: Long) {
+        ensureServiceRunning()
         subtitleOffset.offsetUs = subtitleOffsetMs * 1_000L
         player.setMediaItem(MediaItem.fromUri(uri))
         player.prepare()
@@ -126,6 +128,7 @@ class PlayerController @Inject constructor(
      */
     fun prepareQueue(items: List<QueueItem>, startIndex: Int) {
         if (items.isEmpty()) return
+        ensureServiceRunning()
         subtitleOffset.offsetUs = 0L
         player.setMediaItems(
             items.map { it.toMediaItem() },
@@ -189,6 +192,20 @@ class PlayerController @Inject constructor(
             player.stop()
             player.clearMediaItems()
             _kind.value = PlaybackKind.NONE
+        }
+    }
+
+    /**
+     * Starts [PlaybackService] so a `MediaSession` exists for whatever is about to play.
+     *
+     * Deliberately tied to **playback**, not to a screen: it was originally started from
+     * `PlayerScreen`, which meant audio started from the library never got a session at
+     * all — no notification, no lock-screen or Bluetooth controls. Both entry points into
+     * playback go through this class, so this is the one place that sees every start.
+     */
+    private fun ensureServiceRunning() {
+        runCatching {
+            context.startService(Intent(context, PlaybackService::class.java))
         }
     }
 

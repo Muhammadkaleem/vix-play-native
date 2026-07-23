@@ -69,72 +69,41 @@ screen-by-screen through `/grill-me` sessions.
 
 ## Current grill
 
-None in progress. **Fourteen consecutive features are now built but unrun on hardware.** Removal
-is recoverable on API 30+, which materially lowers the worst case. Rename is not
-recoverable and touches files directly — verify it on expendable files. This is the largest untested surface the project has carried
-and it keeps growing; clear it before adding more.
+**FIRST DEVICE RUN COMPLETED** (emulator, API 35 / Android 15). Three real bugs found and
+fixed, one open finding. The unverified backlog is no longer hypothetical — it contained
+defects that made whole features non-functional.
 
-Device checklist:
-- **Background playback:** notification appears and its controls work; audio survives
-  app-swipe with the toggle on; playback pauses on background with it off; PiP still
-  keeps playing; audio focus ducks/resumes around a call.
-- **Audio slice:** the MediaStore query returns tracks on a real library; album art
-  resolves (and the placeholder shows where it doesn't); tapping a track queues from
-  that point; next/prev/shuffle/repeat behave.
-- **Mini-player:** appears only for audio (never after exiting a video); stays up while
-  paused; tap and swipe-up both expand; next works; progress advances.
-- **Notification metadata:** title/artist/artwork now populate. This was very likely
-  blank before `MediaMetadata` was attached to the queue — confirm the fix landed.
-- **Groupings:** Albums/Artists/Folders populate and their counts match the Tracks tab;
-  drilling in and pressing system back returns to the grouping list, not out of the
-  screen; playing from inside a group queues that group only.
-- **Subtitle styling:** presets visibly change the captions; the size slider works on an
-  ASS file even with the override toggle off (the deliberate asymmetry); Settings and the
-  player sheet show the same values.
-- **Equalizer (needs hardware most):** effects are permitted at all on this device — if
-  not, the screen must show the explanation and NO controls; bands audibly change output;
-  settings survive a track change and an app restart; plugging in headphones swaps to that
-  route's profile; saving and re-applying a preset round-trips.
-- **Playlists:** create one, add tracks via a row's overflow, drag to reorder and confirm
-  the order survives leaving and re-entering the screen; delete a file on the device and
-  confirm its row shows "Unavailable" and is skipped on play-all. Drag feel (thresholds,
-  no edge autoscroll) is the most likely thing to need tuning.
-- **Multi-select:** long-press enters selection and tap then toggles rather than plays;
-  back exits selection before leaving the drill; add-to-queue appends without
-  interrupting playback; share opens the chooser with the right number of files.
-- **Screenshot share:** the pill stays up long enough to tap (4s), Share opens the
-  chooser, and the shared image is the one in the gallery. Failure pills still flash
-  briefly and show no Share.
-- **Bulk delete / trash (⚠️ still verify on expendable files):** on API 30+ removal
-  should go to the **trash** (check the item reappears in the Files app and can be
-  restored), and the action should read "Move to trash". On older devices it is a
-  permanent delete behind the app's own dialog. Every path must prompt before removing —
-  check on this device's API level that a confirmation actually appears;
-  deselecting items inside the system dialog must be reflected in the reported count
-  (it re-queries, so it should say what really went); deleting the currently-playing
-  track should skip onward, not error; affected playlist rows should show "Unavailable".
-- **Video multi-select:** long-press selects, tap then toggles rather than opening the
-  player, back exits selection; Continue Watching hides while selecting; share and trash
-  behave as they do in the audio library. Also re-check audio multi-select still works —
-  it was refactored onto the shared `SelectionHolder` in the same pass.
-- **Folder multi-select + rename (⚠️ rename is not undoable):** long-press selects;
-  rename appears only with exactly one item selected; the extension survives (rename
-  something to a bare word and confirm it keeps `.mp4`); the renamed file still plays;
-  on API 24–28 confirm the file actually moved on disk, not just in MediaStore.
-- **Move / copy (⚠️ touches file contents — use expendable files):** copy a small file
-  first and confirm it plays at the destination and appears in the library; then move one
-  and confirm the source is gone *and* the copy is intact; cancel a large copy mid-way and
-  confirm no partial file is left behind and the source is untouched; check a batch where
-  one file fails reports "n moved, 1 failed" rather than stopping.
-- **Room migrations 1 → 2 → 3:** *verified without hardware.* Both migrations' DDL was
-  checked against Room's exported `schemas/…/{2,3}.json` (2→3 was copied verbatim from
-  it, which is how the `playlist_item` foreign key and index came along — easy to omit
-  by hand). Room validates the *parsed* schema, so this passes. Both are additive and
-  never touch `playback_positions`, so resume history survives by construction. Worth a
-  glance at Continue Watching after the first upgrade, but not an open risk.
+### Fixed and re-verified on device
+1. **`READ_MEDIA_AUDIO` missing from the manifest.** Android 13+ splits media permissions
+   by type. The entire audio subsystem — library, 5 tabs, player, mini-player, queue,
+   equalizer, playlists, multi-select — read as empty on API 33+. Only
+   `READ_MEDIA_VIDEO` was declared.
+2. **Audio permission never requested.** Splash requested a single permission (video), so
+   even with the manifest fixed nothing would have asked for audio. Splash now uses
+   `RequestMultiplePermissions`; entry is still gated on video, so declining audio
+   narrows the app rather than blocking it.
+3. **`PlaybackService` never started for audio.** It was started from a `LaunchedEffect`
+   in `PlayerScreen` (the *video* player), so audio started from the library had **no
+   MediaSession at all** — no notification, no lock-screen, no Bluetooth/media buttons.
+   Moved into `PlayerController.prepareFor`/`prepareQueue`: **the service now follows
+   playback, not navigation.** Verified: service runs, session is active, and it is the
+   system's media-button session.
 
-  **Method worth reusing:** compile first so Room exports the new schema JSON, then write
-  the migration from its `createSql`. Do not hand-write DDL.
+### Verified working
+Video library + thumbnails (Coil `VideoFrameDecoder`), duration badges hidden when
+metadata is absent, audio library with embedded titles, `<unknown>` → "Unknown artist",
+`TITLE COLLATE NOCASE` ordering, album-art fallback, row overflow, audio player transport,
+**queue advance through 5 tracks**, live metadata updates on transition
+(`MediaMetadata` on the queue items), repeat toggle + active tint, equalizer entry point.
+
+### OPEN — not yet explained
+**No media notification is ever posted**, despite: service running, session active and
+PLAYING, `POST_NOTIFICATIONS` granted, and no errors in logcat. Suspicion — unproven —
+is that this follows from the deliberate "no `MediaController`" decision in the
+background-playback grill: Media3 may only drive `onUpdateNotification` when a controller
+connects. **If true, that architectural decision needs revisiting**, since notification
+and lock-screen controls were its main justification. Investigate before building further
+on the service.
 
 ## Next grill
 
