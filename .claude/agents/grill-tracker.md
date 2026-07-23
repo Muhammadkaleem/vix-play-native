@@ -60,10 +60,11 @@ screen-by-screen through `/grill-me` sessions.
 | **Equalizer** | full scope — bands/bass/virtualizer/preamp, saved presets, per-output; Room v2 migration; ⚠️ not device-verified |
 | **Playlists** | CRUD + drag reorder + missing-file flagging; fifth audio tab; Room v3 migration; ⚠️ not device-verified |
 | **Multi-select** | audio library — queue / playlist / share; delete deferred; ⚠️ not device-verified |
+| **Screenshot share** | save-pill gains a Share action; pill dwells 4s when actionable; ⚠️ not device-verified |
 
 ## Current grill
 
-None in progress. **Eight consecutive features are now built but unrun on hardware.** This is the largest untested surface the project has carried
+None in progress. **Nine consecutive features are now built but unrun on hardware.** This is the largest untested surface the project has carried
 and it keeps growing; clear it before adding more.
 
 Device checklist:
@@ -94,6 +95,9 @@ Device checklist:
 - **Multi-select:** long-press enters selection and tap then toggles rather than plays;
   back exits selection before leaving the drill; add-to-queue appends without
   interrupting playback; share opens the chooser with the right number of files.
+- **Screenshot share:** the pill stays up long enough to tap (4s), Share opens the
+  chooser, and the shared image is the one in the gallery. Failure pills still flash
+  briefly and show no Share.
 - **Room migrations 1 → 2 → 3:** *verified without hardware.* Both migrations' DDL was
   checked against Room's exported `schemas/…/{2,3}.json` (2→3 was copied verbatim from
   it, which is how the `playlist_item` foreign key and index came along — easy to omit
@@ -106,9 +110,7 @@ Device checklist:
 
 ## Next grill
 
-1. **Share the screenshot** — small: plumb the saved MediaStore uri through and add a
-   share intent, likely as an action on the confirmation pill.
-2. **Bulk delete** — the action deliberately left out of multi-select. Needs three flows:
+1. **Bulk delete** — the action deliberately left out of multi-select. Needs three flows:
    `MediaStore.createDeleteRequest` (API 30+, OS-provided confirmation),
    `RecoverableSecurityException` recovery (29), direct delete (24–28). Destroys user
    files permanently, so it wants its own confirmation design.

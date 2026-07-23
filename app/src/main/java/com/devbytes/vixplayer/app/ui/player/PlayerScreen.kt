@@ -763,16 +763,21 @@ fun PlayerScreen(
     // saved to Pictures/VixPlay via MediaStore. Confirmed by a transient pill.
     var showScreenshotHud by remember { mutableStateOf(false) }
     var screenshotHudLabel by remember { mutableStateOf("") }
+    // Non-null once a shot has saved, so the pill can offer Share.
+    var lastScreenshotUri by remember { mutableStateOf<Uri?>(null) }
     var screenshotHudKey by remember { mutableIntStateOf(0) }
     LaunchedEffect(screenshotHudKey) {
         if (screenshotHudKey > 0) {
             showScreenshotHud = true
-            delay(1_200)
+            // A pill you're meant to tap needs long enough to notice and reach;
+            // a plain failure message keeps the original quick flash.
+            delay(if (lastScreenshotUri != null) 4_000 else 1_200)
             showScreenshotHud = false
         }
     }
-    fun flashScreenshotHud(label: String) {
+    fun flashScreenshotHud(label: String, savedUri: Uri? = null) {
         screenshotHudLabel = label
+        lastScreenshotUri = savedUri
         screenshotHudKey++
     }
     // Capture the surface, then compress + insert off the main thread.
@@ -792,7 +797,11 @@ fun PlayerScreen(
                         val saved = withContext(Dispatchers.IO) {
                             saveBitmapToGallery(context, bitmap, title)
                         }
-                        flashScreenshotHud(if (saved) "Screenshot saved" else "Couldn't save screenshot")
+                        if (saved != null) {
+                            flashScreenshotHud("Screenshot saved", saved)
+                        } else {
+                            flashScreenshotHud("Couldn't save screenshot")
+                        }
                     }
                 } else {
                     flashScreenshotHud("Couldn't capture frame")
@@ -983,6 +992,13 @@ fun PlayerScreen(
         ScreenshotHud(
             visible = showScreenshotHud,
             label = screenshotHudLabel,
+            actionLabel = lastScreenshotUri?.let { "Share" },
+            onAction = lastScreenshotUri?.let { uri ->
+                {
+                    showScreenshotHud = false
+                    shareScreenshot(context, uri)
+                }
+            },
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -1143,9 +1159,12 @@ private fun formatSleepRemaining(ms: Long): String {
 /**
  * Writes [bitmap] as a PNG into Pictures/VixPlay via MediaStore, gallery-visible.
  * On API 29+ uses the IS_PENDING scoped-storage flow (no permission); on 24–28 the
- * caller has already secured WRITE_EXTERNAL_STORAGE. Returns false on any failure.
+ * caller has already secured WRITE_EXTERNAL_STORAGE.
+ *
+ * Returns the new item's URI so it can be shared, or null on any failure — sharing must
+ * hand over the file that actually landed in the gallery, not a second capture.
  */
-private fun saveBitmapToGallery(context: Context, bitmap: Bitmap, title: String): Boolean {
+private fun saveBitmapToGallery(context: Context, bitmap: Bitmap, title: String): Uri? {
     val safeTitle = title.replace(Regex("[^A-Za-z0-9._-]"), "_").take(40).ifBlank { "video" }
     val name = "VixPlay_${safeTitle}_${System.currentTimeMillis()}.png"
     val resolver = context.contentResolver
@@ -1157,21 +1176,31 @@ private fun saveBitmapToGallery(context: Context, bitmap: Bitmap, title: String)
             put(MediaStore.Images.Media.IS_PENDING, 1)
         }
     }
-    val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return false
+    val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return null
     return try {
         resolver.openOutputStream(uri)?.use { out ->
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
-        } ?: return false
+        } ?: return null
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             values.clear()
             values.put(MediaStore.Images.Media.IS_PENDING, 0)
             resolver.update(uri, values, null, null)
         }
-        true
+        uri
     } catch (e: Exception) {
         resolver.delete(uri, null, null)
-        false
+        null
     }
+}
+
+/** Hands the saved shot to the system chooser, which is itself the confirmation step. */
+private fun shareScreenshot(context: Context, uri: Uri) {
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "image/png"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(Intent.createChooser(intent, "Share screenshot"))
 }
 
 /** Writes the current position to the fast MMKV resume path, guarded against 0. */

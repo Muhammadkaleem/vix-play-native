@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -224,6 +225,9 @@ fun ScreenshotHud(
     visible: Boolean,
     label: String,
     modifier: Modifier = Modifier,
+    /** Shown only when the shot saved and there is something to share. */
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
 ) {
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         AnimatedVisibility(visible = visible, enter = fadeIn(), exit = fadeOut()) {
@@ -246,6 +250,18 @@ fun ScreenshotHud(
                     style = MaterialTheme.typography.titleMedium,
                     color = OnScrim,
                 )
+                if (actionLabel != null && onAction != null) {
+                    Spacer(Modifier.width(16.dp))
+                    Text(
+                        text = actionLabel,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = DarkAccent,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .clickable(onClick = onAction)
+                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                    )
+                }
             }
         }
     }

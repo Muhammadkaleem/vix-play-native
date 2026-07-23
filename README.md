@@ -37,7 +37,7 @@ PRDs in `vix-play-docs/`, then implemented and logged in `CLAUDE.md`.
 | Subtitles | track select, external SAF load, sync offset (±50 ms, per file), **styling + presets** |
 | Audio | track switch (multi-language / commentary) |
 | View | aspect Fit/Crop/Stretch, manual orientation override, immersive full-screen |
-| Extras | playback speed (persisted), Picture-in-Picture, sleep timer, screenshot |
+| Extras | playback speed (persisted), Picture-in-Picture, sleep timer, screenshot + share |
 | Background | `MediaSessionService` + notification/lock-screen controls, audio focus (opt-in) |
 | Equalizer | multiband EQ, bass boost, virtualizer, preamp, saved presets, per-output profiles |
 | Playlists | create/rename/delete, add from library, drag reorder, missing-file flagging |
@@ -54,24 +54,23 @@ tabs, and playlists with drag reorder.
 
 ## Current grill
 
-**Multi-select (audio library) — built, not yet device-verified.** Long-press a track to enter
-selection; a contextual bar takes over with the count, add-to-queue, add-to-playlist, share and
-select-all. Back unwinds one layer at a time: selection, then the group drill, then the screen.
+**Share the screenshot — built, not yet device-verified.** The save-confirmation pill now offers
+Share, handing the saved file to the system chooser.
 
-This is what long-press was being saved for — add-to-playlist went on a row overflow during the
-playlists pass precisely so the gesture stayed free.
+The pill lingers for 4s when there's something to share, rather than its usual ~1.2s flash — a
+notification you're meant to tap needs long enough to notice and reach. Failure messages keep the
+quick flash, since there's nothing to act on.
 
-**Delete is deliberately absent.** It needs three different flows depending on Android version, and
-it permanently destroys files, so it gets its own pass with its own confirmation design rather than
-riding along here.
+Sharing hands over the URI that actually landed in the gallery rather than taking a second capture,
+so what you send is exactly what you saved.
 
-> Eight features now await a device run.
+> Nine features now await a device run.
 
 ## Next grill
 
 Candidates, in rough priority order:
 
-1. **Share the screenshot** — small follow-up: plumb the saved MediaStore uri into a share intent.
-2. **Bulk delete** — the one multi-select action deliberately left out; needs
+1. **Bulk delete** — the one multi-select action deliberately left out; needs
    `createDeleteRequest` (API 30+), `RecoverableSecurityException` (29) and direct delete (24–28).
+2. **Lift multi-select to the video library / folder browser** — the selection primitive is ready.
 3. **Pinch-to-zoom / gesture remap UI (Step 7)** — needs a persisted gesture-binding model.
