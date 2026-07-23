@@ -1,5 +1,6 @@
 package com.devbytes.vixplayer.app.ui.audio
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -15,8 +16,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -36,15 +40,19 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.devbytes.vixplayer.app.R
+import com.devbytes.vixplayer.app.data.repository.AudioTrack
 import com.devbytes.vixplayer.app.ui.library.components.LibraryEmptyState
 import com.devbytes.vixplayer.app.ui.library.components.LibrarySkeleton
 
 /**
- * Audio tab root — Tracks listing.
+ * Audio tab root — Tracks / Albums / Artists / Folders.
  *
- * The other four PRD groupings (Albums / Artists / Folders / Playlists) are additive:
- * they are different queries feeding this same row and player, so each lands as its own
- * pass rather than shipping four empty tabs now.
+ * All four groupings are derived in memory from one MediaStore query, so they can't
+ * disagree with each other. Drilling into a group happens **in place** (same pattern as
+ * `FolderBrowserScreen`) rather than through new routes.
+ *
+ * Playlists is not a tab here: it is P1 with its own route and no data model yet, so a
+ * fifth tab would be selectable and permanently empty.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,44 +63,142 @@ fun AudioLibraryScreen(
     viewModel: AudioLibraryViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    val tab by viewModel.tab.collectAsState()
+    val openGroup by viewModel.openGroup.collectAsState()
+
+    // System back leaves the drill before it leaves the screen.
+    BackHandler(enabled = openGroup != null) { viewModel.closeGroup() }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Audio") },
+                title = { Text(openGroup?.name ?: "Audio") },
+                navigationIcon = {
+                    if (openGroup != null) {
+                        IconButton(onClick = { viewModel.closeGroup() }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_back),
+                                contentDescription = "Back",
+                            )
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                 ),
             )
         },
     ) { padding ->
-        when (val s = state) {
-            is AudioLibraryUiState.Loading -> LibrarySkeleton(
-                columns = 1,
-                modifier = Modifier.padding(padding),
-            )
-
-            is AudioLibraryUiState.Empty -> LibraryEmptyState(
-                iconRes = R.drawable.ic_nav_audio,
-                title = "No music yet",
-                body = "Audio files on this device will show up here.",
-                modifier = Modifier.padding(padding),
-            )
-
-            is AudioLibraryUiState.Tracks -> LazyColumn(modifier = Modifier.padding(padding)) {
-                items(s.tracks, key = { it.mediaStoreId }) { track ->
-                    TrackRow(
-                        title = track.title,
-                        artist = track.artist,
-                        durationMs = track.durationMs,
-                        albumArtUri = track.albumArtUri.toString(),
-                        onClick = {
-                            viewModel.play(track)
-                            onAudioPlayerClick(track.mediaStoreId)
-                        },
-                    )
+        Column(modifier = Modifier.padding(padding)) {
+            // Tabs stay hidden while drilled in — the title and back arrow own that level.
+            if (openGroup == null) {
+                ScrollableTabRow(
+                    selectedTabIndex = tab.ordinal,
+                    containerColor = MaterialTheme.colorScheme.background,
+                    edgePadding = 12.dp,
+                ) {
+                    AudioTab.entries.forEach { entry ->
+                        Tab(
+                            selected = entry == tab,
+                            onClick = { viewModel.selectTab(entry) },
+                            text = { Text(entry.label) },
+                        )
+                    }
                 }
             }
+
+            when (val s = state) {
+                is AudioLibraryUiState.Loading -> LibrarySkeleton(columns = 1)
+
+                is AudioLibraryUiState.Empty -> LibraryEmptyState(
+                    iconRes = R.drawable.ic_nav_audio,
+                    title = "No music yet",
+                    body = "Audio files on this device will show up here.",
+                )
+
+                is AudioLibraryUiState.Loaded -> {
+                    val drilled = openGroup
+                    when {
+                        // Inside a group: its tracks, queued as their own context.
+                        drilled != null -> TrackList(
+                            tracks = drilled.tracks,
+                            onPlay = { track ->
+                                viewModel.play(track, drilled.tracks)
+                                onAudioPlayerClick(track.mediaStoreId)
+                            },
+                        )
+                        // Tracks tab: the whole library is the context.
+                        tab == AudioTab.TRACKS -> TrackList(
+                            tracks = s.tracks,
+                            onPlay = { track ->
+                                viewModel.play(track, s.tracks)
+                                onAudioPlayerClick(track.mediaStoreId)
+                            },
+                        )
+
+                        else -> {
+                            val groups = viewModel.groupsFor(tab, s.tracks)
+                            LazyColumn {
+                                items(groups, key = { it.name }) { group ->
+                                    GroupRow(
+                                        group = group,
+                                        onClick = { viewModel.openGroup(group) },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrackList(
+    tracks: List<AudioTrack>,
+    onPlay: (AudioTrack) -> Unit,
+) {
+    LazyColumn {
+        items(tracks, key = { it.mediaStoreId }) { track ->
+            TrackRow(
+                title = track.title,
+                artist = track.artist,
+                durationMs = track.durationMs,
+                albumArtUri = track.albumArtUri.toString(),
+                onClick = { onPlay(track) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun GroupRow(
+    group: AudioGroup,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AlbumArt(uri = group.artUri, size = 48.dp)
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = group.name,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = if (group.trackCount == 1) "1 track" else "${group.trackCount} tracks",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

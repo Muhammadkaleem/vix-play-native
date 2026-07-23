@@ -40,37 +40,34 @@ PRDs in `vix-play-docs/`, then implemented and logged in `CLAUDE.md`.
 | Extras | playback speed (persisted), Picture-in-Picture, sleep timer, screenshot |
 | Background | `MediaSessionService` + notification/lock-screen controls, audio focus (opt-in) |
 
-**Audio** — tracks library (MediaStore, album art), full-screen player with seek, shuffle and
-repeat over ExoPlayer's native queue, and a persistent mini-player above the tabs.
+**Audio** — library with Tracks / Albums / Artists / Folders tabs, full-screen player with seek,
+shuffle and repeat over ExoPlayer's native queue, and a persistent mini-player above the tabs.
 
 **Library shell** — video library, folder browser, search, history, settings hub, About.
 
-**Not yet built** — libass styled ASS/SSA · subtitle online search · Albums/Artists/Playlists
-groupings · network streaming (SMB/FTP) · Chromecast · equalizer · playlists · private folder ·
-Android TV.
+**Not yet built** — libass styled ASS/SSA · subtitle online search · network streaming (SMB/FTP) ·
+Chromecast · equalizer · playlists · private folder · Android TV.
 
 ## Current grill
 
-**Audio mini-player — built, not yet device-verified.** A persistent bar above the tabs whenever
-audio is loaded; tap or swipe up to expand into the full player.
+**Audio groupings — built, not yet device-verified.** Albums, Artists and Folders join Tracks as
+tabs. All three are derived in memory from the same MediaStore query, so they can't disagree with
+each other or with the `IS_MUSIC` filter — MediaStore's own Albums/Artists tables don't know about
+that filter and would report track counts that differ from what's listed.
 
-Visibility keys off a `PlaybackKind` flag rather than "is something queued" — audio and video share
-one player, and `stop()` keeps the playlist, so a queued-item check would advertise the video you
-just exited. Keying off the flag rather than `isPlaying` also keeps the bar up while paused, so
-there's still a way to resume.
+Drilling into a group happens in place, matching the video-side folder browser, so no new routes.
+Playing from inside a group queues *that group* rather than the whole library.
 
-The same pass moved track metadata onto the `MediaItem` itself. That deleted a whole library query
-from the now-playing screen, and should fix the notification and lock screen, which were reading
-metadata that was never attached.
+Playlists is deliberately not a fifth tab: it's P1 with its own route and no data model yet, so the
+tab would be selectable and permanently empty.
 
-> Three features now await a device run: background playback, the audio slice, and this. The
-> notification-metadata fix in particular is only confirmable on hardware.
+> Four features now await a device run: background playback, the audio slice, the mini-player, and
+> this.
 
 ## Next grill
 
 Candidates, in rough priority order:
 
-1. **Remaining audio groupings** — Albums / Artists / Folders / Playlists tabs. Additive: different
-   queries feeding the same row and player.
-2. **Subtitle styling** — size/color/outline/position presets; blocked on libass for full ASS/SSA.
-3. **Share the screenshot** — small follow-up: plumb the saved MediaStore uri into a share intent.
+1. **Subtitle styling** — size/color/outline/position presets; blocked on libass for full ASS/SSA.
+2. **Share the screenshot** — small follow-up: plumb the saved MediaStore uri into a share intent.
+3. **Playlists (Step 7)** — needs a Room data model; would add the fifth audio tab.

@@ -55,10 +55,11 @@ screen-by-screen through `/grill-me` sessions.
 | **Background playback** | **Step 5 keystone** — `@Singleton PlayerController` + `PlaybackService`; ⚠️ not device-verified |
 | **Audio library + player** | Tracks slice — `AudioRepository`, ExoPlayer-native queue, shuffle/repeat; ⚠️ not device-verified |
 | **Audio mini-player** | `PlaybackKind`-gated bar above the tabs; `MediaMetadata` moved onto the queue; ⚠️ not device-verified |
+| **Audio groupings** | Albums/Artists/Folders tabs, in-memory `groupBy`, in-place drill; ⚠️ not device-verified |
 
 ## Current grill
 
-None in progress. **Three consecutive features are now built but unrun on hardware**, each
+None in progress. **Four consecutive features are now built but unrun on hardware**, each
 stacked on the one before. This is the largest untested surface the project has carried
 and it keeps growing; clear it before adding more.
 
@@ -73,16 +74,19 @@ Device checklist:
   paused; tap and swipe-up both expand; next works; progress advances.
 - **Notification metadata:** title/artist/artwork now populate. This was very likely
   blank before `MediaMetadata` was attached to the queue — confirm the fix landed.
+- **Groupings:** Albums/Artists/Folders populate and their counts match the Tracks tab;
+  drilling in and pressing system back returns to the grouping list, not out of the
+  screen; playing from inside a group queues that group only.
 
 ## Next grill
 
-1. **Remaining audio groupings** — Albums / Artists / Folders / Playlists tabs. Additive:
-   different queries feeding the same row and player.
-2. **Subtitle styling** — PRD wants presets (Netflix/Cinema/Minimal/Classic) plus
+1. **Subtitle styling** — PRD wants presets (Netflix/Cinema/Minimal/Classic) plus
    font/size/color/outline/box/position with live preview. Media3's `SubtitleView`
    covers basic styling; full ASS/SSA fidelity is blocked on libass.
-3. **Share the screenshot** — small: plumb the saved MediaStore uri through and add a
+2. **Share the screenshot** — small: plumb the saved MediaStore uri through and add a
    share intent, likely as an action on the confirmation pill.
+3. **Playlists (Step 7)** — needs Room entities (playlist + playlist_track), CRUD UI, and
+   the `/playlists/{id}` route. Would add the deferred fifth audio tab.
 4. **Pinch-to-zoom / gesture remap UI** — Step 7 polish; remap needs a persisted binding
    model (`GestureModels.kt` in the PRD is aspirational, doesn't exist).
 

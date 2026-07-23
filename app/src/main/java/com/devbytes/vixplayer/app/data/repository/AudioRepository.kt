@@ -23,6 +23,8 @@ data class AudioTrack(
     val album: String,
     val durationMs: Long,
     val albumArtUri: Uri,
+    /** Parent directory name, for the Folders grouping. */
+    val folder: String,
 )
 
 /**
@@ -43,6 +45,9 @@ class AudioRepository @Inject constructor(
             MediaStore.Audio.Media.ALBUM,
             MediaStore.Audio.Media.ALBUM_ID,
             MediaStore.Audio.Media.DURATION,
+            // Deprecated but still populated; BUCKET_DISPLAY_NAME needs API 29 and
+            // minSdk is 24. MediaRepository uses DATA for video paths for the same reason.
+            MediaStore.Audio.Media.DATA,
         )
         context.contentResolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
@@ -58,6 +63,7 @@ class AudioRepository @Inject constructor(
             val albumCol   = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
             val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
             val durCol     = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+            val dataCol    = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idCol)
                 val albumId = cursor.getLong(albumIdCol)
@@ -74,6 +80,7 @@ class AudioRepository @Inject constructor(
                         album = cursor.getString(albumCol) ?: "",
                         durationMs = cursor.getLong(durCol),
                         albumArtUri = ContentUris.withAppendedId(ALBUM_ART_BASE, albumId),
+                        folder = cursor.getString(dataCol).folderName(),
                     )
                 )
             }
@@ -84,4 +91,11 @@ class AudioRepository @Inject constructor(
     private companion object {
         val ALBUM_ART_BASE: Uri = MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI
     }
+}
+
+/** "/storage/emulated/0/Music/Rock/song.mp3" -> "Rock". */
+private fun String?.folderName(): String {
+    val path = this ?: return "Unknown folder"
+    val parent = path.substringBeforeLast('/', "")
+    return parent.substringAfterLast('/', "").ifBlank { "Unknown folder" }
 }
