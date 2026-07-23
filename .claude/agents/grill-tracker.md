@@ -61,12 +61,13 @@ screen-by-screen through `/grill-me` sessions.
 | **Playlists** | CRUD + drag reorder + missing-file flagging; fifth audio tab; Room v3 migration; ⚠️ not device-verified |
 | **Multi-select** | audio library — queue / playlist / share; delete deferred; ⚠️ not device-verified |
 | **Screenshot share** | save-pill gains a Share action; pill dwells 4s when actionable; ⚠️ not device-verified |
-| **Bulk delete** | 3 per-API flows; every path confirmed; re-queries after; ⚠️⚠️ DESTRUCTIVE, not device-verified |
+| **Bulk delete** | 3 per-API flows; every path confirmed; re-queries after; ⚠️ not device-verified |
+| **Trash instead of delete** | `createTrashRequest` on API 30+ — removal is now recoverable; ⚠️ not device-verified |
 
 ## Current grill
 
-None in progress. **Ten consecutive features are now built but unrun on hardware**, and one of
-them deletes files. This is the largest untested surface the project has carried
+None in progress. **Eleven consecutive features are now built but unrun on hardware.** Removal
+is now recoverable on API 30+, which materially lowers the worst case. This is the largest untested surface the project has carried
 and it keeps growing; clear it before adding more.
 
 Device checklist:
@@ -100,8 +101,11 @@ Device checklist:
 - **Screenshot share:** the pill stays up long enough to tap (4s), Share opens the
   chooser, and the shared image is the one in the gallery. Failure pills still flash
   briefly and show no Share.
-- **Bulk delete (⚠️ verify on expendable files first):** every path prompts before
-  deleting — check on this device's API level that a confirmation actually appears;
+- **Bulk delete / trash (⚠️ still verify on expendable files):** on API 30+ removal
+  should go to the **trash** (check the item reappears in the Files app and can be
+  restored), and the action should read "Move to trash". On older devices it is a
+  permanent delete behind the app's own dialog. Every path must prompt before removing —
+  check on this device's API level that a confirmation actually appears;
   deselecting items inside the system dialog must be reflected in the reported count
   (it re-queries, so it should say what really went); deleting the currently-playing
   track should skip onward, not error; affected playlist rows should show "Unavailable".
@@ -117,13 +121,19 @@ Device checklist:
 
 ## Next grill
 
-1. **Bulk delete** — the action deliberately left out of multi-select. Needs three flows:
-   `MediaStore.createDeleteRequest` (API 30+, OS-provided confirmation),
-   `RecoverableSecurityException` recovery (29), direct delete (24–28). Destroys user
-   files permanently, so it wants its own confirmation design.
-
-4. **Pinch-to-zoom / gesture remap UI** — Step 7 polish; remap needs a persisted binding
+1. **Lift multi-select to the video library / folder browser** — the selection primitive
+   (state, contextual bar, ordered BackHandlers) is ready to reuse. Note the folder
+   browser's own set — move, copy, rename, `.nomedia` — is separate file-system work
+   (SAF trees, cross-volume copies, MediaStore path updates), not selection work.
+2. **In-app Trash screen** — restore trashed items without leaving the app
+   (`QUERY_ARG_MATCH_TRASHED`). Weigh carefully: it would reintroduce a permanent-delete
+   action, which the trash pass deliberately removed on API 30+.
+3. **Pinch-to-zoom / gesture remap UI** — Step 7 polish; remap needs a persisted binding
    model (`GestureModels.kt` in the PRD is aspirational, doesn't exist).
+
+**Nothing substantial is left that doesn't need new substrate.** The remaining roadmap
+items (network streaming, Chromecast, private folder, Android TV) each need a data layer
+or dependency that doesn't exist yet — they are new subsystems, not increments.
 
 ## Blocked
 

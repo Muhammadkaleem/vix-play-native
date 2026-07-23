@@ -27,16 +27,18 @@ sealed interface DeleteResult {
 }
 
 /**
- * Deletes media through MediaStore, across the three flows Android requires.
+ * Removes media through MediaStore, across the flows Android requires.
  *
- * - **API 30+** — `createDeleteRequest` returns a `PendingIntent`; the **OS** shows the
- *   confirmation dialog. Nothing is deleted until the user agrees, so no app-side prompt
- *   is needed (or wanted — a second dialog just trains people to dismiss without reading).
+ * - **API 30+** — `createTrashRequest` moves items to the system trash: **recoverable**
+ *   for ~30 days from the Files / Photos apps, and auto-purged after. The **OS** shows
+ *   the confirmation dialog, so no app-side prompt is needed (or wanted — a second dialog
+ *   just trains people to dismiss without reading). VixPlay deliberately offers no
+ *   permanent delete on these devices; that decision belongs to the system trash UI.
  * - **API 29** — a direct delete throws [RecoverableSecurityException] for files the app
  *   doesn't own; its `IntentSender` yields the same kind of system prompt.
- * - **API 24–28** — a direct delete succeeds outright under `WRITE_EXTERNAL_STORAGE`.
- *   **There is no system confirmation on this path**, which is why the caller shows its
- *   own dialog before reaching here.
+ * - **API 24–28** — **no trash concept exists**, so this falls back to a permanent
+ *   delete under `WRITE_EXTERNAL_STORAGE`. There is also no system confirmation on this
+ *   path, which is why the caller shows its own dialog before reaching here.
  */
 @Singleton
 class MediaDeleter @Inject constructor(
@@ -46,7 +48,12 @@ class MediaDeleter @Inject constructor(
         if (uris.isEmpty()) return@withContext DeleteResult.Deleted(0)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val pending = MediaStore.createDeleteRequest(context.contentResolver, uris)
+            // Trash rather than delete: recoverable for ~30 days via the system Files /
+            // Photos apps, and it shows the same OS confirmation createDeleteRequest does.
+            // Permanent removal stays the system's decision, not ours.
+            val pending = MediaStore.createTrashRequest(
+                context.contentResolver, uris, /* value = */ true,
+            )
             return@withContext DeleteResult.NeedsConsent(pending.intentSender)
         }
 
@@ -71,6 +78,9 @@ class MediaDeleter @Inject constructor(
         }
         DeleteResult.Deleted(deleted)
     }
+
+    /** True when removal goes to the system trash and is therefore recoverable. */
+    fun isRecoverable(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
 
     /**
      * True only when the platform is **guaranteed** to confirm — API 30+, where

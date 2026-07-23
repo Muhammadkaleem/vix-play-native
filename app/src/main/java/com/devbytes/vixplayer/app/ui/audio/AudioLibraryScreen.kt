@@ -167,7 +167,13 @@ fun AudioLibraryScreen(
                         }) {
                             Icon(
                                 painter = painterResource(R.drawable.ic_delete),
-                                contentDescription = "Delete",
+                                // Says what this device will actually do: trash is
+                                // recoverable, the pre-API-30 fallback is not.
+                                contentDescription = if (viewModel.deleteIsRecoverable) {
+                                    "Move to trash"
+                                } else {
+                                    "Delete"
+                                },
                             )
                         }
                         IconButton(onClick = { viewModel.selectAll(visibleTracks) }) {
@@ -303,6 +309,8 @@ fun AudioLibraryScreen(
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
+            // Only reachable below API 30, where there is no trash — so the wording is
+            // unambiguous about permanence rather than softened.
             title = { Text("Delete ${selected.size} files?") },
             text = {
                 Text("This permanently removes them from this device. It can't be undone.")

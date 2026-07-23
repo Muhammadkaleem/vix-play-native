@@ -62,6 +62,12 @@ class AudioLibraryViewModel @Inject constructor(
     /** True when the platform shows its own delete confirmation, so we shouldn't. */
     val systemConfirmsDelete: Boolean get() = mediaDeleter.systemConfirms()
 
+    /**
+     * True when removal goes to the system trash and can be undone. Drives the wording,
+     * so the UI promises exactly what the device will actually do.
+     */
+    val deleteIsRecoverable: Boolean get() = mediaDeleter.isRecoverable()
+
     /** URIs pending deletion, kept so the queue can be reconciled after consent. */
     private var pendingDeleteUris: List<String> = emptyList()
 
@@ -223,7 +229,7 @@ class AudioLibraryViewModel @Inject constructor(
     /** Called once the system dialog closes, whichever way the user answered. */
     fun onDeleteConsentResult(granted: Boolean) {
         if (!granted) {
-            _message.value = "Delete cancelled"
+            _message.value = "Cancelled"
             clearSelection()
             pendingDeleteUris = emptyList()
             return
@@ -250,10 +256,11 @@ class AudioLibraryViewModel @Inject constructor(
             playerController.removeFromQueue(removed)
             clearSelection()
             _openGroup.value = null
+            val verb = if (mediaDeleter.isRecoverable()) "moved to trash" else "deleted"
             _message.value = when {
-                actuallyGone == 0 -> "Nothing was deleted"
-                actuallyGone == 1 -> "1 file deleted"
-                else -> "$actuallyGone files deleted"
+                actuallyGone == 0 -> "Nothing was removed"
+                actuallyGone == 1 -> "1 file $verb"
+                else -> "$actuallyGone files $verb"
             }
         }
     }

@@ -41,7 +41,7 @@ PRDs in `vix-play-docs/`, then implemented and logged in `CLAUDE.md`.
 | Background | `MediaSessionService` + notification/lock-screen controls, audio focus (opt-in) |
 | Equalizer | multiband EQ, bass boost, virtualizer, preamp, saved presets, per-output profiles |
 | Playlists | create/rename/delete, add from library, drag reorder, missing-file flagging |
-| Multi-select | long-press to select; add to queue, add to playlist, share, delete |
+| Multi-select | long-press to select; add to queue, add to playlist, share, move to trash |
 
 **Audio** — library with Tracks / Albums / Artists / Folders / Playlists tabs, full-screen player
 with seek, shuffle and repeat over ExoPlayer's native queue, a persistent mini-player above the
@@ -54,21 +54,21 @@ tabs, and playlists with drag reorder.
 
 ## Current grill
 
-**Bulk delete — built, not yet device-verified. Destructive.** Deleting selected tracks, across the
-three flows Android requires: the OS confirmation dialog on API 30+, the recoverable-permission
-prompt on 29, and an app-provided dialog on 24–28 where the platform offers no confirmation at all.
+**Trash instead of delete — built, not yet device-verified.** Removing tracks now goes to the
+system trash on API 30+, recoverable for around 30 days from the Files or Photos apps, rather than
+deleting permanently. Same OS confirmation dialog as before.
 
-The rule enforced throughout is that **no path deletes without at least one confirmation**. On API
-29 that can mean two prompts for one action; that redundancy is the right trade for something
-irreversible.
+This was taken ahead of its queue position because it directly de-risks bulk delete, which shipped
+irreversible and unverified. The riskiest operation in the app is now forgiving.
 
-After a delete the app re-queries MediaStore rather than trusting what it asked to remove — the
-user can deselect items inside the system dialog, so the request isn't the outcome. Deleted tracks
-are also dropped from the active queue, so deleting what you're listening to skips onward instead
-of erroring.
+Devices below API 30 have no trash concept, so they keep permanent delete with the app's own
+confirmation. Labels follow the device: "Move to trash" where it's recoverable, "Delete" where it
+isn't, so the UI promises what will actually happen.
 
-> Ten features now await a device run, and this is the one where being wrong isn't recoverable.
-> Verify on files you can afford to lose.
+The trade: on API 30+ you can no longer permanently delete from inside VixPlay. That decision moves
+to the system trash UI, which already exists and is where people look for it.
+
+> Eleven features now await a device run.
 
 ## Next grill
 
@@ -76,5 +76,5 @@ Candidates, in rough priority order:
 
 1. **Lift multi-select to the video library / folder browser** — the selection primitive is ready.
 2. **Pinch-to-zoom / gesture remap UI (Step 7)** — needs a persisted gesture-binding model.
-3. **Trash instead of delete** — `createTrashRequest` (API 30+) is a recoverable soft-delete and a
-   better default than permanent removal.
+3. **In-app Trash screen** — restore trashed items without leaving the app; today recovery lives in
+   the system Files/Photos apps.
