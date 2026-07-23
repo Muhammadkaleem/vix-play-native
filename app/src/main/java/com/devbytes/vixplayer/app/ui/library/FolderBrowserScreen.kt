@@ -5,7 +5,13 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -24,8 +30,11 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -43,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -80,6 +90,11 @@ fun FolderBrowserScreen(
     val selectionMode = selected.isNotEmpty()
     var confirmDelete by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
+    var selectionMenu by remember { mutableStateOf(false) }
+    // Non-null while choosing a destination; the flag says move vs copy.
+    var choosingDestination by remember { mutableStateOf<Boolean?>(null) }
+    val destinations by viewModel.destinations.collectAsStateWithLifecycle()
+    val transfer by viewModel.transfer.collectAsStateWithLifecycle()
 
     val visibleVideos = (state as? FolderBrowserUiState.VideoList)?.videos.orEmpty()
 
@@ -142,15 +157,6 @@ fun FolderBrowserScreen(
                                 contentDescription = "Share",
                             )
                         }
-                        // Rename is single-item only — there is no sensible bulk meaning.
-                        if (selected.size == 1) {
-                            IconButton(onClick = { renaming = true }) {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_edit),
-                                    contentDescription = "Rename",
-                                )
-                            }
-                        }
                         IconButton(onClick = {
                             if (viewModel.systemConfirmsDelete) removeSelection()
                             else confirmDelete = true
@@ -169,6 +175,45 @@ fun FolderBrowserScreen(
                                 painter = painterResource(R.drawable.ic_check),
                                 contentDescription = "Select all",
                             )
+                        }
+                        // Move/copy/rename live behind the overflow with text labels:
+                        // the design set has no copy or move icon, and six icons in one
+                        // bar is past the point of being readable anyway.
+                        Box {
+                            IconButton(onClick = { selectionMenu = true }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_more_vert),
+                                    contentDescription = "More actions",
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = selectionMenu,
+                                onDismissRequest = { selectionMenu = false },
+                            ) {
+                                // Rename is single-item only — no sensible bulk meaning.
+                                if (selected.size == 1) {
+                                    DropdownMenuItem(
+                                        text = { Text("Rename") },
+                                        onClick = { selectionMenu = false; renaming = true },
+                                    )
+                                }
+                                DropdownMenuItem(
+                                    text = { Text("Copy to folder") },
+                                    onClick = {
+                                        selectionMenu = false
+                                        viewModel.loadDestinations()
+                                        choosingDestination = false
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Move to folder") },
+                                    onClick = {
+                                        selectionMenu = false
+                                        viewModel.loadDestinations()
+                                        choosingDestination = true
+                                    },
+                                )
+                            }
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(

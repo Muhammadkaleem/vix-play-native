@@ -41,7 +41,7 @@ PRDs in `vix-play-docs/`, then implemented and logged in `CLAUDE.md`.
 | Background | `MediaSessionService` + notification/lock-screen controls, audio focus (opt-in) |
 | Equalizer | multiband EQ, bass boost, virtualizer, preamp, saved presets, per-output profiles |
 | Playlists | create/rename/delete, add from library, drag reorder, missing-file flagging |
-| Multi-select | all three browse surfaces — audio: queue/playlist/share/trash · video & folders: share/trash · folders also rename |
+| Multi-select | all three browse surfaces — audio: queue/playlist/share/trash · video: share/trash · folders also rename, move, copy |
 
 **Audio** — library with Tracks / Albums / Artists / Folders / Playlists tabs, full-screen player
 with seek, shuffle and repeat over ExoPlayer's native queue, a persistent mini-player above the
@@ -54,30 +54,27 @@ tabs, and playlists with drag reorder.
 
 ## Current grill
 
-**Folder-browser multi-select + rename — built, not yet device-verified.** Long-press to select;
-share, rename and move to trash. Multi-select now covers all three browse surfaces.
+**Move / copy files — built, not yet device-verified.** Select videos in the folder browser and
+copy or move them into another folder, with per-file progress and cancellation.
 
-Rename works across the whole supported range: `DISPLAY_NAME` with a consent prompt on modern
-Android, and a real file rename via the legacy path on API 24–28, where updating the name alone
-doesn't move the file. The original extension is reapplied on save, so renaming `clip.mp4` to
-`holiday` can't produce a file the system stops recognising. It's offered only when exactly one
-item is selected.
+Copy is the primitive and move is copy-then-delete, with the source removed only after its copy is
+published. That ordering is the whole safety argument: an interrupted move leaves you with two
+copies, not zero. On API 29+ the destination stays `IS_PENDING` until it succeeds, so an abandoned
+copy is never visible in the gallery.
 
-**`.nomedia` hiding is blocked, not deferred.** It needs to create a file inside an arbitrary
-folder, which scoped storage forbids without a SAF tree grant or `MANAGE_EXTERNAL_STORAGE` — a
-storage-architecture decision, not something a feature pass can resolve.
+The trade: moving within a single volume copies the whole file rather than doing an instant
+rename. The fast path is deliberately deferred until the safe path has actually run on hardware.
 
-Move and copy are deferred: both need progress reporting, cancellation and cross-volume fallbacks,
-and neither degrades gracefully if interrupted.
+Destinations are folders that already contain videos — one write path, and the result is
+guaranteed to be somewhere the app can list afterwards.
 
-> Thirteen features now await a device run.
+> Fourteen features now await a device run. This one touches file contents.
 
 ## Next grill
 
 Candidates, in rough priority order:
 
-1. **Move / copy files** — the remaining folder-browser actions; need progress UI, cancellation
-   and a cross-volume copy+delete fallback.
+1. **Same-volume move fast path** — `RELATIVE_PATH` update instead of copying gigabytes.
 2. **Pinch-to-zoom / gesture remap UI (Step 7)** — needs a persisted gesture-binding model.
 3. **In-app Trash screen** — restore trashed items without leaving the app; today recovery lives in
    the system Files/Photos apps.

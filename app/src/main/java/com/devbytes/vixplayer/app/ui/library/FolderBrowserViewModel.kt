@@ -6,6 +6,9 @@ import com.devbytes.vixplayer.app.data.repository.FolderEntry
 import com.devbytes.vixplayer.app.data.repository.DeleteResult
 import com.devbytes.vixplayer.app.data.repository.MediaDeleter
 import com.devbytes.vixplayer.app.data.repository.MediaRenamer
+import com.devbytes.vixplayer.app.data.repository.MediaTransfer
+import com.devbytes.vixplayer.app.data.repository.TransferProgress
+import com.devbytes.vixplayer.app.data.repository.TransferResult
 import com.devbytes.vixplayer.app.data.repository.MediaRepository
 import com.devbytes.vixplayer.app.data.repository.RenameResult
 import com.devbytes.vixplayer.app.ui.common.SelectionHolder
@@ -14,6 +17,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -29,6 +33,7 @@ class FolderBrowserViewModel @Inject constructor(
     private val mediaRepository: MediaRepository,
     private val mediaDeleter: MediaDeleter,
     private val mediaRenamer: MediaRenamer,
+    private val mediaTransfer: MediaTransfer,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<FolderBrowserUiState>(FolderBrowserUiState.Loading)
@@ -48,6 +53,16 @@ class FolderBrowserViewModel @Inject constructor(
 
     /** The rename awaiting system consent, if any. */
     private var pendingRename: Triple<android.net.Uri, String, String>? = null
+
+    /** Destination choices for move/copy: folders that already hold videos. */
+    private val _destinations = MutableStateFlow<List<FolderEntry>>(emptyList())
+    val destinations: StateFlow<List<FolderEntry>> = _destinations.asStateFlow()
+
+    /** Non-null while a transfer is running; drives the modal progress dialog. */
+    private val _transfer = MutableStateFlow<TransferProgress?>(null)
+    val transfer: StateFlow<TransferProgress?> = _transfer.asStateFlow()
+
+    private var transferJob: Job? = null
 
     init { loadFolders() }
 
@@ -107,6 +122,75 @@ class FolderBrowserViewModel @Inject constructor(
                 gone == 1 -> "1 video $verb"
                 else -> "$gone videos $verb"
             }
+        }
+    }
+
+    // ── Move / copy ──────────────────────────────────────────────────────────
+
+    /** Loads pickable destinations, excluding the folder already being viewed. */
+    fun loadDestinations() {
+        viewModelScope.launch {
+            val here = currentBucketId
+            _destinations.value = runCatching { mediaRepository.queryFolders() }
+                .getOrDefault(emptyList())
+                .filter { it.bucketId != here }
+        }
+    }
+
+    /**
+     * Copies (or moves) the selection into [destination].
+     *
+     * Move is copy-then-delete inside [MediaTransfer]: the source goes only once its copy
+     * is published, so an interruption leaves a duplicate rather than nothing.
+     */
+    fun transferSelection(destination: FolderEntry, deleteSource: Boolean) {
+        val videos = selectedVideos(visibleVideos())
+        if (videos.isEmpty()) return
+
+        transferJob = viewModelScope.launch {
+            // Resolve the destination directory from a file that already lives there;
+            // FolderEntry carries no path of its own.
+            val dir = runCatching {
+                mediaRepository.queryVideosInFolder(destination.bucketId)
+                    .firstOrNull()?.path?.substringBeforeLast('/')
+            }.getOrNull()
+
+            if (dir.isNullOrBlank()) {
+                _message.value = "Couldn't resolve that folder"
+                clearSelection()
+                return@launch
+            }
+
+            _transfer.value = TransferProgress(0, videos.size, "", 0f)
+            val result = mediaTransfer.transfer(videos, dir, deleteSource) { progress ->
+                _transfer.value = progress
+            }
+            _transfer.value = null
+
+            reloadCurrentFolder()
+            clearSelection()
+            _message.value = describe(result, deleteSource)
+        }
+    }
+
+    fun cancelTransfer() {
+        transferJob?.cancel()
+        transferJob = null
+        _transfer.value = null
+    }
+
+    private fun describe(result: TransferResult, moved: Boolean): String {
+        val verb = if (moved) "moved" else "copied"
+        return when (result) {
+            is TransferResult.Completed -> when {
+                result.succeeded == 0 -> "Nothing was $verb"
+                result.failed > 0 -> "${result.succeeded} $verb, ${result.failed} failed"
+                result.succeeded == 1 -> "1 video $verb"
+                else -> "${result.succeeded} videos $verb"
+            }
+            is TransferResult.Cancelled ->
+                if (result.succeeded == 0) "Cancelled" else "Cancelled after ${result.succeeded}"
+            is TransferResult.Failed -> result.message
         }
     }
 

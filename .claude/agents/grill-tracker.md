@@ -65,10 +65,11 @@ screen-by-screen through `/grill-me` sessions.
 | **Trash instead of delete** | `createTrashRequest` on API 30+ — removal is now recoverable; ⚠️ not device-verified |
 | **Video multi-select** | share + trash; shared `SelectionHolder`; audio refactored onto it; ⚠️ not device-verified |
 | **Folder multi-select + rename** | share/rename/trash; `MediaRenamer` across all API levels; ⚠️ not device-verified |
+| **Move / copy** | copy primitive, move = copy-then-delete, modal progress + cancel; ⚠️ not device-verified |
 
 ## Current grill
 
-None in progress. **Thirteen consecutive features are now built but unrun on hardware.** Removal
+None in progress. **Fourteen consecutive features are now built but unrun on hardware.** Removal
 is recoverable on API 30+, which materially lowers the worst case. Rename is not
 recoverable and touches files directly — verify it on expendable files. This is the largest untested surface the project has carried
 and it keeps growing; clear it before adding more.
@@ -120,6 +121,11 @@ Device checklist:
   rename appears only with exactly one item selected; the extension survives (rename
   something to a bare word and confirm it keeps `.mp4`); the renamed file still plays;
   on API 24–28 confirm the file actually moved on disk, not just in MediaStore.
+- **Move / copy (⚠️ touches file contents — use expendable files):** copy a small file
+  first and confirm it plays at the destination and appears in the library; then move one
+  and confirm the source is gone *and* the copy is intact; cancel a large copy mid-way and
+  confirm no partial file is left behind and the source is untouched; check a batch where
+  one file fails reports "n moved, 1 failed" rather than stopping.
 - **Room migrations 1 → 2 → 3:** *verified without hardware.* Both migrations' DDL was
   checked against Room's exported `schemas/…/{2,3}.json` (2→3 was copied verbatim from
   it, which is how the `playlist_item` foreign key and index came along — easy to omit
@@ -132,10 +138,11 @@ Device checklist:
 
 ## Next grill
 
-1. **Move / copy files** — the remaining folder-browser actions. Move needs a same-volume
-   `RELATIVE_PATH` fast path plus a cross-volume copy+delete fallback; copy needs progress
-   reporting and cancellation for multi-gigabyte files. Neither degrades gracefully if
-   interrupted.
+1. **Same-volume move fast path** — `RELATIVE_PATH` update (API 29+) so moving within one
+   volume doesn't copy the whole file. Deliberately held back until the safe copy path has
+   run on hardware.
+2. **New-folder creation at the destination** — a `RELATIVE_PATH` insert can create
+   directories on API 29+; needs naming and validation UI.
 2. **In-app Trash screen** — restore trashed items without leaving the app
    (`QUERY_ARG_MATCH_TRASHED`). Weigh carefully: it would reintroduce a permanent-delete
    action, which the trash pass deliberately removed on API 30+.
