@@ -195,7 +195,10 @@ private fun SwatchRow(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(value))
+                    // Light underlay so translucent swatches read as different: the
+                    // background options are black at 0%/50%/80%/100% alpha, which are
+                    // indistinguishable when painted straight onto a near-black surface.
+                    .background(Color(0xFFBDBDBD))
                     .border(
                         width = if (value == selected) 3.dp else 1.dp,
                         color = if (value == selected) {
@@ -208,6 +211,11 @@ private fun SwatchRow(
                     .clickable { onSelect(value) },
                 contentAlignment = Alignment.Center,
             ) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(Color(value)),
+                )
                 if (value == android.graphics.Color.TRANSPARENT) {
                     Text(
                         text = label.take(1),

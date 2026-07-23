@@ -167,6 +167,15 @@ After wiring them, verified on device:
 Still untested here: cancel-mid-copy cleanup and multi-file batches. The legacy
 (API ≤28) rename and copy branches **cannot** run on this API-35 image at all.
 
+### Subtitle styling — verified, one wart fixed
+Live preview, four presets, sliders, swatches, edge and font chips all work. Selecting
+**Cinema** propagated correctly (yellow serif, larger size, yellow swatch selected), and
+the choice **survived an app restart** — DataStore persistence confirmed.
+
+*Wart fixed:* the Background swatches are black at 0/50/80/100% alpha, painted straight
+onto a near-black surface, so three of the four were **visually identical**. They now sit
+on a light underlay, so the alpha progression reads.
+
 ### RESOLVED — notification (was open)
 **Cause: the session was never registered with the service.** `MediaSessionService` only
 lets its notification manager observe sessions passed to `addSession()`, and
