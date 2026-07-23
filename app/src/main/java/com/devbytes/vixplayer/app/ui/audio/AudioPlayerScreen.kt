@@ -20,7 +20,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -35,6 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.ui.player.components.PlayerSeekBar
@@ -58,7 +58,6 @@ fun AudioPlayerScreen(
     viewModel: AudioPlayerViewModel = hiltViewModel(),
 ) {
     val player = viewModel.player
-    val tracksByUri by viewModel.tracksByUri.collectAsState()
 
     // No-op when the library already queued; covers deep-link / notification entry.
     LaunchedEffect(mediaStoreId) { viewModel.ensureQueued(mediaStoreId) }
@@ -66,9 +65,8 @@ fun AudioPlayerScreen(
     var isPlaying by remember { mutableStateOf(player.isPlaying) }
     var shuffle by remember { mutableStateOf(player.shuffleModeEnabled) }
     var repeatMode by remember { mutableIntStateOf(player.repeatMode) }
-    var currentUri by remember {
-        mutableStateOf(player.currentMediaItem?.localConfiguration?.uri?.toString())
-    }
+    // Metadata rides on the MediaItem, so it survives transitions with no library lookup.
+    var metadata by remember { mutableStateOf(player.mediaMetadata) }
     var positionMs by remember { mutableLongStateOf(player.currentPosition) }
     var durationMs by remember { mutableLongStateOf(player.duration.coerceAtLeast(0L)) }
 
@@ -78,8 +76,11 @@ fun AudioPlayerScreen(
                 isPlaying = playing
             }
 
+            override fun onMediaMetadataChanged(newMetadata: MediaMetadata) {
+                metadata = newMetadata
+            }
+
             override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
-                currentUri = item?.localConfiguration?.uri?.toString()
                 durationMs = player.duration.coerceAtLeast(0L)
             }
 
@@ -103,10 +104,6 @@ fun AudioPlayerScreen(
             delay(500)
         }
     }
-
-    // The queue holds URIs; MediaStore owns the metadata, so resolve the display fields
-    // from whatever the player transitioned to.
-    val track = currentUri?.let { tracksByUri[it] }
 
     Scaffold(
         topBar = {
@@ -134,12 +131,12 @@ fun AudioPlayerScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            AlbumArt(uri = track?.albumArtUri?.toString().orEmpty(), size = 260.dp)
+            AlbumArt(uri = metadata.artworkUri?.toString().orEmpty(), size = 260.dp)
 
             Spacer(Modifier.height(28.dp))
 
             Text(
-                text = track?.title ?: "Not playing",
+                text = metadata.title?.toString() ?: "Not playing",
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
@@ -149,8 +146,8 @@ fun AudioPlayerScreen(
             Spacer(Modifier.height(6.dp))
             Text(
                 text = listOfNotNull(
-                    track?.artist,
-                    track?.album?.takeIf { it.isNotBlank() },
+                    metadata.artist?.toString(),
+                    metadata.albumTitle?.toString()?.takeIf { it.isNotBlank() },
                 ).joinToString(" · "),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

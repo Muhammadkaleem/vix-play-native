@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.devbytes.vixplayer.app.data.repository.AudioRepository
 import com.devbytes.vixplayer.app.data.repository.AudioTrack
 import com.devbytes.vixplayer.app.player.PlayerController
+import com.devbytes.vixplayer.app.player.QueueItem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -49,6 +50,15 @@ class AudioLibraryViewModel @Inject constructor(
         val tracks = (_state.value as? AudioLibraryUiState.Tracks)?.tracks ?: return
         val index = tracks.indexOfFirst { it.mediaStoreId == track.mediaStoreId }
         if (index < 0) return
-        playerController.prepareQueue(tracks.map { it.uri.toString() }, index)
+        playerController.prepareQueue(tracks.map { it.toQueueItem() }, index)
     }
 }
+
+/** Carries the display metadata onto the MediaItem, for the session and both UIs. */
+internal fun AudioTrack.toQueueItem() = QueueItem(
+    uri = uri.toString(),
+    title = title,
+    artist = artist,
+    album = album,
+    artworkUri = albumArtUri,
+)

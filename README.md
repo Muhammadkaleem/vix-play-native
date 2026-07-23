@@ -41,34 +41,36 @@ PRDs in `vix-play-docs/`, then implemented and logged in `CLAUDE.md`.
 | Background | `MediaSessionService` + notification/lock-screen controls, audio focus (opt-in) |
 
 **Audio** — tracks library (MediaStore, album art), full-screen player with seek, shuffle and
-repeat over ExoPlayer's native queue.
+repeat over ExoPlayer's native queue, and a persistent mini-player above the tabs.
 
 **Library shell** — video library, folder browser, search, history, settings hub, About.
 
-**Not yet built** — libass styled ASS/SSA · subtitle online search · audio mini-player ·
-Albums/Artists/Playlists groupings · network streaming (SMB/FTP) · Chromecast · equalizer ·
-playlists · private folder · Android TV.
+**Not yet built** — libass styled ASS/SSA · subtitle online search · Albums/Artists/Playlists
+groupings · network streaming (SMB/FTP) · Chromecast · equalizer · playlists · private folder ·
+Android TV.
 
 ## Current grill
 
-**Audio library + player (Tracks slice) — built, not yet device-verified.** A `MediaStore.Audio`
-query feeds a tracks list; tapping one queues the whole visible list from that point and opens a
-full-screen player with album art, seek, shuffle and repeat.
+**Audio mini-player — built, not yet device-verified.** A persistent bar above the tabs whenever
+audio is loaded; tap or swipe up to expand into the full player.
 
-The queue *is* ExoPlayer's own playlist rather than a list maintained beside it, so shuffle order
-and repeat modes come from the engine and the UI can't drift out of sync with what's playing.
-Album art goes through Coil here — many distinct items, one image each, the exact inverse of the
-scrub-preview case that needed a dedicated provider.
+Visibility keys off a `PlaybackKind` flag rather than "is something queued" — audio and video share
+one player, and `stop()` keeps the playlist, so a queued-item check would advertise the video you
+just exited. Keying off the flag rather than `isPlaying` also keeps the bar up while paused, so
+there's still a way to resume.
 
-> Two features now await a device run: this one, and background playback before it. Neither the
-> audio query, album-art resolution, queue transitions, nor the foreground service is exercised by
-> a compile.
+The same pass moved track metadata onto the `MediaItem` itself. That deleted a whole library query
+from the now-playing screen, and should fix the notification and lock screen, which were reading
+metadata that was never attached.
+
+> Three features now await a device run: background playback, the audio slice, and this. The
+> notification-metadata fix in particular is only confirmable on hardware.
 
 ## Next grill
 
 Candidates, in rough priority order:
 
-1. **Audio mini-player** — persistent bar above the bottom nav so playback stays reachable after
-   leaving the player. Cross-cutting nav surface; has a PRD acceptance criterion.
+1. **Remaining audio groupings** — Albums / Artists / Folders / Playlists tabs. Additive: different
+   queries feeding the same row and player.
 2. **Subtitle styling** — size/color/outline/position presets; blocked on libass for full ASS/SSA.
 3. **Share the screenshot** — small follow-up: plumb the saved MediaStore uri into a share intent.

@@ -4,13 +4,34 @@ import android.content.Context
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.devbytes.vixplayer.app.player.subtitle.OffsetSubtitleParserFactory
 import com.devbytes.vixplayer.app.player.subtitle.SubtitleOffsetHolder
+import android.net.Uri
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
+
+/**
+ * What the shared player currently holds. Video and audio use the same [ExoPlayer], and
+ * `stop()` keeps the playlist, so "something is loaded" alone can't tell them apart —
+ * the mini-player would otherwise advertise a video the user just exited.
+ */
+enum class PlaybackKind { NONE, VIDEO, AUDIO }
+
+/** One queued track plus the metadata the session, notification and UI all read back. */
+data class QueueItem(
+    val uri: String,
+    val title: String,
+    val artist: String,
+    val album: String,
+    val artworkUri: Uri?,
+)
 
 /**
  * Owns the one [ExoPlayer] instance for the whole app.
@@ -34,6 +55,11 @@ class PlayerController @Inject constructor(
 ) {
     /** Read by the subtitle parser at parse time; see [OffsetSubtitleParserFactory]. */
     val subtitleOffset = SubtitleOffsetHolder()
+
+    private val _kind = MutableStateFlow(PlaybackKind.NONE)
+
+    /** Drives mini-player visibility: audio should surface a bar, video should not. */
+    val kind: StateFlow<PlaybackKind> = _kind.asStateFlow()
 
     val player: ExoPlayer = ExoPlayer.Builder(context)
         .setMediaSourceFactory(
@@ -65,6 +91,7 @@ class PlayerController @Inject constructor(
         player.setMediaItem(MediaItem.fromUri(uri))
         player.prepare()
         player.playWhenReady = true
+        _kind.value = PlaybackKind.VIDEO
     }
 
     /**
@@ -78,17 +105,36 @@ class PlayerController @Inject constructor(
      * video — in practice `PlayerScreen` has already persisted its resume position when
      * it left composition, so the interrupted video keeps its place in Continue Watching.
      */
-    fun prepareQueue(uris: List<String>, startIndex: Int) {
-        if (uris.isEmpty()) return
+    fun prepareQueue(items: List<QueueItem>, startIndex: Int) {
+        if (items.isEmpty()) return
         subtitleOffset.offsetUs = 0L
         player.setMediaItems(
-            uris.map { MediaItem.fromUri(it) },
-            startIndex.coerceIn(0, uris.lastIndex),
+            items.map { it.toMediaItem() },
+            startIndex.coerceIn(0, items.lastIndex),
             /* startPositionMs = */ 0L,
         )
         player.prepare()
         player.playWhenReady = true
+        _kind.value = PlaybackKind.AUDIO
     }
+
+    /**
+     * Metadata travels on the [MediaItem] rather than in a map beside the queue, so the
+     * player stays the single source of truth: the mini-player and the now-playing screen
+     * read it back with no library lookup, and the MediaSession notification and lock
+     * screen pick up title/artist/artwork automatically.
+     */
+    private fun QueueItem.toMediaItem(): MediaItem = MediaItem.Builder()
+        .setUri(uri)
+        .setMediaMetadata(
+            MediaMetadata.Builder()
+                .setTitle(title)
+                .setArtist(artist)
+                .setAlbumTitle(album)
+                .setArtworkUri(artworkUri)
+                .build()
+        )
+        .build()
 
     /**
      * Frees decoders without destroying the instance. Used when the task is dismissed and
@@ -98,5 +144,6 @@ class PlayerController @Inject constructor(
     fun stop() {
         player.stop()
         player.clearMediaItems()
+        _kind.value = PlaybackKind.NONE
     }
 }

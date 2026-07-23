@@ -3,12 +3,8 @@ package com.devbytes.vixplayer.app.ui.audio
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.devbytes.vixplayer.app.data.repository.AudioRepository
-import com.devbytes.vixplayer.app.data.repository.AudioTrack
 import com.devbytes.vixplayer.app.player.PlayerController
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -22,20 +18,6 @@ class AudioPlayerViewModel @Inject constructor(
     val player = playerController.player
 
     /**
-     * Metadata for the whole library, keyed by URI, so the now-playing card can resolve
-     * title/artist/art for whatever the player transitions to. The queue holds only URIs;
-     * MediaStore owns the metadata.
-     */
-    private val _tracksByUri = MutableStateFlow<Map<String, AudioTrack>>(emptyMap())
-    val tracksByUri: StateFlow<Map<String, AudioTrack>> = _tracksByUri.asStateFlow()
-
-    init {
-        viewModelScope.launch {
-            _tracksByUri.value = audioRepository.queryAllTracks().associateBy { it.uri.toString() }
-        }
-    }
-
-    /**
      * Queues [mediaStoreId] only if nothing is loaded — covers reaching this screen
      * without the library having queued first (deep link, notification, external intent).
      * A no-op in the normal path, so it never restarts what is already playing.
@@ -46,7 +28,7 @@ class AudioPlayerViewModel @Inject constructor(
             val tracks = audioRepository.queryAllTracks()
             val index = tracks.indexOfFirst { it.mediaStoreId == mediaStoreId }
             if (index >= 0) {
-                playerController.prepareQueue(tracks.map { it.uri.toString() }, index)
+                playerController.prepareQueue(tracks.map { it.toQueueItem() }, index)
             }
         }
     }

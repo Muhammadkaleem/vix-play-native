@@ -54,12 +54,13 @@ screen-by-screen through `/grill-me` sessions.
 | **Thumbnail scrub previews** | **Step 4 differentiator** — `ThumbnailProvider`, shared `ScrubPreview`, 3 precision tiers |
 | **Background playback** | **Step 5 keystone** — `@Singleton PlayerController` + `PlaybackService`; ⚠️ not device-verified |
 | **Audio library + player** | Tracks slice — `AudioRepository`, ExoPlayer-native queue, shuffle/repeat; ⚠️ not device-verified |
+| **Audio mini-player** | `PlaybackKind`-gated bar above the tabs; `MediaMetadata` moved onto the queue; ⚠️ not device-verified |
 
 ## Current grill
 
-None in progress. **Two consecutive features are now built but unrun on hardware** — this
-is the largest untested surface the project has carried, and it should be cleared before
-more is stacked on top.
+None in progress. **Three consecutive features are now built but unrun on hardware**, each
+stacked on the one before. This is the largest untested surface the project has carried
+and it keeps growing; clear it before adding more.
 
 Device checklist:
 - **Background playback:** notification appears and its controls work; audio survives
@@ -67,23 +68,22 @@ Device checklist:
   keeps playing; audio focus ducks/resumes around a call.
 - **Audio slice:** the MediaStore query returns tracks on a real library; album art
   resolves (and the placeholder shows where it doesn't); tapping a track queues from
-  that point; next/prev/shuffle/repeat behave; the notification reflects track changes.
+  that point; next/prev/shuffle/repeat behave.
+- **Mini-player:** appears only for audio (never after exiting a video); stays up while
+  paused; tap and swipe-up both expand; next works; progress advances.
+- **Notification metadata:** title/artist/artwork now populate. This was very likely
+  blank before `MediaMetadata` was attached to the queue — confirm the fix landed.
 
 ## Next grill
 
-1. **Audio mini-player** — persistent bar above the bottom nav (`VixPlayNavGraph` scaffold)
-   so playback stays reachable after leaving the player; swipe up expands to the full
-   player. Has a PRD acceptance criterion ("mini-player reflects live playback state
-   across tabs"). Cheap now that `PlayerController` is app-scoped — it just observes the
-   singleton — but it is cross-cutting nav surface.
-2. **Remaining audio groupings** — Albums / Artists / Folders / Playlists tabs. Additive:
+1. **Remaining audio groupings** — Albums / Artists / Folders / Playlists tabs. Additive:
    different queries feeding the same row and player.
-3. **Subtitle styling** — PRD wants presets (Netflix/Cinema/Minimal/Classic) plus
+2. **Subtitle styling** — PRD wants presets (Netflix/Cinema/Minimal/Classic) plus
    font/size/color/outline/box/position with live preview. Media3's `SubtitleView`
    covers basic styling; full ASS/SSA fidelity is blocked on libass.
-4. **Share the screenshot** — small: plumb the saved MediaStore uri through and add a
+3. **Share the screenshot** — small: plumb the saved MediaStore uri through and add a
    share intent, likely as an action on the confirmation pill.
-5. **Pinch-to-zoom / gesture remap UI** — Step 7 polish; remap needs a persisted binding
+4. **Pinch-to-zoom / gesture remap UI** — Step 7 polish; remap needs a persisted binding
    model (`GestureModels.kt` in the PRD is aspirational, doesn't exist).
 
 ## Blocked

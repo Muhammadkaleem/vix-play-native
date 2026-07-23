@@ -44,7 +44,9 @@ import com.devbytes.vixplayer.app.navigation.folderBrowserRoute
 import com.devbytes.vixplayer.app.navigation.playerRoute
 import com.devbytes.vixplayer.app.navigation.searchRoute
 import com.devbytes.vixplayer.app.navigation.smbBrowserRoute
+import androidx.compose.foundation.layout.Column
 import com.devbytes.vixplayer.app.ui.audio.AudioLibraryScreen
+import com.devbytes.vixplayer.app.ui.audio.MiniPlayer
 import com.devbytes.vixplayer.app.ui.audio.AudioPlayerScreen
 import com.devbytes.vixplayer.app.ui.audio.EqualizerScreen
 import com.devbytes.vixplayer.app.ui.audio.PlaylistsScreen
@@ -67,6 +69,13 @@ import com.devbytes.vixplayer.app.ui.settings.SubtitleDefaultsScreen
 import com.devbytes.vixplayer.app.ui.settings.ThemeSkinsScreen
 import com.devbytes.vixplayer.app.ui.splash.SplashScreen
 
+/**
+ * Sentinel for "expand whatever is already playing" — the mini-player has no track to
+ * request, and `AudioPlayerViewModel.ensureQueued` ignores non-positive ids, so this
+ * opens the now-playing screen without disturbing the queue.
+ */
+private const val NOW_PLAYING_ID = -1L
+
 @Composable
 fun VixPlayNavGraph() {
     val navController = rememberNavController()
@@ -81,16 +90,27 @@ fun VixPlayNavGraph() {
     Scaffold(
         bottomBar = {
             if (!isFullScreen) {
-                VixBottomNav(
-                    currentDestination = currentDestination,
-                    onNavigate = { tabRoute ->
-                        navController.navigate(tabRoute) {
-                            popUpTo(TAB_VIDEO_ROUTE) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
-                )
+                // Mini-player sits above the tabs and inside the same slot, so Scaffold
+                // padding accounts for both and content is never hidden behind it.
+                Column {
+                    MiniPlayer(
+                        onExpand = {
+                            navController.navigate(audioPlayerRoute(NOW_PLAYING_ID)) {
+                                launchSingleTop = true
+                            }
+                        },
+                    )
+                    VixBottomNav(
+                        currentDestination = currentDestination,
+                        onNavigate = { tabRoute ->
+                            navController.navigate(tabRoute) {
+                                popUpTo(TAB_VIDEO_ROUTE) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                    )
+                }
             }
         },
         contentWindowInsets = WindowInsets(0),
