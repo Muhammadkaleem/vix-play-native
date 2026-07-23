@@ -96,14 +96,29 @@ metadata is absent, audio library with embedded titles, `<unknown>` → "Unknown
 **queue advance through 5 tracks**, live metadata updates on transition
 (`MediaMetadata` on the queue items), repeat toggle + active tint, equalizer entry point.
 
-### OPEN — not yet explained
-**No media notification is ever posted**, despite: service running, session active and
-PLAYING, `POST_NOTIFICATIONS` granted, and no errors in logcat. Suspicion — unproven —
-is that this follows from the deliberate "no `MediaController`" decision in the
-background-playback grill: Media3 may only drive `onUpdateNotification` when a controller
-connects. **If true, that architectural decision needs revisiting**, since notification
-and lock-screen controls were its main justification. Investigate before building further
-on the service.
+### RESOLVED — notification (was open)
+**Cause: the session was never registered with the service.** `MediaSessionService` only
+lets its notification manager observe sessions passed to `addSession()`, and
+`onGetSession` — which registers implicitly — fires *only when a `MediaController`
+connects*. This app deliberately connects none, so the session existed but nothing drove
+a notification. One line in `onCreate`: `addSession(built)`.
+
+**The "no MediaController" decision survives**, but its justification needed correcting:
+the session does publish to notification/lock-screen/Bluetooth, but only once registered.
+That registration is normally a side effect of controller connection, which is exactly
+what makes this invisible without a controller.
+
+**A second defect surfaced behind it:** `prepareFor` built a bare `MediaItem` with no
+`MediaMetadata`, so even with the notification posting, its title was null. Same root
+cause as a visible bug — `PlayerScreen` derived its title by slicing the URI, which for a
+`content://` URI yields the **numeric MediaStore id** (the player top bar was showing
+`1000000073`). Both now resolve the real display name via `MediaRepository.queryVideoById`,
+re-stamped onto the item with `replaceMediaItem` once the async lookup returns.
+
+Verified: `android.title=String (long_clip)` in dumpsys, MediaStyle template, transport
+actions present. The on-screen title fix is driven by the same resolved value but was
+**not** visually re-confirmed (controls auto-hide, and the test clip's content is itself a
+screen recording, making captures ambiguous) — worth a glance next run.
 
 ## Next grill
 

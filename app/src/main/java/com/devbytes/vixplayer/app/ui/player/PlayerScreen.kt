@@ -501,9 +501,10 @@ fun PlayerScreen(
         }
     }
 
-    val title = remember(currentUri) {
-        currentUri.substringAfterLast('/').substringBeforeLast('.').ifBlank { "Now Playing" }
-    }
+    // Resolved from MediaStore by the ViewModel; slicing the URI yields the numeric id
+    // for content:// sources, which is what used to be displayed here.
+    val resolvedTitle by viewModel.displayTitle.collectAsState()
+    val title = resolvedTitle.ifBlank { "Now Playing" }
 
     // In-place swap to the next folder video (reuses the MediaItem-rebuild pattern):
     // re-seed the resume id, clear external subs, start fresh at 0, dismiss the overlay.

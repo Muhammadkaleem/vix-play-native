@@ -11,7 +11,9 @@ import com.devbytes.vixplayer.app.data.repository.VideoFile
 import com.devbytes.vixplayer.app.player.PlayerController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -32,9 +34,37 @@ class PlayerViewModel @Inject constructor(
     /** Mutable subtitle-offset carrier read by the parser during extraction. */
     val subtitleOffset = playerController.subtitleOffset
 
+    /**
+     * The video's display name. Resolved from MediaStore rather than sliced off the URI —
+     * a `content://` URI's last path segment is the numeric id, which was being shown as
+     * the player's title and left the notification blank.
+     */
+    private val _displayTitle = MutableStateFlow("")
+    val displayTitle: StateFlow<String> = _displayTitle.asStateFlow()
+
     /** Opens a video, resetting per-file state. See [PlayerController.prepareFor]. */
-    fun prepareFor(uri: String, subtitleOffsetMs: Long) =
-        playerController.prepareFor(uri, subtitleOffsetMs)
+    fun prepareFor(uri: String, subtitleOffsetMs: Long) {
+        // Fall back to the URI's own tail for non-MediaStore sources (external intents),
+        // where there is no row to look up.
+        val fallback = Uri.parse(uri).lastPathSegment
+            ?.substringBeforeLast('.')
+            ?.takeIf { it.toLongOrNull() == null }
+            .orEmpty()
+        _displayTitle.value = fallback
+        playerController.prepareFor(uri, subtitleOffsetMs, fallback.ifBlank { null })
+
+        viewModelScope.launch {
+            val name = currentMediaStoreId
+                ?.let { runCatching { mediaRepository.queryVideoById(it) }.getOrNull() }
+                ?.name
+                ?.substringBeforeLast('.')
+            if (!name.isNullOrBlank()) {
+                _displayTitle.value = name
+                // Re-stamp the loaded item so the notification picks the real name up.
+                playerController.setCurrentTitle(name)
+            }
+        }
+    }
 
     /** Persisted subtitle appearance, shared with the Settings screen. */
     val subtitleStyle: StateFlow<SubtitleStyle> = settingsRepository.subtitleStyle

@@ -106,13 +106,37 @@ class PlayerController @Inject constructor(
      * `remember` went out of scope; with an app-scoped player it must be explicit, or a
      * previous video's subtitle offset silently applies to the next one.
      */
-    fun prepareFor(uri: String, subtitleOffsetMs: Long) {
+    fun prepareFor(uri: String, subtitleOffsetMs: Long, title: String? = null) {
         ensureServiceRunning()
         subtitleOffset.offsetUs = subtitleOffsetMs * 1_000L
-        player.setMediaItem(MediaItem.fromUri(uri))
+        // Metadata matters beyond the UI: the notification and lock screen read it, and
+        // a bare MediaItem leaves them blank.
+        player.setMediaItem(
+            MediaItem.Builder()
+                .setUri(uri)
+                .setMediaMetadata(MediaMetadata.Builder().setTitle(title).build())
+                .build()
+        )
         player.prepare()
         player.playWhenReady = true
         _kind.value = PlaybackKind.VIDEO
+    }
+
+    /**
+     * Re-stamps the loaded item's title once the real display name resolves.
+     *
+     * The name comes from a MediaStore query, which can't run synchronously at prepare
+     * time; replacing the item updates the notification without disturbing playback.
+     */
+    fun setCurrentTitle(title: String) {
+        val index = player.currentMediaItemIndex
+        val current = player.currentMediaItem ?: return
+        val updated = current.buildUpon()
+            .setMediaMetadata(
+                current.mediaMetadata.buildUpon().setTitle(title).build()
+            )
+            .build()
+        runCatching { player.replaceMediaItem(index, updated) }
     }
 
     /**

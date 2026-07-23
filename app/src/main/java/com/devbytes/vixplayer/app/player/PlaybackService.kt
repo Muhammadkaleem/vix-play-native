@@ -23,7 +23,14 @@ class PlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
-        session = MediaSession.Builder(this, controller.player).build()
+        val built = MediaSession.Builder(this, controller.player).build()
+        session = built
+        // Register explicitly. The service's notification manager only observes sessions
+        // that have been *added*, and `onGetSession` — which adds one implicitly — fires
+        // only when a MediaController connects. This app deliberately connects none, so
+        // without this the session existed but nothing ever posted a notification: no
+        // lock-screen or Bluetooth surface either. Found on the first device run.
+        addSession(built)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
@@ -43,7 +50,10 @@ class PlaybackService : MediaSessionService() {
     override fun onDestroy() {
         // Release the session only. The player is an app-scoped singleton and must stay
         // usable if the user returns; the process going away is what actually frees it.
-        session?.release()
+        session?.let {
+            if (isSessionAdded(it)) removeSession(it)
+            it.release()
+        }
         session = null
         super.onDestroy()
     }
