@@ -4,25 +4,29 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.devbytes.vixplayer.app.data.repository.AudioRepository
 import com.devbytes.vixplayer.app.data.repository.AudioTrack
+import com.devbytes.vixplayer.app.data.db.entity.Playlist
+import com.devbytes.vixplayer.app.data.repository.PlaylistRepository
 import com.devbytes.vixplayer.app.player.PlayerController
 import com.devbytes.vixplayer.app.player.QueueItem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * Library groupings. Playlists is deliberately **not** here: it is P1 in the PRD with its
- * own `/playlists` route, needs a Room data model that doesn't exist, and is Step 7 in the
- * roadmap — a selectable tab that can never hold anything would be dead UI.
+ * Library groupings. Playlists joined the set once it had a real data model — it was
+ * omitted while a tab could only ever have been empty.
  */
 enum class AudioTab(val label: String) {
     TRACKS("Tracks"),
     ALBUMS("Albums"),
     ARTISTS("Artists"),
     FOLDERS("Folders"),
+    PLAYLISTS("Playlists"),
 }
 
 /** One row in a grouping list (an album, artist, or folder). */
@@ -43,7 +47,23 @@ sealed interface AudioLibraryUiState {
 class AudioLibraryViewModel @Inject constructor(
     private val audioRepository: AudioRepository,
     private val playerController: PlayerController,
+    private val playlistRepository: PlaylistRepository,
 ) : ViewModel() {
+
+    /** Playlists, for the tab and for the add-to-playlist picker. */
+    val playlists: StateFlow<List<Playlist>> = playlistRepository.observePlaylists()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun addToPlaylist(playlistId: Long, track: AudioTrack) {
+        viewModelScope.launch { playlistRepository.addTrack(playlistId, track) }
+    }
+
+    fun createPlaylistWith(name: String, track: AudioTrack) {
+        viewModelScope.launch {
+            val id = playlistRepository.create(name.trim())
+            playlistRepository.addTrack(id, track)
+        }
+    }
 
     private val _state = MutableStateFlow<AudioLibraryUiState>(AudioLibraryUiState.Loading)
     val state: StateFlow<AudioLibraryUiState> = _state.asStateFlow()
@@ -96,7 +116,7 @@ class AudioLibraryViewModel @Inject constructor(
             AudioTab.ALBUMS -> tracks.groupBy { it.album.ifBlank { "Unknown album" } }
             AudioTab.ARTISTS -> tracks.groupBy { it.artist }
             AudioTab.FOLDERS -> tracks.groupBy { it.folder }
-            AudioTab.TRACKS -> emptyMap()
+            AudioTab.TRACKS, AudioTab.PLAYLISTS -> emptyMap()
         }
         return keyed.map { (name, groupTracks) ->
             AudioGroup(

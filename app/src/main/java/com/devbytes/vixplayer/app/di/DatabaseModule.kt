@@ -43,6 +43,39 @@ private val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
+/**
+ * Adds the playlist tables. Additive like [MIGRATION_1_2], and the DDL below is copied
+ * verbatim from Room's exported `schemas/3.json` rather than hand-written — schema
+ * validation compares them exactly, and the foreign key and index are easy to omit by
+ * hand.
+ */
+private val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `playlist` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`name` TEXT NOT NULL, " +
+                "`createdAt` INTEGER NOT NULL)"
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `playlist_item` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`playlistId` INTEGER NOT NULL, " +
+                "`mediaStoreId` INTEGER NOT NULL, " +
+                "`uri` TEXT NOT NULL, " +
+                "`title` TEXT NOT NULL, " +
+                "`artist` TEXT NOT NULL, " +
+                "`position` INTEGER NOT NULL, " +
+                "FOREIGN KEY(`playlistId`) REFERENCES `playlist`(`id`) " +
+                "ON UPDATE NO ACTION ON DELETE CASCADE )"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_playlist_item_playlistId` " +
+                "ON `playlist_item` (`playlistId`)"
+        )
+    }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
@@ -51,7 +84,7 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, "vixplay.db")
-            .addMigrations(MIGRATION_1_2)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
             .build()
 
     @Provides
@@ -59,4 +92,7 @@ object DatabaseModule {
 
     @Provides
     fun provideEqDao(db: AppDatabase) = db.eqDao()
+
+    @Provides
+    fun providePlaylistDao(db: AppDatabase) = db.playlistDao()
 }

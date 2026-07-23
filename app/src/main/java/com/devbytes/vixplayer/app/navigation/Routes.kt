@@ -18,6 +18,9 @@ const val HISTORY_ROUTE        = "history"
 // Audio tab destinations
 const val AUDIO_ROUTE     = "audio"
 const val PLAYLISTS_ROUTE = "playlists"
+const val PLAYLIST_DETAIL_ROUTE = "playlists/{playlistId}"
+
+fun playlistDetailRoute(playlistId: Long) = "playlists/$playlistId"
 const val EQUALIZER_ROUTE = "equalizer"
 
 // Network tab destinations

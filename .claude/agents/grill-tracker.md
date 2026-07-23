@@ -58,10 +58,11 @@ screen-by-screen through `/grill-me` sessions.
 | **Audio groupings** | Albums/Artists/Folders tabs, in-memory `groupBy`, in-place drill; ⚠️ not device-verified |
 | **Subtitle styling** | 4 presets + per-property, shared editor in Settings + player sheet; ⚠️ not device-verified |
 | **Equalizer** | full scope — bands/bass/virtualizer/preamp, saved presets, per-output; Room v2 migration; ⚠️ not device-verified |
+| **Playlists** | CRUD + drag reorder + missing-file flagging; fifth audio tab; Room v3 migration; ⚠️ not device-verified |
 
 ## Current grill
 
-None in progress. **Six consecutive features are now built but unrun on hardware.** This is the largest untested surface the project has carried
+None in progress. **Seven consecutive features are now built but unrun on hardware.** This is the largest untested surface the project has carried
 and it keeps growing; clear it before adding more.
 
 Device checklist:
@@ -85,18 +86,26 @@ Device checklist:
   not, the screen must show the explanation and NO controls; bands audibly change output;
   settings survive a track change and an app restart; plugging in headphones swaps to that
   route's profile; saving and re-applying a preset round-trips.
-- **Room migration 1 → 2:** *verified without hardware* — the hand-written DDL matches
-  Room's exported `schemas/…/2.json` exactly, so schema validation passes, and the
-  migration only adds tables (it never touches `playback_positions`), so resume history
-  is preserved by construction. Still worth a glance at Continue Watching after the
-  first upgrade, but this is no longer an open risk.
+- **Playlists:** create one, add tracks via a row's overflow, drag to reorder and confirm
+  the order survives leaving and re-entering the screen; delete a file on the device and
+  confirm its row shows "Unavailable" and is skipped on play-all. Drag feel (thresholds,
+  no edge autoscroll) is the most likely thing to need tuning.
+- **Room migrations 1 → 2 → 3:** *verified without hardware.* Both migrations' DDL was
+  checked against Room's exported `schemas/…/{2,3}.json` (2→3 was copied verbatim from
+  it, which is how the `playlist_item` foreign key and index came along — easy to omit
+  by hand). Room validates the *parsed* schema, so this passes. Both are additive and
+  never touch `playback_positions`, so resume history survives by construction. Worth a
+  glance at Continue Watching after the first upgrade, but not an open risk.
+
+  **Method worth reusing:** compile first so Room exports the new schema JSON, then write
+  the migration from its `createSql`. Do not hand-write DDL.
 
 ## Next grill
 
 1. **Share the screenshot** — small: plumb the saved MediaStore uri through and add a
    share intent, likely as an action on the confirmation pill.
-2. **Playlists (Step 7)** — needs Room entities (playlist + playlist_track), CRUD UI, and
-   the `/playlists/{id}` route. Would add the deferred fifth audio tab.
+2. **Multi-select in the audio library** — long-press was deliberately kept free for this
+   (queue, add to playlist, delete, share, properties), per the audio-library PRD.
 3. **Pinch-to-zoom / gesture remap UI** — Step 7 polish; remap needs a persisted binding
    model (`GestureModels.kt` in the PRD is aspirational, doesn't exist).
 

@@ -29,6 +29,8 @@ import com.devbytes.vixplayer.app.navigation.NETWORK_STREAM_ROUTE
 import com.devbytes.vixplayer.app.navigation.PLAYBACK_DEFAULTS_ROUTE
 import com.devbytes.vixplayer.app.navigation.PLAYER_ROUTE
 import com.devbytes.vixplayer.app.navigation.PLAYLISTS_ROUTE
+import com.devbytes.vixplayer.app.navigation.PLAYLIST_DETAIL_ROUTE
+import com.devbytes.vixplayer.app.navigation.playlistDetailRoute
 import com.devbytes.vixplayer.app.navigation.PRIVATE_FOLDER_ROUTE
 import com.devbytes.vixplayer.app.navigation.SEARCH_ROUTE
 import com.devbytes.vixplayer.app.navigation.SETTINGS_ROUTE
@@ -49,6 +51,7 @@ import com.devbytes.vixplayer.app.ui.audio.AudioLibraryScreen
 import com.devbytes.vixplayer.app.ui.audio.MiniPlayer
 import com.devbytes.vixplayer.app.ui.audio.AudioPlayerScreen
 import com.devbytes.vixplayer.app.ui.audio.EqualizerScreen
+import com.devbytes.vixplayer.app.ui.audio.PlaylistDetailScreen
 import com.devbytes.vixplayer.app.ui.audio.PlaylistsScreen
 import com.devbytes.vixplayer.app.ui.common.VixBottomNav
 import com.devbytes.vixplayer.app.ui.library.FolderBrowserScreen
@@ -227,12 +230,28 @@ fun VixPlayNavGraph() {
                             navController.navigate(audioPlayerRoute(id))
                         },
                         onPlaylistsClick = { navController.navigate(PLAYLISTS_ROUTE) },
+                        onOpenPlaylist = { navController.navigate(playlistDetailRoute(it)) },
                         onEqualizerClick = { navController.navigate(EQUALIZER_ROUTE) },
                     )
                 }
 
                 composable(PLAYLISTS_ROUTE) {
-                    PlaylistsScreen(onBack = { navController.popBackStack() })
+                    PlaylistsScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenPlaylist = { navController.navigate(playlistDetailRoute(it)) },
+                    )
+                }
+
+                composable(
+                    route = PLAYLIST_DETAIL_ROUTE,
+                    arguments = listOf(navArgument("playlistId") { type = NavType.LongType }),
+                ) { entry ->
+                    val id = entry.arguments?.getLong("playlistId") ?: return@composable
+                    PlaylistDetailScreen(
+                        playlistId = id,
+                        onBack = { navController.popBackStack() },
+                        onOpenPlayer = { navController.navigate(audioPlayerRoute(NOW_PLAYING_ID)) },
+                    )
                 }
 
                 composable(EQUALIZER_ROUTE) {

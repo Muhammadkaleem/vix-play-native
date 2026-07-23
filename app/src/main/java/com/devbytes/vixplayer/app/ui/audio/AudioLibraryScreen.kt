@@ -14,19 +14,28 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,14 +54,13 @@ import com.devbytes.vixplayer.app.ui.library.components.LibraryEmptyState
 import com.devbytes.vixplayer.app.ui.library.components.LibrarySkeleton
 
 /**
- * Audio tab root — Tracks / Albums / Artists / Folders.
+ * Audio tab root — Tracks / Albums / Artists / Folders / Playlists.
  *
- * All four groupings are derived in memory from one MediaStore query, so they can't
+ * The three groupings are derived in memory from one MediaStore query, so they can't
  * disagree with each other. Drilling into a group happens **in place** (same pattern as
  * `FolderBrowserScreen`) rather than through new routes.
  *
- * Playlists is not a tab here: it is P1 with its own route and no data model yet, so a
- * fifth tab would be selectable and permanently empty.
+ * Playlists joined the tab set once it had a real data model behind it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,11 +68,15 @@ fun AudioLibraryScreen(
     onAudioPlayerClick: (Long) -> Unit = {},
     onPlaylistsClick: () -> Unit = {},
     onEqualizerClick: () -> Unit = {},
+    onOpenPlaylist: (Long) -> Unit = {},
     viewModel: AudioLibraryViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
     val tab by viewModel.tab.collectAsState()
     val openGroup by viewModel.openGroup.collectAsState()
+    val playlists by viewModel.playlists.collectAsState()
+    // Track awaiting a playlist choice; non-null shows the picker.
+    var pendingTrack by remember { mutableStateOf<AudioTrack?>(null) }
 
     // System back leaves the drill before it leaves the screen.
     BackHandler(enabled = openGroup != null) { viewModel.closeGroup() }
@@ -126,6 +138,7 @@ fun AudioLibraryScreen(
                                 viewModel.play(track, drilled.tracks)
                                 onAudioPlayerClick(track.mediaStoreId)
                             },
+                            onAddToPlaylist = { pendingTrack = it },
                         )
                         // Tracks tab: the whole library is the context.
                         tab == AudioTab.TRACKS -> TrackList(
@@ -134,7 +147,33 @@ fun AudioLibraryScreen(
                                 viewModel.play(track, s.tracks)
                                 onAudioPlayerClick(track.mediaStoreId)
                             },
+                            onAddToPlaylist = { pendingTrack = it },
                         )
+
+                        tab == AudioTab.PLAYLISTS -> {
+                            if (playlists.isEmpty()) {
+                                LibraryEmptyState(
+                                    iconRes = R.drawable.ic_playlist,
+                                    title = "No playlists yet",
+                                    body = "Use the menu on any track to start one.",
+                                )
+                            } else {
+                                LazyColumn {
+                                    items(playlists, key = { it.id }) { playlist ->
+                                        GroupRow(
+                                            group = AudioGroup(
+                                                name = playlist.name,
+                                                trackCount = 0,
+                                                artUri = "",
+                                                tracks = emptyList(),
+                                            ),
+                                            showCount = false,
+                                            onClick = { onOpenPlaylist(playlist.id) },
+                                        )
+                                    }
+                                }
+                            }
+                        }
 
                         else -> {
                             val groups = viewModel.groupsFor(tab, s.tracks)
@@ -152,12 +191,74 @@ fun AudioLibraryScreen(
             }
         }
     }
+
+    // Playlist picker for the pending track, with an inline "new playlist" path so the
+    // first playlist can be created without leaving the library.
+    pendingTrack?.let { track ->
+        var newName by remember { mutableStateOf("") }
+        var creating by remember { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = { pendingTrack = null },
+            title = { Text("Add to playlist") },
+            text = {
+                Column {
+                    if (creating) {
+                        OutlinedTextField(
+                            value = newName,
+                            onValueChange = { newName = it },
+                            singleLine = true,
+                            label = { Text("Playlist name") },
+                        )
+                    } else {
+                        if (playlists.isEmpty()) {
+                            Text(
+                                text = "No playlists yet.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        playlists.forEach { playlist ->
+                            Text(
+                                text = playlist.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        viewModel.addToPlaylist(playlist.id, track)
+                                        pendingTrack = null
+                                    }
+                                    .padding(vertical = 12.dp),
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                if (creating) {
+                    TextButton(
+                        onClick = {
+                            viewModel.createPlaylistWith(newName, track)
+                            pendingTrack = null
+                        },
+                        enabled = newName.isNotBlank(),
+                    ) { Text("Create") }
+                } else {
+                    TextButton(onClick = { creating = true }) { Text("New playlist") }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingTrack = null }) { Text("Cancel") }
+            },
+        )
+    }
 }
 
 @Composable
 private fun TrackList(
     tracks: List<AudioTrack>,
     onPlay: (AudioTrack) -> Unit,
+    onAddToPlaylist: (AudioTrack) -> Unit,
 ) {
     LazyColumn {
         items(tracks, key = { it.mediaStoreId }) { track ->
@@ -167,6 +268,7 @@ private fun TrackList(
                 durationMs = track.durationMs,
                 albumArtUri = track.albumArtUri.toString(),
                 onClick = { onPlay(track) },
+                onAddToPlaylist = { onAddToPlaylist(track) },
             )
         }
     }
@@ -176,6 +278,7 @@ private fun TrackList(
 private fun GroupRow(
     group: AudioGroup,
     onClick: () -> Unit,
+    showCount: Boolean = true,
 ) {
     Row(
         modifier = Modifier
@@ -194,11 +297,13 @@ private fun GroupRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                text = if (group.trackCount == 1) "1 track" else "${group.trackCount} tracks",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (showCount) {
+                Text(
+                    text = if (group.trackCount == 1) "1 track" else "${group.trackCount} tracks",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -210,7 +315,9 @@ private fun TrackRow(
     durationMs: Long,
     albumArtUri: String,
     onClick: () -> Unit,
+    onAddToPlaylist: () -> Unit,
 ) {
+    var menu by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -242,6 +349,22 @@ private fun TrackRow(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        // Overflow rather than long-press: the PRD reserves long-press for multi-select.
+        Box {
+            IconButton(onClick = { menu = true }) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_more_vert),
+                    contentDescription = "More",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                DropdownMenuItem(
+                    text = { Text("Add to playlist") },
+                    onClick = { menu = false; onAddToPlaylist() },
+                )
+            }
+        }
     }
 }
 

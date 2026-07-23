@@ -40,36 +40,38 @@ PRDs in `vix-play-docs/`, then implemented and logged in `CLAUDE.md`.
 | Extras | playback speed (persisted), Picture-in-Picture, sleep timer, screenshot |
 | Background | `MediaSessionService` + notification/lock-screen controls, audio focus (opt-in) |
 | Equalizer | multiband EQ, bass boost, virtualizer, preamp, saved presets, per-output profiles |
+| Playlists | create/rename/delete, add from library, drag reorder, missing-file flagging |
 
-**Audio** — library with Tracks / Albums / Artists / Folders tabs, full-screen player with seek,
-shuffle and repeat over ExoPlayer's native queue, and a persistent mini-player above the tabs.
+**Audio** — library with Tracks / Albums / Artists / Folders / Playlists tabs, full-screen player
+with seek, shuffle and repeat over ExoPlayer's native queue, a persistent mini-player above the
+tabs, and playlists with drag reorder.
 
 **Library shell** — video library, folder browser, search, history, settings hub, About.
 
 **Not yet built** — libass (full ASS/SSA fidelity) · subtitle online search · network streaming
-(SMB/FTP) · Chromecast · playlists · private folder · Android TV.
+(SMB/FTP) · Chromecast · private folder · Android TV.
 
 ## Current grill
 
-**Equalizer — built, not yet device-verified.** Multiband EQ with bass boost, virtualizer and
-preamp, saved custom presets, and a separate profile per output route so headphones and speaker can
-hold different curves.
+**Playlists — built, not yet device-verified.** Create, rename, delete, add tracks from any row's
+overflow, drag to reorder, play all or shuffle. This also fills the fifth audio tab, which was
+deliberately left out earlier because there was no data model behind it.
 
-Band count, frequencies, level range and preset names are all read from the hardware rather than
-assumed — they vary by device. The app generates and owns its audio session id, which means effects
-bind once and can never be orphaned by a track change; the PRD's rebind edge case stops existing
-rather than being handled.
+Drag reorder is hand-rolled — Compose has no built-in reorderable list and this is one screen, so
+no dependency was added. Long-press lifts an item (leaving ordinary scrolling alone) and the new
+order is persisted once on drop rather than on every swap.
 
-This also fixed a reachability bug: `EqualizerScreen` had a route and a callback but nothing ever
-invoked it, so the screen was unreachable from anywhere in the app.
+Items whose file has disappeared are shown greyed and labelled rather than dropped, and are skipped
+when playing. That's why each entry caches its title and artist: a row for a deleted file can't be
+labelled otherwise.
 
-> Six features now await a device run. The equalizer is the one that most needs it — audio effects
-> are restricted on some ROMs, and the graceful-disable path can only be confirmed on hardware.
+> Seven features now await a device run. Drag reorder is the piece most likely to need tuning —
+> thresholds and autoscroll are judged by feel.
 
 ## Next grill
 
 Candidates, in rough priority order:
 
 1. **Share the screenshot** — small follow-up: plumb the saved MediaStore uri into a share intent.
-2. **Playlists (Step 7)** — needs a Room data model; would add the fifth audio tab.
+2. **Multi-select in the audio library** — long-press was deliberately left free for this.
 3. **Pinch-to-zoom / gesture remap UI (Step 7)** — needs a persisted gesture-binding model.
