@@ -64,11 +64,13 @@ screen-by-screen through `/grill-me` sessions.
 | **Bulk delete** | 3 per-API flows; every path confirmed; re-queries after; ⚠️ not device-verified |
 | **Trash instead of delete** | `createTrashRequest` on API 30+ — removal is now recoverable; ⚠️ not device-verified |
 | **Video multi-select** | share + trash; shared `SelectionHolder`; audio refactored onto it; ⚠️ not device-verified |
+| **Folder multi-select + rename** | share/rename/trash; `MediaRenamer` across all API levels; ⚠️ not device-verified |
 
 ## Current grill
 
-None in progress. **Twelve consecutive features are now built but unrun on hardware.** Removal
-is recoverable on API 30+, which materially lowers the worst case. This is the largest untested surface the project has carried
+None in progress. **Thirteen consecutive features are now built but unrun on hardware.** Removal
+is recoverable on API 30+, which materially lowers the worst case. Rename is not
+recoverable and touches files directly — verify it on expendable files. This is the largest untested surface the project has carried
 and it keeps growing; clear it before adding more.
 
 Device checklist:
@@ -114,6 +116,10 @@ Device checklist:
   player, back exits selection; Continue Watching hides while selecting; share and trash
   behave as they do in the audio library. Also re-check audio multi-select still works —
   it was refactored onto the shared `SelectionHolder` in the same pass.
+- **Folder multi-select + rename (⚠️ rename is not undoable):** long-press selects;
+  rename appears only with exactly one item selected; the extension survives (rename
+  something to a bare word and confirm it keeps `.mp4`); the renamed file still plays;
+  on API 24–28 confirm the file actually moved on disk, not just in MediaStore.
 - **Room migrations 1 → 2 → 3:** *verified without hardware.* Both migrations' DDL was
   checked against Room's exported `schemas/…/{2,3}.json` (2→3 was copied verbatim from
   it, which is how the `playlist_item` foreign key and index came along — easy to omit
@@ -126,10 +132,10 @@ Device checklist:
 
 ## Next grill
 
-1. **Folder-browser multi-select** — `SelectionHolder` is ready, but the folder browser's
-   own PRD set (move, copy, rename, `.nomedia`) is file-system work (SAF trees,
-   cross-volume copies, MediaStore path updates). Shipping only share+trash there would
-   leave its specified actions conspicuously missing, so do them together.
+1. **Move / copy files** — the remaining folder-browser actions. Move needs a same-volume
+   `RELATIVE_PATH` fast path plus a cross-volume copy+delete fallback; copy needs progress
+   reporting and cancellation for multi-gigabyte files. Neither degrades gracefully if
+   interrupted.
 2. **In-app Trash screen** — restore trashed items without leaving the app
    (`QUERY_ARG_MATCH_TRASHED`). Weigh carefully: it would reintroduce a permanent-delete
    action, which the trash pass deliberately removed on API 30+.
@@ -141,6 +147,11 @@ items (network streaming, Chromecast, private folder, Android TV) each need a da
 or dependency that doesn't exist yet — they are new subsystems, not increments.
 
 ## Blocked
+
+- **`.nomedia` folder hiding** — requires creating a file in an arbitrary folder, which
+  scoped storage forbids without a persisted SAF tree grant or `MANAGE_EXTERNAL_STORAGE`
+  (opt-in power mode per CLAUDE.md, needs a Play Console declaration). Needs the storage
+  access decision revisited, not a feature pass.
 
 - **Cast (Step 6)** — needs the Cast SDK dependency added to `libs.versions.toml`.
   Still the last stub in `PlayerSheet` (`Text("Cast — Step 6")`).

@@ -1,6 +1,9 @@
 package com.devbytes.vixplayer.app.ui.library
 
+import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -18,6 +21,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -27,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,7 +74,44 @@ fun FolderBrowserScreen(
 
     val goUp: () -> Unit = { pendingGrid = false; viewModel.navigateUp() }
 
-    BackHandler(enabled = isInFolder, onBack = goUp)
+    val context = LocalContext.current
+    val selected by viewModel.selected.collectAsStateWithLifecycle()
+    val message by viewModel.message.collectAsStateWithLifecycle()
+    val selectionMode = selected.isNotEmpty()
+    var confirmDelete by remember { mutableStateOf(false) }
+    var renaming by remember { mutableStateOf(false) }
+
+    val visibleVideos = (state as? FolderBrowserUiState.VideoList)?.videos.orEmpty()
+
+    // Back unwinds selection first, then leaves the folder.
+    BackHandler(enabled = selectionMode) { viewModel.clearSelection() }
+    BackHandler(enabled = !selectionMode && isInFolder, onBack = goUp)
+
+    val deleteConsent = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult(),
+    ) { result ->
+        viewModel.onDeleteConsentResult(result.resultCode == android.app.Activity.RESULT_OK)
+    }
+    val renameConsent = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult(),
+    ) { result ->
+        viewModel.onRenameConsentResult(result.resultCode == android.app.Activity.RESULT_OK)
+    }
+
+    fun removeSelection() {
+        viewModel.deleteSelection { sender ->
+            deleteConsent.launch(
+                androidx.activity.result.IntentSenderRequest.Builder(sender).build()
+            )
+        }
+    }
+
+    message?.let { text ->
+        LaunchedEffect(text) {
+            android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_SHORT).show()
+            viewModel.consumeMessage()
+        }
+    }
 
     val title = if (state is FolderBrowserUiState.VideoList) {
         (state as FolderBrowserUiState.VideoList).folderName
@@ -77,6 +121,62 @@ fun FolderBrowserScreen(
 
     Scaffold(
         topBar = {
+            if (selectionMode) {
+                TopAppBar(
+                    title = { Text("${selected.size} selected") },
+                    navigationIcon = {
+                        IconButton(onClick = { viewModel.clearSelection() }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_close),
+                                contentDescription = "Clear selection",
+                            )
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = {
+                            shareFolderVideos(context, viewModel.selectedVideos(visibleVideos))
+                            viewModel.clearSelection()
+                        }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_share),
+                                contentDescription = "Share",
+                            )
+                        }
+                        // Rename is single-item only — there is no sensible bulk meaning.
+                        if (selected.size == 1) {
+                            IconButton(onClick = { renaming = true }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_edit),
+                                    contentDescription = "Rename",
+                                )
+                            }
+                        }
+                        IconButton(onClick = {
+                            if (viewModel.systemConfirmsDelete) removeSelection()
+                            else confirmDelete = true
+                        }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_delete),
+                                contentDescription = if (viewModel.deleteIsRecoverable) {
+                                    "Move to trash"
+                                } else {
+                                    "Delete"
+                                },
+                            )
+                        }
+                        IconButton(onClick = { viewModel.selectAll(visibleVideos) }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_check),
+                                contentDescription = "Select all",
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    ),
+                )
+                return@Scaffold
+            }
             TopAppBar(
                 title = { Text(title) },
                 navigationIcon = {
@@ -113,6 +213,9 @@ fun FolderBrowserScreen(
             is FolderBrowserUiState.VideoList -> VideoGrid(
                 videos = s.videos,
                 onVideoClick = onVideoClick,
+                selected = selected,
+                selectionMode = selectionMode,
+                onToggleSelect = { viewModel.toggleSelection(it) },
                 modifier = Modifier.padding(padding),
             )
 
@@ -202,10 +305,32 @@ private fun FolderRow(
     }
 }
 
+/** Hands the selection to the system chooser, which is itself the confirmation step. */
+private fun shareFolderVideos(context: android.content.Context, videos: List<VideoFile>) {
+    if (videos.isEmpty()) return
+    val uris = ArrayList(videos.map { it.uri })
+    val intent = if (uris.size == 1) {
+        Intent(Intent.ACTION_SEND).apply {
+            type = "video/*"
+            putExtra(Intent.EXTRA_STREAM, uris.first())
+        }
+    } else {
+        Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+            type = "video/*"
+            putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+        }
+    }
+    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    context.startActivity(Intent.createChooser(intent, "Share"))
+}
+
 @Composable
 private fun VideoGrid(
     videos: List<VideoFile>,
     onVideoClick: (Uri) -> Unit,
+    selected: Set<Long>,
+    selectionMode: Boolean,
+    onToggleSelect: (VideoFile) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (videos.isEmpty()) {
@@ -227,7 +352,11 @@ private fun VideoGrid(
         items(videos, key = { it.mediaStoreId }) { video ->
             VideoCard(
                 video = video,
-                onClick = { onVideoClick(video.uri) },
+                isSelected = video.mediaStoreId in selected,
+                onClick = {
+                    if (selectionMode) onToggleSelect(video) else onVideoClick(video.uri)
+                },
+                onLongClick = { onToggleSelect(video) },
             )
         }
     }

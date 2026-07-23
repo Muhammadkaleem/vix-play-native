@@ -41,7 +41,7 @@ PRDs in `vix-play-docs/`, then implemented and logged in `CLAUDE.md`.
 | Background | `MediaSessionService` + notification/lock-screen controls, audio focus (opt-in) |
 | Equalizer | multiband EQ, bass boost, virtualizer, preamp, saved presets, per-output profiles |
 | Playlists | create/rename/delete, add from library, drag reorder, missing-file flagging |
-| Multi-select | long-press to select — audio: queue/playlist/share/trash · video: share/trash |
+| Multi-select | all three browse surfaces — audio: queue/playlist/share/trash · video & folders: share/trash · folders also rename |
 
 **Audio** — library with Tracks / Albums / Artists / Folders / Playlists tabs, full-screen player
 with seek, shuffle and repeat over ExoPlayer's native queue, a persistent mini-player above the
@@ -54,27 +54,30 @@ tabs, and playlists with drag reorder.
 
 ## Current grill
 
-**Multi-select lifted to the video library — built, not yet device-verified.** Long-press a video
-to select; the contextual bar offers Share and Move to trash.
+**Folder-browser multi-select + rename — built, not yet device-verified.** Long-press to select;
+share, rename and move to trash. Multi-select now covers all three browse surfaces.
 
-Only two of the PRD's six listed actions had anything behind them — playlists are audio-only, and
-rename/properties/hide don't exist anywhere in the app — so two real actions shipped rather than
-six buttons that can't work.
+Rename works across the whole supported range: `DISPLAY_NAME` with a consent prompt on modern
+Android, and a real file rename via the legacy path on API 24–28, where updating the name alone
+doesn't move the file. The original extension is reapplied on save, so renaming `clip.mp4` to
+`holiday` can't produce a file the system stops recognising. It's offered only when exactly one
+item is selected.
 
-The selection logic moved into a shared `SelectionHolder` and the audio library was refactored onto
-it in the same pass, so there's one implementation rather than two copies waiting to diverge.
+**`.nomedia` hiding is blocked, not deferred.** It needs to create a file inside an arbitrary
+folder, which scoped storage forbids without a SAF tree grant or `MANAGE_EXTERNAL_STORAGE` — a
+storage-architecture decision, not something a feature pass can resolve.
 
-The Continue Watching rail hides while selecting: its cards aren't selection-aware, so leaving it
-visible would mean a tap there opens the player while a tap below ticks a checkbox.
+Move and copy are deferred: both need progress reporting, cancellation and cross-volume fallbacks,
+and neither degrades gracefully if interrupted.
 
-> Twelve features now await a device run.
+> Thirteen features now await a device run.
 
 ## Next grill
 
 Candidates, in rough priority order:
 
-1. **Folder-browser multi-select** — needs its own file-system actions (move, copy, rename,
-   `.nomedia`), which is separate work from selection.
+1. **Move / copy files** — the remaining folder-browser actions; need progress UI, cancellation
+   and a cross-volume copy+delete fallback.
 2. **Pinch-to-zoom / gesture remap UI (Step 7)** — needs a persisted gesture-binding model.
 3. **In-app Trash screen** — restore trashed items without leaving the app; today recovery lives in
    the system Files/Photos apps.
