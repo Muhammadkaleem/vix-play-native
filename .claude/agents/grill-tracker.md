@@ -116,6 +116,24 @@ disk as `/sdcard/Music/Rock/.trashed-…-track_rock.ogg` — recoverable, as des
 assumption about embedded titles — `Alarm_Beep_01.ogg` is titled "Piezo Alarm". Selection
 resolves correctly.)*
 
+### Playlists — verified, one real bug fixed
+Create (inline, from a track's overflow), add tracks, Room persistence, detail screen with
+Play all / Shuffle / per-row delete, **cached titles surviving as designed**, and reorder
+**persisting** across leaving and re-entering the screen — all confirmed.
+
+**Bug: a drag of any length advanced exactly one position.** Root cause was *not* the swap
+detection — it was `Modifier.pointerInput(index)`. `pointerInput` restarts when its key
+changes, and a swap changes the dragged row's index, so the block was torn down and the
+gesture cancelled mid-drag. **I rewrote the detection twice at the wrong layer** (offset
+rebasing, then pointer hit-testing) before spotting it; both failed identically, which was
+the clue. Now keyed on `Unit` with the live index read via `rememberUpdatedState`, and
+detection is deterministic distance accumulation that derives nothing from `layoutInfo`
+mid-gesture. Verified: one drag now moves an item two positions.
+
+*Note:* the Playlists **tab** shows no track count, while the separate `PlaylistsScreen`
+route does — two playlist lists of differing fidelity. The PRD asks for name + item count
++ art collage.
+
 ### RESOLVED — notification (was open)
 **Cause: the session was never registered with the service.** `MediaSessionService` only
 lets its notification manager observe sessions passed to `addSession()`, and

@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -39,37 +40,43 @@ class ReorderState(
     var dragOffset by mutableFloatStateOf(0f)
         private set
 
-    private var startOffset = 0f
-
     val isDragging: Boolean get() = draggingIndex >= 0
+
+    private var rowHeight = 0f
 
     fun onDragStart(index: Int) {
         draggingIndex = index
         dragOffset = 0f
-        startOffset = itemInfo(index)?.offset?.toFloat() ?: 0f
+        // Captured once, before any swap, so the drag never depends on layout that
+        // recomposition hasn't caught up with.
+        rowHeight = itemInfo(index)?.size?.toFloat() ?: 0f
     }
 
+    /**
+     * Swaps once per row-height of travel, accumulating the remainder.
+     *
+     * Deliberately derives nothing from `layoutInfo` mid-gesture. Two earlier attempts
+     * did — first rebasing against the swapped item's offset, then hit-testing the
+     * pointer against item bounds — and both read geometry from before `onMove`'s
+     * recomposition had landed, so a drag of any length advanced exactly one position.
+     * Distance accumulation has no such dependency, and [dragOffset] doubles as the
+     * visual displacement.
+     */
     fun onDrag(delta: Float) {
-        if (draggingIndex < 0) return
+        if (draggingIndex < 0 || rowHeight <= 0f) return
         dragOffset += delta
+        val lastIndex = listState.layoutInfo.totalItemsCount - 1
 
-        val current = itemInfo(draggingIndex) ?: return
-        val currentCentre = startOffset + dragOffset + current.size / 2f
-
-        // Swap once the dragged item's centre passes a neighbour's centre.
-        val target = listState.layoutInfo.visibleItemsInfo
-            .firstOrNull { info ->
-                info.index != draggingIndex &&
-                    currentCentre.toInt() in info.offset..(info.offset + info.size)
-            }
-            ?: return
-
-        onMove(draggingIndex, target.index)
-        // The dragged item now occupies the target slot; rebase so it stays under the finger.
-        val newStart = itemInfo(target.index)?.offset?.toFloat() ?: startOffset
-        dragOffset += startOffset - newStart
-        startOffset = newStart
-        draggingIndex = target.index
+        while (dragOffset >= rowHeight && draggingIndex < lastIndex) {
+            onMove(draggingIndex, draggingIndex + 1)
+            draggingIndex += 1
+            dragOffset -= rowHeight
+        }
+        while (dragOffset <= -rowHeight && draggingIndex > 0) {
+            onMove(draggingIndex, draggingIndex - 1)
+            draggingIndex -= 1
+            dragOffset += rowHeight
+        }
     }
 
     fun onDragEnd() {
@@ -92,11 +99,19 @@ fun rememberReorderState(
 /**
  * Attaches the lift-and-drag gesture to a row. Long-press is the trigger, so vertical
  * scrolling over the same list is unaffected.
+ *
+ * **Keyed on `Unit`, never on the index.** `pointerInput` restarts when its key changes,
+ * and a swap changes the dragged row's index — which tore down the block and cancelled
+ * the gesture mid-drag, so a drag of any length advanced exactly one position no matter
+ * how the swap detection was written. The live index is read through
+ * [rememberUpdatedState] instead, which updates without restarting the gesture.
  */
-fun Modifier.reorderable(state: ReorderState, index: Int): Modifier =
-    this.pointerInput(index) {
+@Composable
+fun Modifier.reorderable(state: ReorderState, index: Int): Modifier {
+    val currentIndex by rememberUpdatedState(index)
+    return this.pointerInput(Unit) {
         detectDragGesturesAfterLongPress(
-            onDragStart = { state.onDragStart(index) },
+            onDragStart = { state.onDragStart(currentIndex) },
             onDrag = { change, amount ->
                 change.consume()
                 state.onDrag(amount.y)
@@ -105,3 +120,4 @@ fun Modifier.reorderable(state: ReorderState, index: Int): Modifier =
             onDragCancel = { state.onDragEnd() },
         )
     }
+}
