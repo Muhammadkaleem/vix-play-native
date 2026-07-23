@@ -1,6 +1,8 @@
 package com.devbytes.vixplayer.app.ui.library.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
@@ -29,18 +31,29 @@ import com.devbytes.vixplayer.app.ui.theme.ScrimStrong
 import com.devbytes.vixplayer.app.ui.theme.TimecodeStyle
 import com.devbytes.vixplayer.app.ui.theme.TrackInactive
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun VideoCard(
     video: VideoFile,
     resumeFraction: Float = 0f,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    isSelected: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
 ) {
     Surface(
-        onClick = onClick,
-        modifier = modifier,
+        // combinedClickable rather than Surface's onClick: Surface has no long-press
+        // overload, and long-press is what enters selection (matching the audio library).
+        modifier = modifier.combinedClickable(
+            onClick = onClick,
+            onLongClick = onLongClick,
+        ),
         shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        color = if (isSelected) {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant
+        },
     ) {
         Column {
             Box(

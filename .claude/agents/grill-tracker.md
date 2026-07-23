@@ -63,11 +63,12 @@ screen-by-screen through `/grill-me` sessions.
 | **Screenshot share** | save-pill gains a Share action; pill dwells 4s when actionable; ⚠️ not device-verified |
 | **Bulk delete** | 3 per-API flows; every path confirmed; re-queries after; ⚠️ not device-verified |
 | **Trash instead of delete** | `createTrashRequest` on API 30+ — removal is now recoverable; ⚠️ not device-verified |
+| **Video multi-select** | share + trash; shared `SelectionHolder`; audio refactored onto it; ⚠️ not device-verified |
 
 ## Current grill
 
-None in progress. **Eleven consecutive features are now built but unrun on hardware.** Removal
-is now recoverable on API 30+, which materially lowers the worst case. This is the largest untested surface the project has carried
+None in progress. **Twelve consecutive features are now built but unrun on hardware.** Removal
+is recoverable on API 30+, which materially lowers the worst case. This is the largest untested surface the project has carried
 and it keeps growing; clear it before adding more.
 
 Device checklist:
@@ -109,6 +110,10 @@ Device checklist:
   deselecting items inside the system dialog must be reflected in the reported count
   (it re-queries, so it should say what really went); deleting the currently-playing
   track should skip onward, not error; affected playlist rows should show "Unavailable".
+- **Video multi-select:** long-press selects, tap then toggles rather than opening the
+  player, back exits selection; Continue Watching hides while selecting; share and trash
+  behave as they do in the audio library. Also re-check audio multi-select still works —
+  it was refactored onto the shared `SelectionHolder` in the same pass.
 - **Room migrations 1 → 2 → 3:** *verified without hardware.* Both migrations' DDL was
   checked against Room's exported `schemas/…/{2,3}.json` (2→3 was copied verbatim from
   it, which is how the `playlist_item` foreign key and index came along — easy to omit
@@ -121,10 +126,10 @@ Device checklist:
 
 ## Next grill
 
-1. **Lift multi-select to the video library / folder browser** — the selection primitive
-   (state, contextual bar, ordered BackHandlers) is ready to reuse. Note the folder
-   browser's own set — move, copy, rename, `.nomedia` — is separate file-system work
-   (SAF trees, cross-volume copies, MediaStore path updates), not selection work.
+1. **Folder-browser multi-select** — `SelectionHolder` is ready, but the folder browser's
+   own PRD set (move, copy, rename, `.nomedia`) is file-system work (SAF trees,
+   cross-volume copies, MediaStore path updates). Shipping only share+trash there would
+   leave its specified actions conspicuously missing, so do them together.
 2. **In-app Trash screen** — restore trashed items without leaving the app
    (`QUERY_ARG_MATCH_TRASHED`). Weigh carefully: it would reintroduce a permanent-delete
    action, which the trash pass deliberately removed on API 30+.

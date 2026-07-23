@@ -2,8 +2,11 @@ package com.devbytes.vixplayer.app.ui.library
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.devbytes.vixplayer.app.data.repository.DeleteResult
+import com.devbytes.vixplayer.app.data.repository.MediaDeleter
 import com.devbytes.vixplayer.app.data.repository.MediaRepository
 import com.devbytes.vixplayer.app.data.repository.PlaybackRepository
+import com.devbytes.vixplayer.app.ui.common.SelectionHolder
 import com.devbytes.vixplayer.app.data.repository.VideoFile
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,10 +42,93 @@ data class VideoLibraryUiState(
 class VideoLibraryViewModel @Inject constructor(
     private val mediaRepository: MediaRepository,
     private val playbackRepository: PlaybackRepository,
+    private val mediaDeleter: MediaDeleter,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(VideoLibraryUiState())
     val uiState: StateFlow<VideoLibraryUiState> = _uiState.asStateFlow()
+
+    /** Multi-select state, shared implementation with the audio library. */
+    private val selection = SelectionHolder()
+    val selected: StateFlow<Set<Long>> = selection.selected
+
+    /** One-shot message for the trash/delete outcome; consumed by the screen. */
+    private val _message = MutableStateFlow<String?>(null)
+    val message: StateFlow<String?> = _message.asStateFlow()
+
+    fun consumeMessage() { _message.value = null }
+
+    /** True when the platform shows its own confirmation, so we shouldn't. */
+    val systemConfirmsDelete: Boolean get() = mediaDeleter.systemConfirms()
+
+    /** True when removal is recoverable (system trash), driving the wording. */
+    val deleteIsRecoverable: Boolean get() = mediaDeleter.isRecoverable()
+
+    private var pendingDeleteCount = 0
+
+    fun toggleSelection(video: VideoFile) = selection.toggle(video.mediaStoreId)
+
+    fun selectAll(videos: List<VideoFile>) =
+        selection.selectAll(videos.map { it.mediaStoreId })
+
+    fun clearSelection() = selection.clear()
+
+    fun selectedVideos(visible: List<VideoFile>): List<VideoFile> =
+        selection.filter(visible) { it.mediaStoreId }
+
+    /**
+     * Removes the current selection. On API 30+ this trashes (recoverable); below that it
+     * deletes permanently, which is why the screen confirms first on those versions.
+     */
+    fun deleteSelection(
+        visible: List<VideoFile>,
+        onNeedsConsent: (android.content.IntentSender) -> Unit,
+    ) {
+        val videos = selectedVideos(visible)
+        if (videos.isEmpty()) return
+        pendingDeleteCount = videos.size
+        viewModelScope.launch {
+            when (val result = mediaDeleter.delete(videos.map { it.uri })) {
+                is DeleteResult.NeedsConsent -> onNeedsConsent(result.intentSender)
+                is DeleteResult.Deleted -> finishDelete()
+                is DeleteResult.Failed -> {
+                    _message.value = result.message
+                    clearSelection()
+                }
+            }
+        }
+    }
+
+    fun onDeleteConsentResult(granted: Boolean) {
+        if (!granted) {
+            _message.value = "Cancelled"
+            clearSelection()
+            pendingDeleteCount = 0
+            return
+        }
+        finishDelete()
+    }
+
+    /**
+     * Re-queries MediaStore instead of trusting what was requested: the user can deselect
+     * items inside the system dialog, so the request is not the outcome.
+     */
+    private fun finishDelete() {
+        pendingDeleteCount = 0
+        viewModelScope.launch {
+            val before = rawVideos.size
+            loadContent()
+            val after = mediaRepository.queryAllVideos().size
+            val gone = (before - after).coerceAtLeast(0)
+            clearSelection()
+            val verb = if (mediaDeleter.isRecoverable()) "moved to trash" else "deleted"
+            _message.value = when {
+                gone == 0 -> "Nothing was removed"
+                gone == 1 -> "1 video $verb"
+                else -> "$gone videos $verb"
+            }
+        }
+    }
 
     // Query order (DATE_MODIFIED DESC) preserved so SortOrder.RECENT stays available.
     private var rawVideos: List<VideoFile> = emptyList()

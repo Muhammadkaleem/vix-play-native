@@ -1,8 +1,10 @@
 package com.devbytes.vixplayer.app.ui.library
 
 import android.Manifest
+import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -17,11 +19,14 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -40,6 +45,7 @@ import androidx.core.content.PermissionChecker
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.devbytes.vixplayer.app.R
+import com.devbytes.vixplayer.app.data.repository.VideoFile
 import com.devbytes.vixplayer.app.ui.library.components.ContinueWatchingRail
 import com.devbytes.vixplayer.app.ui.library.components.LibraryEmptyState
 import com.devbytes.vixplayer.app.ui.library.components.LibrarySkeleton
@@ -66,6 +72,35 @@ fun VideoLibraryScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var sortMenuOpen by remember { mutableStateOf(false) }
 
+    val selected by viewModel.selected.collectAsStateWithLifecycle()
+    val message by viewModel.message.collectAsStateWithLifecycle()
+    val selectionMode = selected.isNotEmpty()
+    // Only shown below API 30, where removal is permanent and nothing else confirms it.
+    var confirmDelete by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = selectionMode) { viewModel.clearSelection() }
+
+    val deleteConsent = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult(),
+    ) { result ->
+        viewModel.onDeleteConsentResult(result.resultCode == android.app.Activity.RESULT_OK)
+    }
+
+    fun removeSelection() {
+        viewModel.deleteSelection(uiState.allVideos) { sender ->
+            deleteConsent.launch(
+                androidx.activity.result.IntentSenderRequest.Builder(sender).build()
+            )
+        }
+    }
+
+    message?.let { text ->
+        LaunchedEffect(text) {
+            android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_SHORT).show()
+            viewModel.consumeMessage()
+        }
+    }
+
     val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
         Manifest.permission.READ_MEDIA_VIDEO
     else
@@ -87,6 +122,53 @@ fun VideoLibraryScreen(
 
     Scaffold(
         topBar = {
+            if (selectionMode) {
+                TopAppBar(
+                    title = { Text("${selected.size} selected") },
+                    navigationIcon = {
+                        IconButton(onClick = { viewModel.clearSelection() }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_close),
+                                contentDescription = "Clear selection",
+                            )
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = {
+                            shareVideos(context, viewModel.selectedVideos(uiState.allVideos))
+                            viewModel.clearSelection()
+                        }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_share),
+                                contentDescription = "Share",
+                            )
+                        }
+                        IconButton(onClick = {
+                            if (viewModel.systemConfirmsDelete) removeSelection()
+                            else confirmDelete = true
+                        }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_delete),
+                                contentDescription = if (viewModel.deleteIsRecoverable) {
+                                    "Move to trash"
+                                } else {
+                                    "Delete"
+                                },
+                            )
+                        }
+                        IconButton(onClick = { viewModel.selectAll(uiState.allVideos) }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_check),
+                                contentDescription = "Select all",
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    ),
+                )
+                return@Scaffold
+            }
             TopAppBar(
                 title = { Text("VixPlay") },
                 actions = {
@@ -182,16 +264,66 @@ fun VideoLibraryScreen(
             else -> LibraryGrid(
                 uiState = uiState,
                 onVideoClick = onVideoClick,
+                selected = selected,
+                selectionMode = selectionMode,
+                onToggleSelect = { viewModel.toggleSelection(it) },
                 modifier = Modifier.padding(padding),
             )
         }
     }
+
+    if (confirmDelete) {
+        ConfirmDeleteDialog(
+            count = selected.size,
+            onConfirm = { confirmDelete = false; removeSelection() },
+            onDismiss = { confirmDelete = false },
+        )
+    }
+}
+
+// Only reachable below API 30: no trash there, so this dialog is the sole thing between
+// a tap and permanent deletion.
+@Composable
+private fun ConfirmDeleteDialog(
+    count: Int,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete $count videos?") },
+        text = { Text("This permanently removes them from this device. It can't be undone.") },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Delete") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/** Hands the selection to the system chooser, which is itself the confirmation step. */
+private fun shareVideos(context: android.content.Context, videos: List<VideoFile>) {
+    if (videos.isEmpty()) return
+    val uris = ArrayList(videos.map { it.uri })
+    val intent = if (uris.size == 1) {
+        Intent(Intent.ACTION_SEND).apply {
+            type = "video/*"
+            putExtra(Intent.EXTRA_STREAM, uris.first())
+        }
+    } else {
+        Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+            type = "video/*"
+            putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+        }
+    }
+    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    context.startActivity(Intent.createChooser(intent, "Share"))
 }
 
 @Composable
 private fun LibraryGrid(
     uiState: VideoLibraryUiState,
     onVideoClick: (Uri) -> Unit,
+    selected: Set<Long>,
+    selectionMode: Boolean,
+    onToggleSelect: (VideoFile) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val resumeMap = uiState.continueWatching.associate { it.video.mediaStoreId to it.progressFraction }
@@ -204,7 +336,9 @@ private fun LibraryGrid(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier.fillMaxSize(),
     ) {
-        if (uiState.continueWatching.isNotEmpty()) {
+        // Hidden while selecting: the rail's cards aren't selection-aware, so leaving it
+        // up would mean a tap there opens the player while a tap below toggles a checkbox.
+        if (uiState.continueWatching.isNotEmpty() && !selectionMode) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 ContinueWatchingRail(
                     items = uiState.continueWatching,
@@ -217,7 +351,12 @@ private fun LibraryGrid(
             VideoCard(
                 video = video,
                 resumeFraction = resumeMap[video.mediaStoreId] ?: 0f,
-                onClick = { onVideoClick(video.uri) },
+                isSelected = video.mediaStoreId in selected,
+                // In selection mode a tap toggles instead of opening the player.
+                onClick = {
+                    if (selectionMode) onToggleSelect(video) else onVideoClick(video.uri)
+                },
+                onLongClick = { onToggleSelect(video) },
             )
         }
     }

@@ -41,7 +41,7 @@ PRDs in `vix-play-docs/`, then implemented and logged in `CLAUDE.md`.
 | Background | `MediaSessionService` + notification/lock-screen controls, audio focus (opt-in) |
 | Equalizer | multiband EQ, bass boost, virtualizer, preamp, saved presets, per-output profiles |
 | Playlists | create/rename/delete, add from library, drag reorder, missing-file flagging |
-| Multi-select | long-press to select; add to queue, add to playlist, share, move to trash |
+| Multi-select | long-press to select — audio: queue/playlist/share/trash · video: share/trash |
 
 **Audio** — library with Tracks / Albums / Artists / Folders / Playlists tabs, full-screen player
 with seek, shuffle and repeat over ExoPlayer's native queue, a persistent mini-player above the
@@ -54,27 +54,27 @@ tabs, and playlists with drag reorder.
 
 ## Current grill
 
-**Trash instead of delete — built, not yet device-verified.** Removing tracks now goes to the
-system trash on API 30+, recoverable for around 30 days from the Files or Photos apps, rather than
-deleting permanently. Same OS confirmation dialog as before.
+**Multi-select lifted to the video library — built, not yet device-verified.** Long-press a video
+to select; the contextual bar offers Share and Move to trash.
 
-This was taken ahead of its queue position because it directly de-risks bulk delete, which shipped
-irreversible and unverified. The riskiest operation in the app is now forgiving.
+Only two of the PRD's six listed actions had anything behind them — playlists are audio-only, and
+rename/properties/hide don't exist anywhere in the app — so two real actions shipped rather than
+six buttons that can't work.
 
-Devices below API 30 have no trash concept, so they keep permanent delete with the app's own
-confirmation. Labels follow the device: "Move to trash" where it's recoverable, "Delete" where it
-isn't, so the UI promises what will actually happen.
+The selection logic moved into a shared `SelectionHolder` and the audio library was refactored onto
+it in the same pass, so there's one implementation rather than two copies waiting to diverge.
 
-The trade: on API 30+ you can no longer permanently delete from inside VixPlay. That decision moves
-to the system trash UI, which already exists and is where people look for it.
+The Continue Watching rail hides while selecting: its cards aren't selection-aware, so leaving it
+visible would mean a tap there opens the player while a tap below ticks a checkbox.
 
-> Eleven features now await a device run.
+> Twelve features now await a device run.
 
 ## Next grill
 
 Candidates, in rough priority order:
 
-1. **Lift multi-select to the video library / folder browser** — the selection primitive is ready.
+1. **Folder-browser multi-select** — needs its own file-system actions (move, copy, rename,
+   `.nomedia`), which is separate work from selection.
 2. **Pinch-to-zoom / gesture remap UI (Step 7)** — needs a persisted gesture-binding model.
 3. **In-app Trash screen** — restore trashed items without leaving the app; today recovery lives in
    the system Files/Photos apps.

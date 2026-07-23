@@ -10,6 +10,7 @@ import com.devbytes.vixplayer.app.data.repository.MediaDeleter
 import com.devbytes.vixplayer.app.data.repository.PlaylistRepository
 import com.devbytes.vixplayer.app.player.PlayerController
 import com.devbytes.vixplayer.app.player.QueueItem
+import com.devbytes.vixplayer.app.ui.common.SelectionHolder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -95,9 +96,10 @@ class AudioLibraryViewModel @Inject constructor(
     /**
      * Selected track ids. Long-press was deliberately reserved for this during the
      * playlists pass, which is why add-to-playlist went on a row overflow instead.
+     * Bookkeeping lives in [SelectionHolder], shared with the video library.
      */
-    private val _selected = MutableStateFlow<Set<Long>>(emptySet())
-    val selected: StateFlow<Set<Long>> = _selected.asStateFlow()
+    private val selection = SelectionHolder()
+    val selected: StateFlow<Set<Long>> = selection.selected
 
     /** Non-null while drilled into one group; mirrors FolderBrowserScreen's in-place drill. */
     private val _openGroup = MutableStateFlow<AudioGroup?>(null)
@@ -124,24 +126,16 @@ class AudioLibraryViewModel @Inject constructor(
         clearSelection()
     }
 
-    fun toggleSelection(track: AudioTrack) {
-        val current = _selected.value
-        _selected.value =
-            if (track.mediaStoreId in current) current - track.mediaStoreId
-            else current + track.mediaStoreId
-    }
+    fun toggleSelection(track: AudioTrack) = selection.toggle(track.mediaStoreId)
 
-    fun selectAll(tracks: List<AudioTrack>) {
-        _selected.value = tracks.map { it.mediaStoreId }.toSet()
-    }
+    fun selectAll(tracks: List<AudioTrack>) =
+        selection.selectAll(tracks.map { it.mediaStoreId })
 
-    fun clearSelection() {
-        if (_selected.value.isNotEmpty()) _selected.value = emptySet()
-    }
+    fun clearSelection() = selection.clear()
 
     /** Returns the selected tracks in the order they appear in [visible]. */
     fun selectedTracks(visible: List<AudioTrack>): List<AudioTrack> =
-        visible.filter { it.mediaStoreId in _selected.value }
+        selection.filter(visible) { it.mediaStoreId }
 
     /** Appends the selection to the queue without interrupting what is playing. */
     fun enqueueSelection(visible: List<AudioTrack>) {
