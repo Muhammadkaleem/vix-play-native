@@ -21,3 +21,4 @@ Kotlin · Jetpack Compose · Media3 (ExoPlayer) · Hilt · Room · DataStore · 
 - `vix-play-docs/media-player-docs/` — product docs
 - `config-vix-play/player-design-assets/` — color tokens, typography, icons, launcher icon
 # vix-play-native
+# vix-play-native
