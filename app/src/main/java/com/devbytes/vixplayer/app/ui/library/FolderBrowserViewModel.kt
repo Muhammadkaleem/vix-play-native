@@ -51,6 +51,9 @@ class FolderBrowserViewModel @Inject constructor(
     val systemConfirmsDelete: Boolean get() = mediaDeleter.systemConfirms()
     val deleteIsRecoverable: Boolean get() = mediaDeleter.isRecoverable()
 
+    /** True while a move is awaiting consent to remove the originals. */
+    private var movePending = false
+
     /** The rename awaiting system consent, if any. */
     private var pendingRename: Triple<android.net.Uri, String, String>? = null
 
@@ -99,9 +102,21 @@ class FolderBrowserViewModel @Inject constructor(
     }
 
     fun onDeleteConsentResult(granted: Boolean) {
+        val wasMove = movePending
+        movePending = false
         if (!granted) {
-            _message.value = "Cancelled"
+            // The copies are already made; only the originals survive the refusal.
+            _message.value = if (wasMove) "Copied, originals kept" else "Cancelled"
             clearSelection()
+            viewModelScope.launch { reloadCurrentFolder() }
+            return
+        }
+        if (wasMove) {
+            viewModelScope.launch {
+                reloadCurrentFolder()
+                clearSelection()
+                _message.value = "Moved"
+            }
             return
         }
         finishRemoval()
@@ -143,7 +158,11 @@ class FolderBrowserViewModel @Inject constructor(
      * Move is copy-then-delete inside [MediaTransfer]: the source goes only once its copy
      * is published, so an interruption leaves a duplicate rather than nothing.
      */
-    fun transferSelection(destination: FolderEntry, deleteSource: Boolean) {
+    fun transferSelection(
+        destination: FolderEntry,
+        deleteSource: Boolean,
+        onNeedsConsent: (android.content.IntentSender) -> Unit,
+    ) {
         val videos = selectedVideos(visibleVideos())
         if (videos.isEmpty()) return
 
@@ -166,6 +185,20 @@ class FolderBrowserViewModel @Inject constructor(
                 _transfer.value = progress
             }
             _transfer.value = null
+
+            val sources = (result as? TransferResult.Completed)?.copiedSources.orEmpty()
+            if (deleteSource && sources.isNotEmpty()) {
+                // One consent prompt for the whole batch, reusing the delete path that
+                // scoped storage actually permits.
+                movePending = true
+                when (val removal = mediaDeleter.delete(sources)) {
+                    is DeleteResult.NeedsConsent -> {
+                        onNeedsConsent(removal.intentSender)
+                        return@launch
+                    }
+                    else -> Unit
+                }
+            }
 
             reloadCurrentFolder()
             clearSelection()

@@ -154,7 +154,17 @@ After wiring them, verified on device:
   the copy landed in `DCIM/Camera` with the **source intact**, **identical MD5**
   (byte-for-byte), and correctly indexed at the destination path.
 
-Still untested here: move, cancel-mid-copy cleanup, and multi-file batches. The legacy
+- **Move — bug found and fixed.** `MediaTransfer` removed the source with a raw
+  `contentResolver.delete()`, which throws `RecoverableSecurityException` on API 30+ for
+  files the app doesn't own. `runCatching` swallowed it, so **move silently degraded into
+  copy** while reporting a failure. I had built the whole consent flow in `MediaDeleter`
+  and then bypassed it. Source removal now routes through that path — **one consent
+  prompt for the whole batch**, after all copies succeed. Verified: `clip_c.mp4` moved
+  folders, and the original became `.trashed-…-clip_c.mp4` — i.e. **a move leaves the
+  original recoverable**, which is safer than a conventional move.
+  *The safety design held throughout: the failed move left two copies, never zero.*
+
+Still untested here: cancel-mid-copy cleanup and multi-file batches. The legacy
 (API ≤28) rename and copy branches **cannot** run on this API-35 image at all.
 
 ### RESOLVED — notification (was open)

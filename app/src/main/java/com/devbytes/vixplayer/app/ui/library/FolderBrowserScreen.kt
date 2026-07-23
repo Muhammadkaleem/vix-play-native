@@ -297,7 +297,12 @@ fun FolderBrowserScreen(
                                     .fillMaxWidth()
                                     .clickable {
                                         choosingDestination = null
-                                        viewModel.transferSelection(folder, isMove)
+                                        viewModel.transferSelection(folder, isMove) { sender ->
+                                            deleteConsent.launch(
+                                                androidx.activity.result.IntentSenderRequest
+                                                    .Builder(sender).build()
+                                            )
+                                        }
                                     }
                                     .padding(vertical = 12.dp),
                             )

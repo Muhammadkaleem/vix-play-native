@@ -23,7 +23,17 @@ data class TransferProgress(
 )
 
 sealed interface TransferResult {
-    data class Completed(val succeeded: Int, val failed: Int) : TransferResult
+    /**
+     * [copiedSources] are the originals whose copy succeeded. For a move the caller
+     * removes them **through the consent-based delete path** — a raw `delete()` throws
+     * `RecoverableSecurityException` on API 30+ for files the app doesn't own, which is
+     * how move silently degraded into copy.
+     */
+    data class Completed(
+        val succeeded: Int,
+        val failed: Int,
+        val copiedSources: List<Uri> = emptyList(),
+    ) : TransferResult
     data class Cancelled(val succeeded: Int) : TransferResult
     data class Failed(val message: String) : TransferResult
 }
@@ -58,6 +68,7 @@ class MediaTransfer @Inject constructor(
 
         var succeeded = 0
         var failed = 0
+        val copiedSources = mutableListOf<Uri>()
 
         for ((index, video) in videos.withIndex()) {
             try {
@@ -79,18 +90,14 @@ class MediaTransfer @Inject constructor(
                 continue
             }
 
+            succeeded++
             // Only now is removing the original safe: the copy exists and is published.
-            if (deleteSource) {
-                val removed = runCatching {
-                    context.contentResolver.delete(video.uri, null, null)
-                }.getOrDefault(0)
-                if (removed == 0) failed++ else succeeded++
-            } else {
-                succeeded++
-            }
+            // The removal itself is the caller's job, so it can go through the consent
+            // flow rather than a raw delete that scoped storage rejects.
+            if (deleteSource) copiedSources.add(video.uri)
         }
 
-        TransferResult.Completed(succeeded, failed)
+        TransferResult.Completed(succeeded, failed, copiedSources)
     }
 
     /**
