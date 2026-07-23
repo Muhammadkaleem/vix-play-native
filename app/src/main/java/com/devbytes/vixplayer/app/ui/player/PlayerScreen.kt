@@ -83,9 +83,12 @@ import androidx.media3.ui.PlayerView
 import com.devbytes.vixplayer.app.MainActivity
 import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.data.repository.VideoFile
+import com.devbytes.vixplayer.app.player.PlaybackService
 import com.devbytes.vixplayer.app.player.gesture.GestureEvent
+import com.devbytes.vixplayer.app.player.gesture.SeekPrecision
 import com.devbytes.vixplayer.app.player.gesture.SeekSide
 import com.devbytes.vixplayer.app.player.gesture.playerGestures
+import com.devbytes.vixplayer.app.player.thumbnail.ThumbnailProvider
 import com.devbytes.vixplayer.app.ui.player.components.AspectHud
 import com.devbytes.vixplayer.app.ui.player.components.AspectMode
 import com.devbytes.vixplayer.app.ui.player.components.AudioTrackSheet
@@ -102,7 +105,7 @@ import com.devbytes.vixplayer.app.ui.player.components.OrientationHud
 import com.devbytes.vixplayer.app.ui.player.components.OrientationMode
 import com.devbytes.vixplayer.app.ui.player.components.PlayerHud
 import com.devbytes.vixplayer.app.ui.player.components.ScreenshotHud
-import com.devbytes.vixplayer.app.ui.player.components.SeekScrubHud
+import com.devbytes.vixplayer.app.ui.player.components.ScrubPreview
 import com.devbytes.vixplayer.app.ui.player.components.SleepTimerHud
 import com.devbytes.vixplayer.app.ui.player.components.SleepTimerMode
 import com.devbytes.vixplayer.app.ui.player.components.SleepTimerSheet
@@ -110,6 +113,7 @@ import com.devbytes.vixplayer.app.ui.player.components.SpeedHud
 import com.devbytes.vixplayer.app.ui.player.components.SpeedSheet
 import com.devbytes.vixplayer.app.ui.player.components.ResumeChip
 import com.devbytes.vixplayer.app.ui.player.components.SubtitleSheet
+import com.devbytes.vixplayer.app.ui.player.components.SubtitleSyncHud
 import com.devbytes.vixplayer.app.ui.player.components.SubtitleTrackUi
 import com.devbytes.vixplayer.app.ui.theme.AmoledBackground
 import com.devbytes.vixplayer.app.ui.theme.OnScrim
@@ -155,6 +159,8 @@ fun PlayerScreen(
     var scrubbing by remember { mutableStateOf(false) }
     var scrubStartPos by remember { mutableLongStateOf(0L) }
     var scrubTargetMs by remember { mutableLongStateOf(0L) }
+    var scrubLastFraction by remember { mutableFloatStateOf(0f) }
+    var scrubPrecision by remember { mutableStateOf(SeekPrecision.COARSE) }
 
     // Long-press speed-hold (drag-to-vary), restored on release.
     var speedHolding by remember { mutableStateOf(false) }
@@ -174,17 +180,43 @@ fun PlayerScreen(
     // (title, subtitle configs, resume id) re-derives without recreating the screen.
     var currentUri by remember { mutableStateOf(uri) }
 
-    val player = remember {
-        ExoPlayer.Builder(context).build().apply {
-            setMediaItem(MediaItem.fromUri(uri))
-            prepare()
-            playWhenReady = true
-        }
+    // Per-file subtitle timing offset. Read synchronously (like resumePos) so prepareFor
+    // seeds the holder before prepare() — a remembered offset costs no extra re-prepare.
+    val subtitleOffsetHolder = viewModel.subtitleOffset
+    var subtitleOffsetMs by remember { mutableLongStateOf(viewModel.getSubtitleOffsetMs()) }
+
+    // Declared early: the ON_STOP background-pause rule below must consult it, and PiP is
+    // the one case where backgrounding must NOT pause (the video is still on screen).
+    var pipMode by remember { mutableStateOf(false) }
+
+    // App-scoped player (owned by PlayerController so playback can outlive this Activity).
+    // Never released here — only prepared, and paused on exit when appropriate.
+    val player = viewModel.player
+    val backgroundPlayback by viewModel.backgroundPlayback.collectAsState()
+
+    // Opening a video is one call so per-file state can't leak from the previous one.
+    LaunchedEffect(Unit) { viewModel.prepareFor(uri, subtitleOffsetMs) }
+
+    // Host the MediaSession while the player screen is live, so the notification and
+    // lock-screen controls exist. The service self-stops once nothing is playing.
+    LaunchedEffect(Unit) {
+        context.startService(Intent(context, PlaybackService::class.java))
     }
 
     // Held so the screenshot capture can reach the video SurfaceView for PixelCopy.
     var playerView by remember { mutableStateOf<PlayerView?>(null) }
     val scope = rememberCoroutineScope()
+
+    // Scrub-preview frames. One retriever kept open per file; released on dispose and
+    // rebuilt when playNext swaps currentUri.
+    val thumbnails = remember(currentUri) { ThumbnailProvider(context, Uri.parse(currentUri)) }
+    DisposableEffect(thumbnails) { onDispose { thumbnails.release() } }
+    var scrubFrame by remember { mutableStateOf<Bitmap?>(null) }
+    // Keyed on the 5s bucket, so a drag only decodes when it crosses a boundary; the
+    // effect's cancellation gives latest-wins for free on a fast drag.
+    LaunchedEffect(scrubbing, scrubTargetMs / 5_000L) {
+        scrubFrame = if (scrubbing) thumbnails.frameAt(scrubTargetMs) else null
+    }
 
     // Externally side-loaded subtitle configs (survive the MediaItem rebuild) + a live
     // snapshot of the player's tracks, refreshed by the listener's onTracksChanged.
@@ -204,6 +236,24 @@ fun PlayerScreen(
         player.prepare()
         player.seekTo(pos)
         player.playWhenReady = wasPlaying
+    }
+
+    // Sync-adjust surface + debounced commit. Stepping updates the readout instantly,
+    // but the re-prepare (Media3 stamps cue timings at parse time, so a new offset only
+    // reaches already-buffered cues via a re-parse) waits for the user to settle.
+    var showSyncHud by remember { mutableStateOf(false) }
+    var pendingOffsetKey by remember { mutableIntStateOf(0) }
+    LaunchedEffect(pendingOffsetKey) {
+        if (pendingOffsetKey > 0) {
+            delay(350)
+            subtitleOffsetHolder.offsetUs = subtitleOffsetMs * 1_000L
+            viewModel.saveSubtitleOffsetMs(subtitleOffsetMs)
+            reloadWithSubtitles()
+        }
+    }
+    fun stepSubtitleOffset(deltaMs: Long) {
+        subtitleOffsetMs = (subtitleOffsetMs + deltaMs).coerceIn(-60_000L, 60_000L)
+        pendingOffsetKey++
     }
 
     val subtitlePicker = rememberLauncherForActivityResult(
@@ -330,19 +380,26 @@ fun PlayerScreen(
     // MMKV alone is enough here: resume reads MMKV and it survives process death;
     // the durable Room persist stays on onDispose (deterministic teardown).
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
+    DisposableEffect(lifecycleOwner, backgroundPlayback, pipMode) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) flushPositionFast(player, viewModel)
+            if (event == Lifecycle.Event.ON_STOP) {
+                flushPositionFast(player, viewModel)
+                // Default is to pause on background — this is a video player, and silent
+                // continued playback reads as a battery bug. PiP is its own case: the
+                // video is still on screen, so it must keep playing.
+                if (!backgroundPlayback && !pipMode) player.pause()
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // Persist to Room + release on navigation away or process death.
+    // Persist to Room on navigation away. The player is app-scoped now, so it is NOT
+    // released here — it is stopped, which frees decoders while keeping it usable.
     DisposableEffect(Unit) {
         onDispose {
             viewModel.persistPosition(player.currentPosition)
-            player.release()
+            player.stop()
         }
     }
 
@@ -458,9 +515,11 @@ fun PlayerScreen(
         currentUri = newUri
         externalSubs.clear()
         viewModel.initMedia(newUri)
-        player.setMediaItem(MediaItem.fromUri(newUri))
-        player.prepare()
-        player.playWhenReady = true
+        // Offsets are per file — pick up the incoming file's stored value before
+        // prepare() so its cues parse at the right offset, not the previous file's.
+        subtitleOffsetMs = viewModel.getSubtitleOffsetMs()
+        showSyncHud = false
+        viewModel.prepareFor(newUri, subtitleOffsetMs)
         showResumeChip = false
         ended = false
         nextVideo = null
@@ -566,7 +625,6 @@ fun PlayerScreen(
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             context.packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
     }
-    var pipMode by remember { mutableStateOf(false) }
 
     // The one in-PiP control (touch doesn't reach the surface there): a play/pause
     // RemoteAction routes through this receiver to toggle the player.
@@ -803,13 +861,22 @@ fun PlayerScreen(
                     GestureEvent.SeekScrubStart -> {
                         scrubStartPos = player.currentPosition
                         scrubTargetMs = scrubStartPos
+                        scrubLastFraction = 0f
+                        scrubPrecision = SeekPrecision.COARSE
                         scrubbing = true
                     }
                     is GestureEvent.SeekScrub -> {
+                        // Accumulate incrementally rather than recomputing from the total,
+                        // so changing tier mid-drag alters sensitivity going forward
+                        // instead of snapping the target to a new mapping.
+                        val tier = SeekPrecision.fromVerticalFraction(event.verticalFraction)
+                        scrubPrecision = tier
+                        val stepFraction = event.totalFraction - scrubLastFraction
+                        scrubLastFraction = event.totalFraction
                         val dur = player.duration
                         val max = if (dur > 0) dur else Long.MAX_VALUE
-                        scrubTargetMs = (scrubStartPos + event.totalFraction * 120_000L)
-                            .toLong().coerceIn(0L, max)
+                        scrubTargetMs = (scrubTargetMs + (stepFraction * tier.rangeMs).toLong())
+                            .coerceIn(0L, max)
                     }
                     GestureEvent.SeekCommit -> {
                         if (scrubbing) {
@@ -865,12 +932,20 @@ fun PlayerScreen(
             modifier = Modifier.fillMaxSize(),
         )
 
-        SeekScrubHud(
+        // Surface-gesture scrub: frame + timecode + delta + active precision tier.
+        AnimatedVisibility(
             visible = scrubbing,
-            targetMs = scrubTargetMs,
-            deltaMs = scrubTargetMs - scrubStartPos,
-            modifier = Modifier.fillMaxSize(),
-        )
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.Center),
+        ) {
+            ScrubPreview(
+                frame = scrubFrame,
+                targetMs = scrubTargetMs,
+                deltaMs = scrubTargetMs - scrubStartPos,
+                tierLabel = scrubPrecision.label,
+            )
+        }
 
         SpeedHud(
             visible = speedHolding,
@@ -899,6 +974,17 @@ fun PlayerScreen(
         ScreenshotHud(
             visible = showScreenshotHud,
             label = screenshotHudLabel,
+            modifier = Modifier.fillMaxSize(),
+        )
+
+        // Sync adjust — interactive, so it renders above the gesture layer. Hidden in
+        // PiP and while locked, like the rest of the chrome.
+        SubtitleSyncHud(
+            visible = showSyncHud && !locked && !pipMode && playbackError == null,
+            offsetMs = subtitleOffsetMs,
+            onStep = { stepSubtitleOffset(it) },
+            onReset = { if (subtitleOffsetMs != 0L) stepSubtitleOffset(-subtitleOffsetMs) },
+            onDone = { showSyncHud = false },
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -938,6 +1024,7 @@ fun PlayerScreen(
             onLockClick = { locked = true; controlsVisible = false },
             onMenuOpenChange = { menuOpen = it },
             onScrubbingChange = { seekBarDragging = it },
+            frameLoader = { thumbnails.frameAt(it) },
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -1006,6 +1093,11 @@ fun PlayerScreen(
                     onSelect = { selectSubtitle(it) },
                     onDisableSubtitles = { disableSubtitles() },
                     onLoadFromFile = { subtitlePicker.launch(arrayOf("*/*")) },
+                    offsetMs = subtitleOffsetMs,
+                    onSyncOffset = {
+                        currentSheet = null
+                        showSyncHud = true
+                    },
                 )
                 is PlayerSheet.Audio     -> AudioTrackSheet(
                     tracks = audioTracks,

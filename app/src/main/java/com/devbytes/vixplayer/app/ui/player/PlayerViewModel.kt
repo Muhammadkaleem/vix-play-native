@@ -7,6 +7,7 @@ import com.devbytes.vixplayer.app.data.repository.MediaRepository
 import com.devbytes.vixplayer.app.data.repository.PlaybackRepository
 import com.devbytes.vixplayer.app.data.repository.SettingsRepository
 import com.devbytes.vixplayer.app.data.repository.VideoFile
+import com.devbytes.vixplayer.app.player.PlayerController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -19,9 +20,24 @@ class PlayerViewModel @Inject constructor(
     private val playbackRepository: PlaybackRepository,
     private val mediaRepository: MediaRepository,
     private val settingsRepository: SettingsRepository,
+    private val playerController: PlayerController,
 ) : ViewModel() {
 
     private var currentMediaStoreId: Long? = null
+
+    /** The app-scoped player. Owned by [PlayerController], never released by the screen. */
+    val player = playerController.player
+
+    /** Mutable subtitle-offset carrier read by the parser during extraction. */
+    val subtitleOffset = playerController.subtitleOffset
+
+    /** Opens a video, resetting per-file state. See [PlayerController.prepareFor]. */
+    fun prepareFor(uri: String, subtitleOffsetMs: Long) =
+        playerController.prepareFor(uri, subtitleOffsetMs)
+
+    /** Whether audio should keep playing once the app is backgrounded. */
+    val backgroundPlayback: StateFlow<Boolean> = settingsRepository.backgroundPlayback
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     /** Persisted global playback speed — applied to every video, updated from the player. */
     val playbackSpeed: StateFlow<Float> = settingsRepository.playbackSpeed
@@ -48,6 +64,17 @@ class PlayerViewModel @Inject constructor(
 
     fun savePositionFast(positionMs: Long) {
         currentMediaStoreId?.let { playbackRepository.savePositionFast(it, positionMs) }
+    }
+
+    /**
+     * Per-file subtitle offset in ms. Returns 0 for non-MediaStore URIs (external
+     * ACTION_VIEW intents have no id) — the offset still works, it just isn't remembered.
+     */
+    fun getSubtitleOffsetMs(): Long =
+        currentMediaStoreId?.let { playbackRepository.getSubtitleOffsetFast(it) } ?: 0L
+
+    fun saveSubtitleOffsetMs(offsetMs: Long) {
+        currentMediaStoreId?.let { playbackRepository.saveSubtitleOffsetFast(it, offsetMs) }
     }
 
     fun persistPosition(positionMs: Long) {

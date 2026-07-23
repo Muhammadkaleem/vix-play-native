@@ -37,6 +37,8 @@ fun SubtitleSheet(
     onSelect: (String) -> Unit,
     onDisableSubtitles: () -> Unit,
     onLoadFromFile: () -> Unit,
+    onSyncOffset: () -> Unit,
+    offsetMs: Long,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -94,6 +96,35 @@ fun SubtitleSheet(
                 text = "Load from file",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+
+        // Adjusting happens over the video (the sheet would cover the frame being
+        // judged), so this row hands off to the on-surface sync HUD.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onSyncOffset)
+                .padding(horizontal = 20.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_timer),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp),
+            )
+            Spacer(Modifier.width(16.dp))
+            Text(
+                text = "Sync offset",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = formatSubtitleOffset(offsetMs),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

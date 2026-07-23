@@ -23,6 +23,7 @@ class SettingsRepository @Inject constructor(
         val PLAYBACK_SPEED          = floatPreferencesKey("playback_speed")
         val USE_AMOLED_THEME        = booleanPreferencesKey("use_amoled_theme")
         val SHOW_SUBTITLES_DEFAULT  = booleanPreferencesKey("show_subtitles_by_default")
+        val BACKGROUND_PLAYBACK     = booleanPreferencesKey("background_playback")
     }
 
     val playbackSpeed: Flow<Float> = context.dataStore.data
@@ -34,6 +35,14 @@ class SettingsRepository @Inject constructor(
     val showSubtitlesByDefault: Flow<Boolean> = context.dataStore.data
         .map { it[Keys.SHOW_SUBTITLES_DEFAULT] ?: true }
 
+    /**
+     * Keep playing audio when the app goes to background. Defaults to **off**: this is a
+     * video player, and silently continuing playback after backgrounding reads as a
+     * battery bug rather than a feature. PiP already covers the Home-press case.
+     */
+    val backgroundPlayback: Flow<Boolean> = context.dataStore.data
+        .map { it[Keys.BACKGROUND_PLAYBACK] ?: false }
+
     suspend fun setPlaybackSpeed(speed: Float) {
         context.dataStore.edit { it[Keys.PLAYBACK_SPEED] = speed }
     }
@@ -44,5 +53,9 @@ class SettingsRepository @Inject constructor(
 
     suspend fun setShowSubtitlesByDefault(enabled: Boolean) {
         context.dataStore.edit { it[Keys.SHOW_SUBTITLES_DEFAULT] = enabled }
+    }
+
+    suspend fun setBackgroundPlayback(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.BACKGROUND_PLAYBACK] = enabled }
     }
 }

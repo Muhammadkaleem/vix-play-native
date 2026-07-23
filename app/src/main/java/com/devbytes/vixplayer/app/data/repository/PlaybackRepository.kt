@@ -19,6 +19,18 @@ class PlaybackRepository @Inject constructor(
     fun getPositionFast(mediaStoreId: Long): Long =
         mmkv.decodeLong("pos_$mediaStoreId", 0L)
 
+    /**
+     * Per-file subtitle timing offset in milliseconds (negative = subtitles earlier).
+     * MMKV only — nothing ever lists offsets, so this needs no Room mirror. Deliberately
+     * left untouched by [clearAll]: clearing watch history shouldn't discard subtitle tuning.
+     */
+    fun saveSubtitleOffsetFast(mediaStoreId: Long, offsetMs: Long) {
+        mmkv.encode("suboff_$mediaStoreId", offsetMs)
+    }
+
+    fun getSubtitleOffsetFast(mediaStoreId: Long): Long =
+        mmkv.decodeLong("suboff_$mediaStoreId", 0L)
+
     suspend fun persistPosition(mediaStoreId: Long, positionMs: Long) {
         dao.upsert(PlaybackPosition(mediaStoreId, positionMs, System.currentTimeMillis()))
     }

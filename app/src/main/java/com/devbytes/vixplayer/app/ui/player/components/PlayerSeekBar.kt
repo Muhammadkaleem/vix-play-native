@@ -1,15 +1,19 @@
 package com.devbytes.vixplayer.app.ui.player.components
 
+import android.graphics.Bitmap
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -33,6 +37,7 @@ fun PlayerSeekBar(
     durationMs: Long,
     onSeek: (Long) -> Unit,
     onScrubbingChange: (Boolean) -> Unit = {},
+    frameLoader: (suspend (Long) -> Bitmap?)? = null,
     modifier: Modifier = Modifier,
 ) {
     if (durationMs <= 0L) return
@@ -44,7 +49,30 @@ fun PlayerSeekBar(
     val displayFraction = if (isDragging) dragFraction else fraction
     val accent = MaterialTheme.colorScheme.primary
 
+    val previewMs = (dragFraction * durationMs).toLong()
+    var previewFrame by remember { mutableStateOf<Bitmap?>(null) }
+    // Same 5s bucketing as the surface scrub; cancellation gives latest-wins.
+    LaunchedEffect(isDragging, previewMs / 5_000L, frameLoader) {
+        previewFrame = if (isDragging && frameLoader != null) frameLoader(previewMs) else null
+    }
+
     Column(modifier = modifier) {
+        // Preview rides above the thumb, clamped so it never runs off either edge.
+        if (isDragging && frameLoader != null) {
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val cardWidth = 172.dp
+                val maxOffset = (maxWidth - cardWidth).coerceAtLeast(0.dp)
+                val offset = (maxWidth * displayFraction - cardWidth / 2)
+                    .coerceIn(0.dp, maxOffset)
+                ScrubPreview(
+                    frame = previewFrame,
+                    targetMs = previewMs,
+                    modifier = Modifier
+                        .offset(x = offset)
+                        .padding(bottom = 8.dp),
+                )
+            }
+        }
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()

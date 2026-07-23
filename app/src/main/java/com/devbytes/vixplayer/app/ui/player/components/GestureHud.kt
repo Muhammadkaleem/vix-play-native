@@ -114,50 +114,8 @@ fun GestureHud(
 }
 
 /**
- * Centered transient pill shown while a horizontal drag scrubs the timeline.
- * Preview-only: the seek commits on release. Shows the target timecode and the
- * signed delta from the anchor position.
- */
-@Composable
-fun SeekScrubHud(
-    visible: Boolean,
-    targetMs: Long,
-    deltaMs: Long,
-    modifier: Modifier = Modifier,
-) {
-    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        AnimatedVisibility(visible = visible, enter = fadeIn(), exit = fadeOut()) {
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(50))
-                    .background(ScrimStrong)
-                    .padding(horizontal = 24.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = formatTimeMs(targetMs),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = OnScrim,
-                )
-                Spacer(Modifier.width(12.dp))
-                Text(
-                    text = formatSignedSeconds(deltaMs),
-                    style = TimecodeStyle,
-                    color = DarkAccent,
-                )
-            }
-        }
-    }
-}
-
-private fun formatSignedSeconds(ms: Long): String {
-    val s = abs(ms) / 1000
-    return if (ms < 0) "−${s}s" else "+${s}s"
-}
-
-/**
  * Centered transient pill confirming the current [AspectMode] after a cycle.
- * Text-only, matching [SeekScrubHud]'s language; dismisses on its own timer.
+ * Text-only, matching the HUD pill language; dismisses on its own timer.
  */
 @Composable
 fun AspectHud(

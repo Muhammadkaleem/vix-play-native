@@ -66,6 +66,8 @@ fun PlayerHud(
     onLockClick: () -> Unit = {},
     onMenuOpenChange: (Boolean) -> Unit = {},
     onScrubbingChange: (Boolean) -> Unit = {},
+    /** Supplies scrub-preview frames; null disables the seek-bar thumbnail. */
+    frameLoader: (suspend (Long) -> android.graphics.Bitmap?)? = null,
     modifier: Modifier = Modifier,
 ) {
     var isPlaying by remember { mutableStateOf(player.isPlaying) }
@@ -274,6 +276,7 @@ fun PlayerHud(
                     durationMs = durationMs,
                     onSeek = { player.seekTo(it) },
                     onScrubbingChange = onScrubbingChange,
+                    frameLoader = frameLoader,
                 )
 
                 Row(

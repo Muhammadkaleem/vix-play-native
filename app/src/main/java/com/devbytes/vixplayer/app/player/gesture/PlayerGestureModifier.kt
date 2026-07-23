@@ -102,7 +102,10 @@ fun Modifier.playerGestures(
                             }
                             DragAxis.HORIZONTAL -> {
                                 scrubTotal += delta.x / size.width
-                                onEvent(GestureEvent.SeekScrub(scrubTotal))
+                                // Vertical stray from the drag origin picks the precision tier.
+                                val vertical =
+                                    abs(change.position.y - down.position.y) / size.height
+                                onEvent(GestureEvent.SeekScrub(scrubTotal, vertical))
                             }
                         }
                         dragged = true

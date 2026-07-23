@@ -20,8 +20,12 @@ sealed interface GestureEvent {
     /** A horizontal scrub began — capture the current position as the anchor. */
     data object SeekScrubStart : GestureEvent
 
-    /** Cumulative horizontal displacement since scrub start, as a fraction of width (+right). */
-    data class SeekScrub(val totalFraction: Float) : GestureEvent
+    /**
+     * Cumulative horizontal displacement since scrub start, as a fraction of width (+right),
+     * plus how far the finger has strayed vertically from where the drag began (absolute
+     * fraction of height) — that distance selects the precision tier.
+     */
+    data class SeekScrub(val totalFraction: Float, val verticalFraction: Float) : GestureEvent
 
     /** Horizontal scrub released — commit the previewed target. */
     data object SeekCommit : GestureEvent
@@ -40,3 +44,28 @@ sealed interface GestureEvent {
 }
 
 enum class SeekSide { LEFT, RIGHT }
+
+/**
+ * Scrub sensitivity, selected by how far the finger has moved vertically from the drag
+ * origin — the PRD's "finger's vertical position sets granularity (coarse/fine/frame)".
+ *
+ * [rangeMs] is the span a full-width drag covers at that tier. Measured from the *drag
+ * origin* rather than absolute screen position, so it behaves the same whether the drag
+ * started near the top or the bottom of the surface.
+ *
+ * Named "Precise" rather than the PRD's "frame": ±3s across a drag width is sub-second
+ * targeting, which is the actual need, but it isn't literally frame-accurate stepping.
+ */
+enum class SeekPrecision(val rangeMs: Long, val label: String) {
+    COARSE(120_000L, "Coarse"),
+    FINE(20_000L, "Fine"),
+    PRECISE(3_000L, "Precise");
+
+    companion object {
+        fun fromVerticalFraction(fraction: Float): SeekPrecision = when {
+            fraction < 0.30f -> COARSE
+            fraction < 0.60f -> FINE
+            else -> PRECISE
+        }
+    }
+}
