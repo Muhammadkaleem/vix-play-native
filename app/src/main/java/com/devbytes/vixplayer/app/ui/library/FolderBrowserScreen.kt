@@ -274,6 +274,127 @@ fun FolderBrowserScreen(
             )
         }
     }
+
+    choosingDestination?.let { isMove ->
+        AlertDialog(
+            onDismissRequest = { choosingDestination = null },
+            title = { Text(if (isMove) "Move to…" else "Copy to…") },
+            text = {
+                if (destinations.isEmpty()) {
+                    Text(
+                        text = "No other folders contain videos yet.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                        destinations.forEach { folder ->
+                            Text(
+                                text = folder.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        choosingDestination = null
+                                        viewModel.transferSelection(folder, isMove)
+                                    }
+                                    .padding(vertical = 12.dp),
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { choosingDestination = null }) { Text("Cancel") }
+            },
+        )
+    }
+
+    // Modal while transferring: letting the user mutate the same folder under a running
+    // copy invites inconsistency, and they explicitly asked for this operation.
+    transfer?.let { progress ->
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("${progress.currentIndex} of ${progress.total}") },
+            text = {
+                Column {
+                    Text(
+                        text = progress.currentName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    LinearProgressIndicator(
+                        progress = { progress.fileFraction },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { viewModel.cancelTransfer() }) { Text("Cancel") }
+            },
+        )
+    }
+
+    // Only reachable below API 30, where there is no trash and nothing else confirms.
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete ${selected.size} videos?") },
+            text = { Text("This permanently removes them from this device. It can't be undone.") },
+            confirmButton = {
+                TextButton(onClick = { confirmDelete = false; removeSelection() }) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (renaming) {
+        val target = viewModel.selectedVideos(visibleVideos).singleOrNull()
+        // Seeded without the extension, which is reapplied on save, so the user edits the
+        // name rather than having to retype ".mp4" correctly.
+        var newName by remember(target) {
+            mutableStateOf(target?.name?.substringBeforeLast('.').orEmpty())
+        }
+        AlertDialog(
+            onDismissRequest = { renaming = false },
+            title = { Text("Rename") },
+            text = {
+                OutlinedTextField(
+                    value = newName,
+                    onValueChange = { newName = it },
+                    singleLine = true,
+                    label = { Text("Name") },
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        renaming = false
+                        viewModel.renameSelected(newName) { sender ->
+                            renameConsent.launch(
+                                androidx.activity.result.IntentSenderRequest
+                                    .Builder(sender).build()
+                            )
+                        }
+                    },
+                    enabled = newName.isNotBlank(),
+                ) { Text("Rename") }
+            },
+            dismissButton = {
+                TextButton(onClick = { renaming = false }) { Text("Cancel") }
+            },
+        )
+    }
 }
 
 @Composable

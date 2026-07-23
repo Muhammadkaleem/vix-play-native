@@ -134,6 +134,29 @@ mid-gesture. Verified: one drag now moves an item two positions.
 route does — two playlist lists of differing fidelity. The PRD asks for name + item count
 + art collage.
 
+### Folder browser — MAJOR finding: most of its UI was never wired
+Rename, Copy, Move **and** the sub-API-30 delete confirmation were all **missing entirely**.
+The state (`renaming`, `choosingDestination`, `confirmDelete`), the ViewModel wiring,
+`MediaRenamer` and `MediaTransfer` all existed and compiled — but the dialogs that render
+them were never inserted. Tapping the menu items did nothing at all.
+
+**Cause: three of my own string-anchored edits silently no-op'd.** Each anchored on text a
+previous failed edit was supposed to have created, so the failures cascaded. Nothing
+errored, the code compiled, and `assembleDebug` passed throughout. **Lesson: use an edit
+tool that fails loudly on a missed anchor; a silent no-op in a build that still compiles
+is invisible.**
+
+After wiring them, verified on device:
+- **Rename** — dialog seeds the name *without* the extension; `createWriteRequest` shows
+  the OS "Allow … to modify this video?" prompt; `long_clip.mp4` → **`holiday.mp4`**, with
+  the extension reapplied though only "holiday" was typed. Correct on disk and in MediaStore.
+- **Copy** — destination picker lists other folders and **excludes the current one**;
+  the copy landed in `DCIM/Camera` with the **source intact**, **identical MD5**
+  (byte-for-byte), and correctly indexed at the destination path.
+
+Still untested here: move, cancel-mid-copy cleanup, and multi-file batches. The legacy
+(API ≤28) rename and copy branches **cannot** run on this API-35 image at all.
+
 ### RESOLVED — notification (was open)
 **Cause: the session was never registered with the service.** `MediaSessionService` only
 lets its notification manager observe sessions passed to `addSession()`, and
