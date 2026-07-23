@@ -1,7 +1,9 @@
 package com.devbytes.vixplayer.app.ui.audio
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,7 +18,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -75,30 +76,90 @@ fun AudioLibraryScreen(
     val tab by viewModel.tab.collectAsState()
     val openGroup by viewModel.openGroup.collectAsState()
     val playlists by viewModel.playlists.collectAsState()
+    val selected by viewModel.selected.collectAsState()
+    val context = LocalContext.current
     // Track awaiting a playlist choice; non-null shows the picker.
     var pendingTrack by remember { mutableStateOf<AudioTrack?>(null) }
+    // True when the picker should target the whole selection rather than one track.
+    var pickerForSelection by remember { mutableStateOf(false) }
 
-    // System back leaves the drill before it leaves the screen.
-    BackHandler(enabled = openGroup != null) { viewModel.closeGroup() }
+    val selectionMode = selected.isNotEmpty()
+    // Whatever list is on screen — the selection and its actions operate on this.
+    val visibleTracks = openGroup?.tracks
+        ?: (state as? AudioLibraryUiState.Loaded)?.tracks.orEmpty()
+
+    // Back unwinds one layer at a time: selection, then drill, then the screen.
+    BackHandler(enabled = selectionMode) { viewModel.clearSelection() }
+    BackHandler(enabled = !selectionMode && openGroup != null) { viewModel.closeGroup() }
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(openGroup?.name ?: "Audio") },
-                navigationIcon = {
-                    if (openGroup != null) {
-                        IconButton(onClick = { viewModel.closeGroup() }) {
+            if (selectionMode) {
+                // Contextual bar replaces the normal one while selecting.
+                TopAppBar(
+                    title = { Text("${selected.size} selected") },
+                    navigationIcon = {
+                        IconButton(onClick = { viewModel.clearSelection() }) {
                             Icon(
-                                painter = painterResource(R.drawable.ic_back),
-                                contentDescription = "Back",
+                                painter = painterResource(R.drawable.ic_close),
+                                contentDescription = "Clear selection",
                             )
                         }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                ),
-            )
+                    },
+                    actions = {
+                        IconButton(onClick = { viewModel.enqueueSelection(visibleTracks) }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_playlist),
+                                contentDescription = "Add to queue",
+                            )
+                        }
+                        IconButton(onClick = {
+                            pickerForSelection = true
+                            pendingTrack = visibleTracks.firstOrNull()
+                        }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_add),
+                                contentDescription = "Add to playlist",
+                            )
+                        }
+                        IconButton(onClick = {
+                            shareTracks(context, viewModel.selectedTracks(visibleTracks))
+                            viewModel.clearSelection()
+                        }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_share),
+                                contentDescription = "Share",
+                            )
+                        }
+                        IconButton(onClick = { viewModel.selectAll(visibleTracks) }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_check),
+                                contentDescription = "Select all",
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    ),
+                )
+            } else {
+                TopAppBar(
+                    title = { Text(openGroup?.name ?: "Audio") },
+                    navigationIcon = {
+                        if (openGroup != null) {
+                            IconButton(onClick = { viewModel.closeGroup() }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_back),
+                                    contentDescription = "Back",
+                                )
+                            }
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                    ),
+                )
+            }
         },
     ) { padding ->
         Column(modifier = Modifier.padding(padding)) {
@@ -134,19 +195,25 @@ fun AudioLibraryScreen(
                         // Inside a group: its tracks, queued as their own context.
                         drilled != null -> TrackList(
                             tracks = drilled.tracks,
+                            selected = selected,
+                            selectionMode = selectionMode,
                             onPlay = { track ->
                                 viewModel.play(track, drilled.tracks)
                                 onAudioPlayerClick(track.mediaStoreId)
                             },
+                            onToggle = { viewModel.toggleSelection(it) },
                             onAddToPlaylist = { pendingTrack = it },
                         )
                         // Tracks tab: the whole library is the context.
                         tab == AudioTab.TRACKS -> TrackList(
                             tracks = s.tracks,
+                            selected = selected,
+                            selectionMode = selectionMode,
                             onPlay = { track ->
                                 viewModel.play(track, s.tracks)
                                 onAudioPlayerClick(track.mediaStoreId)
                             },
+                            onToggle = { viewModel.toggleSelection(it) },
                             onAddToPlaylist = { pendingTrack = it },
                         )
 
@@ -198,8 +265,16 @@ fun AudioLibraryScreen(
         var newName by remember { mutableStateOf("") }
         var creating by remember { mutableStateOf(false) }
         AlertDialog(
-            onDismissRequest = { pendingTrack = null },
-            title = { Text("Add to playlist") },
+            onDismissRequest = { pendingTrack = null; pickerForSelection = false },
+            title = {
+                Text(
+                    if (pickerForSelection) {
+                        "Add ${selected.size} tracks to playlist"
+                    } else {
+                        "Add to playlist"
+                    }
+                )
+            },
             text = {
                 Column {
                     if (creating) {
@@ -225,8 +300,15 @@ fun AudioLibraryScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
-                                        viewModel.addToPlaylist(playlist.id, track)
+                                        if (pickerForSelection) {
+                                            viewModel.addSelectionToPlaylist(
+                                                playlist.id, visibleTracks,
+                                            )
+                                        } else {
+                                            viewModel.addToPlaylist(playlist.id, track)
+                                        }
                                         pendingTrack = null
+                                        pickerForSelection = false
                                     }
                                     .padding(vertical = 12.dp),
                             )
@@ -238,8 +320,13 @@ fun AudioLibraryScreen(
                 if (creating) {
                     TextButton(
                         onClick = {
-                            viewModel.createPlaylistWith(newName, track)
+                            if (pickerForSelection) {
+                                viewModel.createPlaylistWithSelection(newName, visibleTracks)
+                            } else {
+                                viewModel.createPlaylistWith(newName, track)
+                            }
                             pendingTrack = null
+                            pickerForSelection = false
                         },
                         enabled = newName.isNotBlank(),
                     ) { Text("Create") }
@@ -248,7 +335,10 @@ fun AudioLibraryScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { pendingTrack = null }) { Text("Cancel") }
+                TextButton(onClick = {
+                    pendingTrack = null
+                    pickerForSelection = false
+                }) { Text("Cancel") }
             },
         )
     }
@@ -257,7 +347,10 @@ fun AudioLibraryScreen(
 @Composable
 private fun TrackList(
     tracks: List<AudioTrack>,
+    selected: Set<Long>,
+    selectionMode: Boolean,
     onPlay: (AudioTrack) -> Unit,
+    onToggle: (AudioTrack) -> Unit,
     onAddToPlaylist: (AudioTrack) -> Unit,
 ) {
     LazyColumn {
@@ -267,7 +360,11 @@ private fun TrackList(
                 artist = track.artist,
                 durationMs = track.durationMs,
                 albumArtUri = track.albumArtUri.toString(),
-                onClick = { onPlay(track) },
+                isSelected = track.mediaStoreId in selected,
+                selectionMode = selectionMode,
+                // In selection mode a tap toggles rather than plays.
+                onClick = { if (selectionMode) onToggle(track) else onPlay(track) },
+                onLongClick = { onToggle(track) },
                 onAddToPlaylist = { onAddToPlaylist(track) },
             )
         }
@@ -309,19 +406,30 @@ private fun GroupRow(
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun TrackRow(
     title: String,
     artist: String,
     durationMs: Long,
     albumArtUri: String,
+    isSelected: Boolean,
+    selectionMode: Boolean,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
     onAddToPlaylist: () -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .background(
+                if (isSelected) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                } else {
+                    MaterialTheme.colorScheme.background
+                }
+            )
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -349,20 +457,37 @@ private fun TrackRow(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        // Overflow rather than long-press: the PRD reserves long-press for multi-select.
-        Box {
-            IconButton(onClick = { menu = true }) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_more_vert),
-                    contentDescription = "More",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                DropdownMenuItem(
-                    text = { Text("Add to playlist") },
-                    onClick = { menu = false; onAddToPlaylist() },
-                )
+        if (selectionMode) {
+            // The overflow would be redundant while the contextual bar owns the actions.
+            Icon(
+                painter = painterResource(
+                    if (isSelected) R.drawable.ic_check else R.drawable.ic_close
+                ),
+                contentDescription = if (isSelected) "Selected" else "Not selected",
+                tint = if (isSelected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                },
+                modifier = Modifier
+                    .padding(start = 8.dp)
+                    .size(24.dp),
+            )
+        } else {
+            Box {
+                IconButton(onClick = { menu = true }) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_more_vert),
+                        contentDescription = "More",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Add to playlist") },
+                        onClick = { menu = false; onAddToPlaylist() },
+                    )
+                }
             }
         }
     }
@@ -407,4 +532,28 @@ internal fun formatTrackDuration(ms: Long): String {
     val m = totalSec / 60
     val s = totalSec % 60
     return "$m:${s.toString().padStart(2, '0')}"
+}
+
+
+/**
+ * Shares the given tracks via the system chooser. MediaStore content URIs are shareable
+ * directly; the read grant lets the receiving app open them.
+ */
+private fun shareTracks(context: android.content.Context, tracks: List<AudioTrack>) {
+    if (tracks.isEmpty()) return
+    val uris = ArrayList(tracks.map { it.uri })
+    val intent = if (uris.size == 1) {
+        android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+            type = "audio/*"
+            putExtra(android.content.Intent.EXTRA_STREAM, uris.first())
+        }
+    } else {
+        android.content.Intent(android.content.Intent.ACTION_SEND_MULTIPLE).apply {
+            type = "audio/*"
+            putParcelableArrayListExtra(android.content.Intent.EXTRA_STREAM, uris)
+        }
+    }
+    intent.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    // The chooser is the confirmation step: the user picks the destination.
+    context.startActivity(android.content.Intent.createChooser(intent, "Share"))
 }

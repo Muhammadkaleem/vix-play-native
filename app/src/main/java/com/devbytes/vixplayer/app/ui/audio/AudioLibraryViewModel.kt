@@ -71,6 +71,13 @@ class AudioLibraryViewModel @Inject constructor(
     private val _tab = MutableStateFlow(AudioTab.TRACKS)
     val tab: StateFlow<AudioTab> = _tab.asStateFlow()
 
+    /**
+     * Selected track ids. Long-press was deliberately reserved for this during the
+     * playlists pass, which is why add-to-playlist went on a row overflow instead.
+     */
+    private val _selected = MutableStateFlow<Set<Long>>(emptySet())
+    val selected: StateFlow<Set<Long>> = _selected.asStateFlow()
+
     /** Non-null while drilled into one group; mirrors FolderBrowserScreen's in-place drill. */
     private val _openGroup = MutableStateFlow<AudioGroup?>(null)
     val openGroup: StateFlow<AudioGroup?> = _openGroup.asStateFlow()
@@ -93,16 +100,63 @@ class AudioLibraryViewModel @Inject constructor(
         _tab.value = tab
         // Leaving a tab abandons its drill; returning should start at the grouping list.
         _openGroup.value = null
+        clearSelection()
+    }
+
+    fun toggleSelection(track: AudioTrack) {
+        val current = _selected.value
+        _selected.value =
+            if (track.mediaStoreId in current) current - track.mediaStoreId
+            else current + track.mediaStoreId
+    }
+
+    fun selectAll(tracks: List<AudioTrack>) {
+        _selected.value = tracks.map { it.mediaStoreId }.toSet()
+    }
+
+    fun clearSelection() {
+        if (_selected.value.isNotEmpty()) _selected.value = emptySet()
+    }
+
+    /** Returns the selected tracks in the order they appear in [visible]. */
+    fun selectedTracks(visible: List<AudioTrack>): List<AudioTrack> =
+        visible.filter { it.mediaStoreId in _selected.value }
+
+    /** Appends the selection to the queue without interrupting what is playing. */
+    fun enqueueSelection(visible: List<AudioTrack>) {
+        val tracks = selectedTracks(visible)
+        if (tracks.isEmpty()) return
+        playerController.enqueue(tracks.map { it.toQueueItem() })
+        clearSelection()
+    }
+
+    fun addSelectionToPlaylist(playlistId: Long, visible: List<AudioTrack>) {
+        val tracks = selectedTracks(visible)
+        viewModelScope.launch {
+            tracks.forEach { playlistRepository.addTrack(playlistId, it) }
+            clearSelection()
+        }
+    }
+
+    fun createPlaylistWithSelection(name: String, visible: List<AudioTrack>) {
+        val tracks = selectedTracks(visible)
+        viewModelScope.launch {
+            val id = playlistRepository.create(name.trim())
+            tracks.forEach { playlistRepository.addTrack(id, it) }
+            clearSelection()
+        }
     }
 
     fun openGroup(group: AudioGroup) {
         _openGroup.value = group
+        clearSelection()
     }
 
     /** Returns true if a drill was popped, so the caller can swallow the back press. */
     fun closeGroup(): Boolean {
         if (_openGroup.value == null) return false
         _openGroup.value = null
+        clearSelection()
         return true
     }
 

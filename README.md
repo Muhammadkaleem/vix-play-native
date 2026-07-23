@@ -41,6 +41,7 @@ PRDs in `vix-play-docs/`, then implemented and logged in `CLAUDE.md`.
 | Background | `MediaSessionService` + notification/lock-screen controls, audio focus (opt-in) |
 | Equalizer | multiband EQ, bass boost, virtualizer, preamp, saved presets, per-output profiles |
 | Playlists | create/rename/delete, add from library, drag reorder, missing-file flagging |
+| Multi-select | long-press to select; add to queue, add to playlist, share |
 
 **Audio** — library with Tracks / Albums / Artists / Folders / Playlists tabs, full-screen player
 with seek, shuffle and repeat over ExoPlayer's native queue, a persistent mini-player above the
@@ -53,25 +54,24 @@ tabs, and playlists with drag reorder.
 
 ## Current grill
 
-**Playlists — built, not yet device-verified.** Create, rename, delete, add tracks from any row's
-overflow, drag to reorder, play all or shuffle. This also fills the fifth audio tab, which was
-deliberately left out earlier because there was no data model behind it.
+**Multi-select (audio library) — built, not yet device-verified.** Long-press a track to enter
+selection; a contextual bar takes over with the count, add-to-queue, add-to-playlist, share and
+select-all. Back unwinds one layer at a time: selection, then the group drill, then the screen.
 
-Drag reorder is hand-rolled — Compose has no built-in reorderable list and this is one screen, so
-no dependency was added. Long-press lifts an item (leaving ordinary scrolling alone) and the new
-order is persisted once on drop rather than on every swap.
+This is what long-press was being saved for — add-to-playlist went on a row overflow during the
+playlists pass precisely so the gesture stayed free.
 
-Items whose file has disappeared are shown greyed and labelled rather than dropped, and are skipped
-when playing. That's why each entry caches its title and artist: a row for a deleted file can't be
-labelled otherwise.
+**Delete is deliberately absent.** It needs three different flows depending on Android version, and
+it permanently destroys files, so it gets its own pass with its own confirmation design rather than
+riding along here.
 
-> Seven features now await a device run. Drag reorder is the piece most likely to need tuning —
-> thresholds and autoscroll are judged by feel.
+> Eight features now await a device run.
 
 ## Next grill
 
 Candidates, in rough priority order:
 
 1. **Share the screenshot** — small follow-up: plumb the saved MediaStore uri into a share intent.
-2. **Multi-select in the audio library** — long-press was deliberately left free for this.
+2. **Bulk delete** — the one multi-select action deliberately left out; needs
+   `createDeleteRequest` (API 30+), `RecoverableSecurityException` (29) and direct delete (24–28).
 3. **Pinch-to-zoom / gesture remap UI (Step 7)** — needs a persisted gesture-binding model.

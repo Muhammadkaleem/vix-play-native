@@ -156,6 +156,20 @@ class PlayerController @Inject constructor(
         .build()
 
     /**
+     * Appends to the end of the current queue without disturbing what is playing.
+     * If nothing is loaded this behaves as [prepareQueue].
+     */
+    fun enqueue(items: List<QueueItem>) {
+        if (items.isEmpty()) return
+        if (player.mediaItemCount == 0) {
+            prepareQueue(items, 0)
+            return
+        }
+        player.addMediaItems(items.map { it.toMediaItem() })
+        _kind.value = PlaybackKind.AUDIO
+    }
+
+    /**
      * Frees decoders without destroying the instance. Used when the task is dismissed and
      * nothing is playing — the player must stay usable for when the user comes back, since
      * a released one would leave this singleton holding a dead object.
