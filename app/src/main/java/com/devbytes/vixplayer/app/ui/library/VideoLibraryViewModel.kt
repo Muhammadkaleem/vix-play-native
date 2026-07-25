@@ -6,6 +6,7 @@ import com.devbytes.vixplayer.app.data.repository.DeleteResult
 import com.devbytes.vixplayer.app.data.repository.MediaDeleter
 import com.devbytes.vixplayer.app.data.repository.MediaRepository
 import com.devbytes.vixplayer.app.data.repository.PlaybackRepository
+import com.devbytes.vixplayer.app.data.repository.SettingsRepository
 import com.devbytes.vixplayer.app.ui.common.SelectionHolder
 import com.devbytes.vixplayer.app.data.repository.VideoFile
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -43,7 +44,19 @@ class VideoLibraryViewModel @Inject constructor(
     private val mediaRepository: MediaRepository,
     private val playbackRepository: PlaybackRepository,
     private val mediaDeleter: MediaDeleter,
+    private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
+
+    init {
+        // Restore the persisted view mode; toggling writes it back.
+        viewModelScope.launch {
+            settingsRepository.viewMode.collect { mode ->
+                _uiState.value = _uiState.value.copy(
+                    viewMode = runCatching { ViewMode.valueOf(mode) }.getOrDefault(ViewMode.GRID),
+                )
+            }
+        }
+    }
 
     private val _uiState = MutableStateFlow(VideoLibraryUiState())
     val uiState: StateFlow<VideoLibraryUiState> = _uiState.asStateFlow()
@@ -143,9 +156,8 @@ class VideoLibraryViewModel @Inject constructor(
     }
 
     fun toggleViewMode() {
-        _uiState.value = _uiState.value.copy(
-            viewMode = if (_uiState.value.viewMode == ViewMode.GRID) ViewMode.LIST else ViewMode.GRID,
-        )
+        val next = if (_uiState.value.viewMode == ViewMode.GRID) ViewMode.LIST else ViewMode.GRID
+        viewModelScope.launch { settingsRepository.setViewMode(next.name) }
     }
 
     fun setSortOrder(order: SortOrder) {

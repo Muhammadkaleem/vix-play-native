@@ -10,6 +10,8 @@ import com.devbytes.vixplayer.app.data.repository.MediaTransfer
 import com.devbytes.vixplayer.app.data.repository.TransferProgress
 import com.devbytes.vixplayer.app.data.repository.TransferResult
 import com.devbytes.vixplayer.app.data.repository.MediaRepository
+import com.devbytes.vixplayer.app.data.repository.PlaybackRepository
+import com.devbytes.vixplayer.app.data.repository.SettingsRepository
 import com.devbytes.vixplayer.app.data.repository.RenameResult
 import com.devbytes.vixplayer.app.ui.common.SelectionHolder
 import com.devbytes.vixplayer.app.data.repository.VideoFile
@@ -17,9 +19,18 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+enum class FolderSort(val label: String) {
+    NAME("Name"),
+    RECENT("Recent"),
+    COUNT("Item count"),
+}
 
 sealed interface FolderBrowserUiState {
     data object Loading : FolderBrowserUiState
@@ -34,10 +45,65 @@ class FolderBrowserViewModel @Inject constructor(
     private val mediaDeleter: MediaDeleter,
     private val mediaRenamer: MediaRenamer,
     private val mediaTransfer: MediaTransfer,
+    private val playbackRepository: PlaybackRepository,
+    private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<FolderBrowserUiState>(FolderBrowserUiState.Loading)
     val state: StateFlow<FolderBrowserUiState> = _state.asStateFlow()
+
+    /** Grid vs list — shared, persisted, mirrors the video library. */
+    val viewMode: StateFlow<ViewMode> = settingsRepository.viewMode
+        .map { runCatching { ViewMode.valueOf(it) }.getOrDefault(ViewMode.GRID) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ViewMode.GRID)
+
+    private val _folderSort = MutableStateFlow(FolderSort.NAME)
+    val folderSort: StateFlow<FolderSort> = _folderSort.asStateFlow()
+
+    /** Resume fraction per video in the open folder, keyed by mediaStoreId. */
+    private val _resume = MutableStateFlow<Map<Long, Float>>(emptyMap())
+    val resume: StateFlow<Map<Long, Float>> = _resume.asStateFlow()
+
+    /** Unsorted folder list, re-sorted in memory when [folderSort] changes. */
+    private var rawFolders: List<FolderEntry> = emptyList()
+
+    init {
+        viewModelScope.launch {
+            settingsRepository.folderSort.collect { name ->
+                _folderSort.value = runCatching { FolderSort.valueOf(name) }
+                    .getOrDefault(FolderSort.NAME)
+                if (_state.value is FolderBrowserUiState.FolderList) {
+                    _state.value = FolderBrowserUiState.FolderList(sortFolders(rawFolders))
+                }
+            }
+        }
+    }
+
+    fun toggleViewMode() {
+        val next = if (viewMode.value == ViewMode.GRID) ViewMode.LIST else ViewMode.GRID
+        viewModelScope.launch { settingsRepository.setViewMode(next.name) }
+    }
+
+    fun setFolderSort(sort: FolderSort) {
+        viewModelScope.launch { settingsRepository.setFolderSort(sort.name) }
+    }
+
+    private fun sortFolders(folders: List<FolderEntry>): List<FolderEntry> = when (_folderSort.value) {
+        FolderSort.NAME -> folders.sortedBy { it.name.lowercase() }
+        FolderSort.RECENT -> folders.sortedByDescending { it.dateModified }
+        FolderSort.COUNT -> folders.sortedByDescending { it.videoCount }
+    }
+
+    /** Fetches resume fractions for the videos now on screen. */
+    private suspend fun refreshResume(videos: List<VideoFile>) {
+        val recent = runCatching { playbackRepository.getRecentPositions(200) }.getOrDefault(emptyList())
+        val byId = recent.associateBy { it.mediaStoreId }
+        _resume.value = videos.mapNotNull { v ->
+            val pos = byId[v.mediaStoreId] ?: return@mapNotNull null
+            if (v.durationMs <= 0) return@mapNotNull null
+            v.mediaStoreId to (pos.positionMs.toFloat() / v.durationMs).coerceIn(0f, 1f)
+        }.toMap()
+    }
 
     /** Shared with both libraries; see [SelectionHolder]. */
     private val selection = SelectionHolder()
@@ -275,6 +341,7 @@ class FolderBrowserViewModel @Inject constructor(
         runCatching { mediaRepository.queryVideosInFolder(bucketId) }
             .onSuccess {
                 _state.value = FolderBrowserUiState.VideoList(current.folderName, it)
+                refreshResume(it)
             }
     }
 
@@ -288,6 +355,7 @@ class FolderBrowserViewModel @Inject constructor(
             runCatching { mediaRepository.queryVideosInFolder(bucketId) }
                 .onSuccess { videos ->
                     _state.value = FolderBrowserUiState.VideoList(folderName, videos)
+                    refreshResume(videos)
                 }
                 .onFailure { e ->
                     _state.value = FolderBrowserUiState.Error(e.message ?: "Unknown error")
@@ -306,7 +374,8 @@ class FolderBrowserViewModel @Inject constructor(
             _state.value = FolderBrowserUiState.Loading
             runCatching { mediaRepository.queryFolders() }
                 .onSuccess { folders ->
-                    _state.value = FolderBrowserUiState.FolderList(folders)
+                    rawFolders = folders
+                    _state.value = FolderBrowserUiState.FolderList(sortFolders(folders))
                 }
                 .onFailure { e ->
                     _state.value = FolderBrowserUiState.Error(e.message ?: "Unknown error")

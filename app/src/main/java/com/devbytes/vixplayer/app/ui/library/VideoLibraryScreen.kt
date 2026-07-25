@@ -50,6 +50,7 @@ import com.devbytes.vixplayer.app.ui.library.components.ContinueWatchingRail
 import com.devbytes.vixplayer.app.ui.library.components.LibraryEmptyState
 import com.devbytes.vixplayer.app.ui.library.components.LibrarySkeleton
 import com.devbytes.vixplayer.app.ui.library.components.VideoCard
+import com.devbytes.vixplayer.app.ui.library.components.VideoListRow
 
 private val SortOrder.label: String
     get() = when (this) {
@@ -348,16 +349,26 @@ private fun LibraryGrid(
             }
         }
         items(uiState.allVideos, key = { it.mediaStoreId }) { video ->
-            VideoCard(
-                video = video,
-                resumeFraction = resumeMap[video.mediaStoreId] ?: 0f,
-                isSelected = video.mediaStoreId in selected,
-                // In selection mode a tap toggles instead of opening the player.
-                onClick = {
-                    if (selectionMode) onToggleSelect(video) else onVideoClick(video.uri)
-                },
-                onLongClick = { onToggleSelect(video) },
-            )
+            val onClick: () -> Unit = {
+                if (selectionMode) onToggleSelect(video) else onVideoClick(video.uri)
+            }
+            if (uiState.viewMode == ViewMode.LIST) {
+                VideoListRow(
+                    video = video,
+                    resumeFraction = resumeMap[video.mediaStoreId] ?: 0f,
+                    isSelected = video.mediaStoreId in selected,
+                    onClick = onClick,
+                    onLongClick = { onToggleSelect(video) },
+                )
+            } else {
+                VideoCard(
+                    video = video,
+                    resumeFraction = resumeMap[video.mediaStoreId] ?: 0f,
+                    isSelected = video.mediaStoreId in selected,
+                    onClick = onClick,
+                    onLongClick = { onToggleSelect(video) },
+                )
+            }
         }
     }
 }

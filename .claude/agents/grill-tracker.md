@@ -167,6 +167,22 @@ After wiring them, verified on device:
 Still untested here: cancel-mid-copy cleanup and multi-file batches. The legacy
 (API ≤28) rename and copy branches **cannot** run on this API-35 image at all.
 
+### Folder + video listing (grill) — done, verified on device
+Three PRD gaps fixed:
+1. **Folders were sorted by video count**, so any file operation reshuffled the whole
+   list — it even made my own testing tap the wrong folder. Now **Name A–Z by default**
+   (stable: position changes only on rename), with a persisted sort control
+   (Name / Recent / Item count). `FolderEntry` gained `dateModified` for Recent.
+2. **`ViewMode.LIST` was a 1-column grid of full-size cards** — fewer items than the grid,
+   the opposite of a list. New shared `VideoListRow` (96×54, reusing the `HistoryRow`
+   vocabulary) is a genuine compact row. `ViewMode` is now persisted in `SettingsRepository`
+   and **shared** by the library and folder browser.
+3. **In-folder videos had no resume bar** (`FolderBrowserViewModel` never had
+   `PlaybackRepository`). Now wired: verified `holiday.mp4` shows a resume fill in-folder.
+
+Verified on device: folders list Camera/Movies A–Z; library and folder browser both render
+the compact row in LIST; view mode persisted across navigation; in-folder resume bar shows.
+
 ### Subtitle styling — verified, one wart fixed
 Live preview, four presets, sliders, swatches, edge and font chips all work. Selecting
 **Cinema** propagated correctly (yellow serif, larger size, yellow swatch selected), and

@@ -26,6 +26,8 @@ class SettingsRepository @Inject constructor(
         val USE_AMOLED_THEME        = booleanPreferencesKey("use_amoled_theme")
         val SHOW_SUBTITLES_DEFAULT  = booleanPreferencesKey("show_subtitles_by_default")
         val BACKGROUND_PLAYBACK     = booleanPreferencesKey("background_playback")
+        val VIEW_MODE               = stringPreferencesKey("library_view_mode")
+        val FOLDER_SORT             = stringPreferencesKey("folder_sort")
         val SUB_PRESET              = stringPreferencesKey("subtitle_preset")
         val SUB_TEXT_SIZE           = floatPreferencesKey("subtitle_text_size")
         val SUB_BOTTOM_PADDING      = floatPreferencesKey("subtitle_bottom_padding")
@@ -67,6 +69,20 @@ class SettingsRepository @Inject constructor(
 
     suspend fun setBackgroundPlayback(enabled: Boolean) {
         context.dataStore.edit { it[Keys.BACKGROUND_PLAYBACK] = enabled }
+    }
+
+    /** Grid vs list, shared by the video library and the folder browser. */
+    val viewMode: Flow<String> = context.dataStore.data.map { it[Keys.VIEW_MODE] ?: "GRID" }
+
+    suspend fun setViewMode(mode: String) {
+        context.dataStore.edit { it[Keys.VIEW_MODE] = mode }
+    }
+
+    /** Folder-browser ordering. Default NAME: stable against file operations. */
+    val folderSort: Flow<String> = context.dataStore.data.map { it[Keys.FOLDER_SORT] ?: "NAME" }
+
+    suspend fun setFolderSort(sort: String) {
+        context.dataStore.edit { it[Keys.FOLDER_SORT] = sort }
     }
 
     /**

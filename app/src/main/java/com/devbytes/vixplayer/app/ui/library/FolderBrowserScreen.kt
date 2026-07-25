@@ -66,6 +66,7 @@ import com.devbytes.vixplayer.app.ui.library.components.FolderListSkeleton
 import com.devbytes.vixplayer.app.ui.library.components.LibraryEmptyState
 import com.devbytes.vixplayer.app.ui.library.components.LibrarySkeleton
 import com.devbytes.vixplayer.app.ui.library.components.VideoCard
+import com.devbytes.vixplayer.app.ui.library.components.VideoListRow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -95,6 +96,10 @@ fun FolderBrowserScreen(
     var choosingDestination by remember { mutableStateOf<Boolean?>(null) }
     val destinations by viewModel.destinations.collectAsStateWithLifecycle()
     val transfer by viewModel.transfer.collectAsStateWithLifecycle()
+    val viewMode by viewModel.viewMode.collectAsStateWithLifecycle()
+    val folderSort by viewModel.folderSort.collectAsStateWithLifecycle()
+    val resume by viewModel.resume.collectAsStateWithLifecycle()
+    var sortMenu by remember { mutableStateOf(false) }
 
     val visibleVideos = (state as? FolderBrowserUiState.VideoList)?.videos.orEmpty()
 
@@ -232,6 +237,49 @@ fun FolderBrowserScreen(
                         )
                     }
                 },
+                actions = {
+                    if (isInFolder) {
+                        // In a folder: toggle grid/list of its videos.
+                        IconButton(onClick = { viewModel.toggleViewMode() }) {
+                            Icon(
+                                painter = painterResource(
+                                    if (viewMode == ViewMode.GRID) R.drawable.ic_list
+                                    else R.drawable.ic_grid
+                                ),
+                                contentDescription = "Toggle view",
+                            )
+                        }
+                    } else {
+                        // Folder list: choose the folder ordering.
+                        Box {
+                            IconButton(onClick = { sortMenu = true }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_sort),
+                                    contentDescription = "Sort folders",
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = sortMenu,
+                                onDismissRequest = { sortMenu = false },
+                            ) {
+                                FolderSort.entries.forEach { sort ->
+                                    DropdownMenuItem(
+                                        text = { Text(sort.label) },
+                                        onClick = { sortMenu = false; viewModel.setFolderSort(sort) },
+                                        trailingIcon = if (sort == folderSort) {
+                                            {
+                                                Icon(
+                                                    painter = painterResource(R.drawable.ic_check),
+                                                    contentDescription = null,
+                                                )
+                                            }
+                                        } else null,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                 ),
@@ -260,6 +308,8 @@ fun FolderBrowserScreen(
                 onVideoClick = onVideoClick,
                 selected = selected,
                 selectionMode = selectionMode,
+                viewMode = viewMode,
+                resume = resume,
                 onToggleSelect = { viewModel.toggleSelection(it) },
                 modifier = Modifier.padding(padding),
             )
@@ -501,6 +551,8 @@ private fun VideoGrid(
     onVideoClick: (Uri) -> Unit,
     selected: Set<Long>,
     selectionMode: Boolean,
+    viewMode: ViewMode,
+    resume: Map<Long, Float>,
     onToggleSelect: (VideoFile) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -514,21 +566,33 @@ private fun VideoGrid(
         return
     }
     LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
-        contentPadding = PaddingValues(12.dp),
+        columns = GridCells.Fixed(if (viewMode == ViewMode.LIST) 1 else 2),
+        contentPadding = PaddingValues(if (viewMode == ViewMode.LIST) 0.dp else 12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(if (viewMode == ViewMode.LIST) 0.dp else 8.dp),
         modifier = modifier.fillMaxSize(),
     ) {
         items(videos, key = { it.mediaStoreId }) { video ->
-            VideoCard(
-                video = video,
-                isSelected = video.mediaStoreId in selected,
-                onClick = {
-                    if (selectionMode) onToggleSelect(video) else onVideoClick(video.uri)
-                },
-                onLongClick = { onToggleSelect(video) },
-            )
+            val onClick: () -> Unit = {
+                if (selectionMode) onToggleSelect(video) else onVideoClick(video.uri)
+            }
+            if (viewMode == ViewMode.LIST) {
+                VideoListRow(
+                    video = video,
+                    resumeFraction = resume[video.mediaStoreId] ?: 0f,
+                    isSelected = video.mediaStoreId in selected,
+                    onClick = onClick,
+                    onLongClick = { onToggleSelect(video) },
+                )
+            } else {
+                VideoCard(
+                    video = video,
+                    resumeFraction = resume[video.mediaStoreId] ?: 0f,
+                    isSelected = video.mediaStoreId in selected,
+                    onClick = onClick,
+                    onLongClick = { onToggleSelect(video) },
+                )
+            }
         }
     }
 }

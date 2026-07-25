@@ -24,6 +24,8 @@ data class FolderEntry(
     val name: String,
     val videoCount: Int,
     val sampleUri: Uri,
+    /** Newest DATE_MODIFIED in the bucket, for the "Recent" folder sort. */
+    val dateModified: Long,
 )
 
 @Singleton
@@ -101,13 +103,14 @@ class MediaRepository @Inject constructor(
     }
 
     suspend fun queryFolders(): List<FolderEntry> = withContext(Dispatchers.IO) {
-        // bucket -> (name, count, sampleUri). Ordered by DATE_MODIFIED DESC so the first
-        // video seen per bucket becomes the thumbnail.
-        val buckets = linkedMapOf<Long, Triple<String, Int, Uri>>()
+        // bucket -> (name, count, sampleUri, newestDate). Ordered by DATE_MODIFIED DESC so
+        // the first video seen per bucket becomes the thumbnail and carries the newest date.
+        val buckets = linkedMapOf<Long, Quad>()
         val projection = arrayOf(
             MediaStore.Video.Media._ID,
             MediaStore.Video.Media.BUCKET_ID,
             MediaStore.Video.Media.BUCKET_DISPLAY_NAME,
+            MediaStore.Video.Media.DATE_MODIFIED,
         )
         context.contentResolver.query(
             MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
@@ -117,27 +120,40 @@ class MediaRepository @Inject constructor(
             val idCol     = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
             val bidCol    = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.BUCKET_ID)
             val bnameCol  = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.BUCKET_DISPLAY_NAME)
+            val dateCol   = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_MODIFIED)
             while (cursor.moveToNext()) {
                 val id   = cursor.getLong(idCol)
                 val bid  = cursor.getLong(bidCol)
                 val name = cursor.getString(bnameCol) ?: "Unknown"
+                val date = cursor.getLong(dateCol)
                 val uri  = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id)
                 val existing = buckets[bid]
-                buckets[bid] = if (existing == null) Triple(name, 1, uri)
+                buckets[bid] = if (existing == null) Quad(name, 1, uri, date)
                                else existing.copy(second = existing.second + 1)
             }
         }
+        // Name A–Z default: a folder's position changes only when it is renamed, never
+        // when a file is added, moved or removed. The VM re-sorts for other orders.
         buckets.entries
-            .sortedByDescending { it.value.second }
-            .map { (bid, triple) ->
+            .sortedBy { it.value.first.lowercase() }
+            .map { (bid, q) ->
                 FolderEntry(
-                    bucketId    = bid,
-                    name        = triple.first,
-                    videoCount  = triple.second,
-                    sampleUri   = triple.third,
+                    bucketId     = bid,
+                    name         = q.first,
+                    videoCount   = q.second,
+                    sampleUri    = q.third,
+                    dateModified = q.fourth,
                 )
             }
     }
+
+    /** Local 4-tuple: MediaStore aggregation needs name, running count, sample, newest date. */
+    private data class Quad(
+        val first: String,
+        val second: Int,
+        val third: Uri,
+        val fourth: Long,
+    )
 
     /**
      * The next video in the same folder as [mediaStoreId], following the folder's own
