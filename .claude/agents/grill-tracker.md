@@ -167,6 +167,26 @@ After wiring them, verified on device:
 Still untested here: cancel-mid-copy cleanup and multi-file batches. The legacy
 (API ≤28) rename and copy branches **cannot** run on this API-35 image at all.
 
+### Private folder (grill) — built and verified on device
+Vault in app-private storage, PIN-gated. The PRD's "hide in place via .nomedia + MediaStore
+exclusion" is **not buildable** under scoped storage without MANAGE_EXTERNAL_STORAGE
+(power-mode, Play-gated) — so "private" means moving the bytes into `filesDir/private`,
+which MediaStore genuinely cannot see, and trashing the public original.
+
+- **PIN/recovery:** PBKDF2 salted hashes (no dependency), verified never stored in clear.
+  Recovery code shown once at setup (DEK2-LLDX), grouped, unambiguous alphabet.
+- **Hide:** "Move to private" (lock icon) in the video-library multi-select → copies to
+  vault → consent to remove the public original (goes to trash, recoverable) → scrubs the
+  file's resume position.
+- **Verified on device, full chain:** set PIN → recovery screen → empty vault; hide clip_c
+  → it leaves the library query and the original becomes `/sdcard/Movies/.trashed-…-clip_c`;
+  vault **re-locks on exit**; wrong-empty PIN stays locked, correct PIN (2468) unlocks; the
+  hidden item shows in the vault with a thumbnail decoded from the app-private file.
+
+**Deferred (logged, not silent):** biometric unlock (needs androidx.biometric + an enrolled
+fingerprint to test — acceptance criterion), folder-browser "move to private" entry,
+per-item encryption (PRD P2), unhide/delete not yet exercised on device.
+
 ### Folder + video listing (grill) — done, verified on device
 Three PRD gaps fixed:
 1. **Folders were sorted by video count**, so any file operation reshuffled the whole

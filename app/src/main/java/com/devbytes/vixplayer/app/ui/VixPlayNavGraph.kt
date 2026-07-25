@@ -327,7 +327,12 @@ fun VixPlayNavGraph() {
                 }
 
                 composable(PRIVATE_FOLDER_ROUTE) {
-                    PrivateFolderScreen(onBack = { navController.popBackStack() })
+                    PrivateFolderScreen(
+                        onBack = { navController.popBackStack() },
+                        onPlay = { uri ->
+                            navController.navigate(playerRoute(Uri.encode(uri)))
+                        },
+                    )
                 }
 
                 composable(ABOUT_PRO_ROUTE) {

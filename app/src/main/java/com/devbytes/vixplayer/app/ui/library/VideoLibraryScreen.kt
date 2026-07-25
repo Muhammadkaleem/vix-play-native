@@ -95,6 +95,14 @@ fun VideoLibraryScreen(
         }
     }
 
+    fun moveSelectionToPrivate() {
+        viewModel.moveToPrivate(uiState.allVideos) { sender ->
+            deleteConsent.launch(
+                androidx.activity.result.IntentSenderRequest.Builder(sender).build()
+            )
+        }
+    }
+
     message?.let { text ->
         LaunchedEffect(text) {
             android.widget.Toast.makeText(context, text, android.widget.Toast.LENGTH_SHORT).show()
@@ -142,6 +150,12 @@ fun VideoLibraryScreen(
                             Icon(
                                 painter = painterResource(R.drawable.ic_share),
                                 contentDescription = "Share",
+                            )
+                        }
+                        IconButton(onClick = { moveSelectionToPrivate() }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_lock),
+                                contentDescription = "Move to private",
                             )
                         }
                         IconButton(onClick = {

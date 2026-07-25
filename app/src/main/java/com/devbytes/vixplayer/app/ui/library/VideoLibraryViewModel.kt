@@ -6,6 +6,7 @@ import com.devbytes.vixplayer.app.data.repository.DeleteResult
 import com.devbytes.vixplayer.app.data.repository.MediaDeleter
 import com.devbytes.vixplayer.app.data.repository.MediaRepository
 import com.devbytes.vixplayer.app.data.repository.PlaybackRepository
+import com.devbytes.vixplayer.app.data.repository.PrivateVault
 import com.devbytes.vixplayer.app.data.repository.SettingsRepository
 import com.devbytes.vixplayer.app.ui.common.SelectionHolder
 import com.devbytes.vixplayer.app.data.repository.VideoFile
@@ -45,6 +46,7 @@ class VideoLibraryViewModel @Inject constructor(
     private val playbackRepository: PlaybackRepository,
     private val mediaDeleter: MediaDeleter,
     private val settingsRepository: SettingsRepository,
+    private val privateVault: PrivateVault,
 ) : ViewModel() {
 
     init {
@@ -78,6 +80,51 @@ class VideoLibraryViewModel @Inject constructor(
     val deleteIsRecoverable: Boolean get() = mediaDeleter.isRecoverable()
 
     private var pendingDeleteCount = 0
+    // Non-null while a "move to private" awaits consent to remove the public originals.
+    private var pendingPrivateIds: List<Long> = emptyList()
+
+    /**
+     * Copies the selection into the private vault, then removes the public originals via
+     * the same consent path as delete. Hiding also scrubs each file's resume position so
+     * a private item leaves no breadcrumb in Continue Watching or History.
+     */
+    fun moveToPrivate(
+        visible: List<VideoFile>,
+        onNeedsConsent: (android.content.IntentSender) -> Unit,
+    ) {
+        val videos = selectedVideos(visible)
+        if (videos.isEmpty()) return
+        viewModelScope.launch {
+            val copied = privateVault.hide(videos)
+            if (copied.isEmpty()) {
+                _message.value = "Couldn't move to private"
+                clearSelection()
+                return@launch
+            }
+            pendingPrivateIds = videos
+                .filter { it.uri in copied }
+                .map { it.mediaStoreId }
+            when (val result = mediaDeleter.delete(copied)) {
+                is DeleteResult.NeedsConsent -> onNeedsConsent(result.intentSender)
+                is DeleteResult.Deleted -> finishPrivate()
+                is DeleteResult.Failed -> {
+                    _message.value = result.message
+                    clearSelection()
+                }
+            }
+        }
+    }
+
+    private fun finishPrivate() {
+        val ids = pendingPrivateIds
+        pendingPrivateIds = emptyList()
+        viewModelScope.launch {
+            ids.forEach { playbackRepository.clearPosition(it) }
+            loadContent()
+            clearSelection()
+            _message.value = if (ids.size == 1) "Moved to private" else "${ids.size} moved to private"
+        }
+    }
 
     fun toggleSelection(video: VideoFile) = selection.toggle(video.mediaStoreId)
 
@@ -113,13 +160,16 @@ class VideoLibraryViewModel @Inject constructor(
     }
 
     fun onDeleteConsentResult(granted: Boolean) {
+        val privateMove = pendingPrivateIds.isNotEmpty()
         if (!granted) {
-            _message.value = "Cancelled"
+            // The vault copy already exists; a refusal just leaves the public copy too.
+            _message.value = if (privateMove) "Copied to private, original kept" else "Cancelled"
             clearSelection()
             pendingDeleteCount = 0
+            pendingPrivateIds = emptyList()
             return
         }
-        finishDelete()
+        if (privateMove) finishPrivate() else finishDelete()
     }
 
     /**
