@@ -9,6 +9,7 @@ import com.devbytes.vixplayer.app.data.repository.SettingsRepository
 import com.devbytes.vixplayer.app.data.repository.SubtitleStyle
 import com.devbytes.vixplayer.app.data.repository.VideoFile
 import com.devbytes.vixplayer.app.player.PlayerController
+import com.devbytes.vixplayer.app.player.gesture.GestureBindings
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -73,6 +74,10 @@ class PlayerViewModel @Inject constructor(
     fun setSubtitleStyle(style: SubtitleStyle) {
         viewModelScope.launch { settingsRepository.setSubtitleStyle(style) }
     }
+
+    /** Remappable player gestures, persisted. */
+    val gestureBindings: StateFlow<GestureBindings> = settingsRepository.gestureBindings
+        .stateIn(viewModelScope, SharingStarted.Eagerly, GestureBindings.DEFAULT)
 
     /** Whether audio should keep playing once the app is backgrounded. */
     val backgroundPlayback: StateFlow<Boolean> = settingsRepository.backgroundPlayback

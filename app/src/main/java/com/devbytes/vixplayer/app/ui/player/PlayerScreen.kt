@@ -84,6 +84,11 @@ import com.devbytes.vixplayer.app.MainActivity
 import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.data.repository.VideoFile
 import com.devbytes.vixplayer.app.player.PlaybackService
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
+import com.devbytes.vixplayer.app.player.gesture.DragAction
 import com.devbytes.vixplayer.app.player.gesture.GestureEvent
 import com.devbytes.vixplayer.app.player.gesture.SeekPrecision
 import com.devbytes.vixplayer.app.player.gesture.SeekSide
@@ -186,6 +191,14 @@ fun PlayerScreen(
     // seeds the holder before prepare() — a remembered offset costs no extra re-prepare.
     val subtitleOffsetHolder = viewModel.subtitleOffset
     var subtitleOffsetMs by remember { mutableLongStateOf(viewModel.getSubtitleOffsetMs()) }
+
+    // Pinch-zoom transform, applied to the video surface. 1x = no zoom.
+    var zoomScale by remember { mutableFloatStateOf(1f) }
+    var zoomOffset by remember { mutableStateOf(Offset.Zero) }
+    // Surface size in px, used to clamp pan to the zoomed content's bounds.
+    var containerSize by remember { mutableStateOf(IntSize.Zero) }
+    // Remappable gesture assignments; PlayerScreen resolves side -> action.
+    val bindings by viewModel.gestureBindings.collectAsState()
 
     // Declared early: the ON_STOP background-pause rule below must consult it, and PiP is
     // the one case where backgrounding must NOT pause (the video is still on screen).
@@ -521,6 +534,10 @@ fun PlayerScreen(
         showResumeChip = false
         ended = false
         nextVideo = null
+        // A zoom is a "look closer at this shot" intent tied to the current file; a new
+        // video (likely a different resolution) starts un-zoomed and centred.
+        zoomScale = 1f
+        zoomOffset = Offset.Zero
     }
 
     // File Info sheet data — loaded once on first open (file metadata via MediaStore,
@@ -827,43 +844,76 @@ fun PlayerScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(AmoledBackground)
+            // Surface size, so pan can be clamped to the zoomed content's bounds.
+            .onSizeChanged { containerSize = it }
             // Locked → LockOverlay owns all touches; the surface below is inert.
-            .playerGestures(enabled = !locked) { event ->
+            .playerGestures(enabled = !locked, zoomed = zoomScale > 1f) { event ->
                 when (event) {
                     GestureEvent.ToggleControls -> controlsVisible = !controlsVisible
                     is GestureEvent.DoubleTapSeek -> {
                         val side = event.side
-                        val delta = if (side == SeekSide.LEFT) -10_000L else 10_000L
-                        val now = System.currentTimeMillis()
-                        if (lastTapSide == side && now - lastTapTime < 800L) {
-                            accumulatedSeekMs += delta
+                        // While zoomed, double-tap resets the zoom instead of seeking, so
+                        // the familiar seek gesture is unchanged unless you've zoomed in.
+                        if (zoomScale > 1f) {
+                            zoomScale = 1f
+                            zoomOffset = Offset.Zero
                         } else {
-                            accumulatedSeekMs = delta
+                            val skipMs = bindings.tapFor(side).skipMs
+                            if (skipMs != 0L) {
+                                val delta = if (side == SeekSide.LEFT) -skipMs else skipMs
+                                val now = System.currentTimeMillis()
+                                accumulatedSeekMs =
+                                    if (lastTapSide == side && now - lastTapTime < 800L) {
+                                        accumulatedSeekMs + delta
+                                    } else {
+                                        delta
+                                    }
+                                lastTapSide = side
+                                lastTapTime = now
+                                doubleTapSide = side
+                                doubleTapKey++
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                player.seekTo((player.currentPosition + delta).coerceAtLeast(0L))
+                            }
                         }
-                        lastTapSide = side
-                        lastTapTime = now
-                        doubleTapSide = side
-                        doubleTapKey++
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        val newPos = (player.currentPosition + delta).coerceAtLeast(0L)
-                        player.seekTo(newPos)
                     }
-                    is GestureEvent.VolumeDrag -> {
-                        volumeLevel = (volumeLevel + event.deltaFraction * maxVolume)
-                            .coerceIn(0f, maxVolume.toFloat())
-                        audioManager.setStreamVolume(
-                            AudioManager.STREAM_MUSIC, volumeLevel.roundToInt(), 0,
-                        )
-                        hudKind = GestureHudKind.VOLUME
-                        hudFraction = volumeLevel / maxVolume
-                    }
-                    is GestureEvent.BrightnessDrag -> {
-                        brightness = (brightness + event.deltaFraction).coerceIn(0.01f, 1f)
-                        activity?.window?.let { w ->
-                            w.attributes = w.attributes.also { it.screenBrightness = brightness }
+                    is GestureEvent.VerticalDrag -> {
+                        when (bindings.dragFor(event.side)) {
+                            DragAction.VOLUME -> {
+                                volumeLevel = (volumeLevel + event.deltaFraction * maxVolume)
+                                    .coerceIn(0f, maxVolume.toFloat())
+                                audioManager.setStreamVolume(
+                                    AudioManager.STREAM_MUSIC, volumeLevel.roundToInt(), 0,
+                                )
+                                hudKind = GestureHudKind.VOLUME
+                                hudFraction = volumeLevel / maxVolume
+                            }
+                            DragAction.BRIGHTNESS -> {
+                                brightness = (brightness + event.deltaFraction).coerceIn(0.01f, 1f)
+                                activity?.window?.let { w ->
+                                    w.attributes = w.attributes.also { it.screenBrightness = brightness }
+                                }
+                                hudKind = GestureHudKind.BRIGHTNESS
+                                hudFraction = brightness
+                            }
+                            DragAction.NONE -> Unit
                         }
-                        hudKind = GestureHudKind.BRIGHTNESS
-                        hudFraction = brightness
+                    }
+                    is GestureEvent.Zoom -> {
+                        zoomScale = (zoomScale * event.scale).coerceIn(1f, 4f)
+                        // Snap back to centre once fully zoomed out; otherwise re-clamp the
+                        // existing offset to the new (smaller, when pinching out) bounds so
+                        // the image can't stay stranded off-centre.
+                        zoomOffset = if (zoomScale == 1f) Offset.Zero else clampPan(zoomOffset, zoomScale, containerSize)
+                    }
+                    is GestureEvent.Pan -> {
+                        if (zoomScale > 1f) {
+                            zoomOffset = clampPan(
+                                Offset(zoomOffset.x + event.dx, zoomOffset.y + event.dy),
+                                zoomScale,
+                                containerSize,
+                            )
+                        }
                     }
                     GestureEvent.SeekScrubStart -> {
                         scrubStartPos = player.currentPosition
@@ -922,7 +972,14 @@ fun PlayerScreen(
                 }
             },
             update = { it.resizeMode = aspectMode.resizeMode },
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = zoomScale
+                    scaleY = zoomScale
+                    translationX = zoomOffset.x
+                    translationY = zoomOffset.y
+                },
             onRelease = { it.player = null; playerView = null },
         )
 
@@ -1149,6 +1206,20 @@ fun PlayerScreen(
 private fun formatSleepRemaining(ms: Long): String {
     val totalSec = (ms / 1000).coerceAtLeast(0)
     return if (totalSec >= 60) "${(totalSec + 59) / 60}m left" else "${totalSec}s left"
+}
+
+/**
+ * Clamps a pan [offset] so the content scaled by [scale] about the centre always covers the
+ * viewport [size] — i.e. panning stops at the zoomed image's edges and never reveals a gap.
+ * At scale s the content overhangs each side by (s-1)/2 of the dimension.
+ */
+private fun clampPan(offset: Offset, scale: Float, size: IntSize): Offset {
+    val maxX = (scale - 1f) * size.width / 2f
+    val maxY = (scale - 1f) * size.height / 2f
+    return Offset(
+        offset.x.coerceIn(-maxX, maxX),
+        offset.y.coerceIn(-maxY, maxY),
+    )
 }
 
 /**

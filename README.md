@@ -38,6 +38,7 @@ PRDs in `vix-play-docs/`, then implemented and logged in `CLAUDE.md`.
 | Audio | track switch (multi-language / commentary) |
 | View | aspect Fit/Crop/Stretch, manual orientation override, immersive full-screen |
 | Extras | playback speed (persisted), Picture-in-Picture, sleep timer, screenshot + share |
+| Gesture remap | remap the two vertical drags + two double-taps (persisted); pinch-to-zoom + pan always on |
 | Background | `MediaSessionService` + notification/lock-screen controls, audio focus (opt-in) |
 | Equalizer | multiband EQ, bass boost, virtualizer, preamp, saved presets, per-output profiles |
 | Playlists | create/rename/delete, add from library, drag reorder, missing-file flagging |
@@ -47,34 +48,37 @@ PRDs in `vix-play-docs/`, then implemented and logged in `CLAUDE.md`.
 with seek, shuffle and repeat over ExoPlayer's native queue, a persistent mini-player above the
 tabs, and playlists with drag reorder.
 
-**Library shell** — video library, folder browser, search, history, settings hub, About.
+**Library shell** — video library, folder browser, search, history, settings hub, About, and a
+PIN-locked private folder (app-private vault, PBKDF2-hashed PIN, recovery code).
 
 **Not yet built** — libass (full ASS/SSA fidelity) · subtitle online search · network streaming
-(SMB/FTP) · Chromecast · private folder · Android TV.
+(SMB/FTP) · Chromecast · Android TV.
 
 ## Current grill
 
-**Move / copy files — built, not yet device-verified.** Select videos in the folder browser and
-copy or move them into another folder, with per-file progress and cancellation.
+**Pan while zoomed (finishes pinch-zoom) — built, not-zoomed regression device-verified; pan
+itself needs a real pinch to reach.** Once pinched in, a one-finger drag moves the viewport, so you
+can inspect any corner instead of only the centre.
 
-Copy is the primitive and move is copy-then-delete, with the source removed only after its copy is
-published. That ordering is the whole safety argument: an interrupted move leaves you with two
-copies, not zero. On API 29+ the destination stays `IS_PENDING` until it succeeds, so an abandoned
-copy is never visible in the gallery.
+While zoomed, the drag is repurposed for panning — brightness / volume / seek / speed-hold suspend
+until you zoom back out (double-tap resets zoom, so there's always a one-gesture way back). The pan
+is clamped so the zoomed content always covers the viewport: you reach any edge but never reveal a
+black bar, and pinching out re-clamps so the image can't stay stranded off-centre. Zoom and pan
+reset on the next video.
 
-The trade: moving within a single volume copies the whole file rather than doing an instant
-rename. The fast path is deliberately deferred until the safe path has actually run on hardware.
+On device: with the pan branch added, double-tap seek and vertical-drag volume still fired in the
+un-zoomed state — the normal single-finger gestures are unbroken. Reaching the zoomed state to test
+pan itself needs a genuine two-finger pinch, which the emulator can't inject (same limit as the
+pinch pass), so the pan feel needs a hardware check.
 
-Destinations are folders that already contain videos — one write path, and the result is
-guaranteed to be somewhere the app can list afterwards.
-
-> Fourteen features now await a device run. This one touches file contents.
+> Sixteen features now await (or have partially had) a hardware run.
 
 ## Next grill
 
 Candidates, in rough priority order:
 
 1. **Same-volume move fast path** — `RELATIVE_PATH` update instead of copying gigabytes.
-2. **Pinch-to-zoom / gesture remap UI (Step 7)** — needs a persisted gesture-binding model.
-3. **In-app Trash screen** — restore trashed items without leaving the app; today recovery lives in
+2. **In-app Trash screen** — restore trashed items without leaving the app; today recovery lives in
    the system Files/Photos apps.
+3. **New-folder creation at a move/copy destination** — `RELATIVE_PATH` insert can make directories
+   on API 29+; needs naming and validation UI.

@@ -11,11 +11,22 @@ sealed interface GestureEvent {
     /** Double tap on the left/right half — jumps ±10s. */
     data class DoubleTapSeek(val side: SeekSide) : GestureEvent
 
-    /** Incremental vertical drag on the right half (+up, −down), as a fraction of height. */
-    data class VolumeDrag(val deltaFraction: Float) : GestureEvent
+    /**
+     * Incremental vertical drag on one half (+up, −down), as a fraction of height. The
+     * modifier reports *which side*; PlayerScreen resolves the side to an action via the
+     * user's [GestureBindings], so the same gesture can be volume, brightness, or nothing.
+     */
+    data class VerticalDrag(val side: SeekSide, val deltaFraction: Float) : GestureEvent
 
-    /** Incremental vertical drag on the left half (+up, −down), as a fraction of height. */
-    data class BrightnessDrag(val deltaFraction: Float) : GestureEvent
+    /** Two-finger pinch: [scale] is the incremental factor since the last event (~1.0). */
+    data class Zoom(val scale: Float) : GestureEvent
+
+    /**
+     * One-finger drag while zoomed in — moves the viewport. [dx]/[dy] are incremental pixel
+     * deltas since the last event (content-follows-finger). Only emitted when the modifier is
+     * told it is `zoomed`; PlayerScreen accumulates and clamps them to the zoomed bounds.
+     */
+    data class Pan(val dx: Float, val dy: Float) : GestureEvent
 
     /** A horizontal scrub began — capture the current position as the anchor. */
     data object SeekScrubStart : GestureEvent

@@ -9,11 +9,17 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.devbytes.vixplayer.app.player.gesture.DragAction
+import com.devbytes.vixplayer.app.player.gesture.GestureBindings
+import com.devbytes.vixplayer.app.player.gesture.TapAction
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private inline fun <reified T : Enum<T>> enumOrNull(name: String): T? =
+    runCatching { enumValueOf<T>(name) }.getOrNull()
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "vixplay_settings")
 
@@ -28,6 +34,10 @@ class SettingsRepository @Inject constructor(
         val BACKGROUND_PLAYBACK     = booleanPreferencesKey("background_playback")
         val VIEW_MODE               = stringPreferencesKey("library_view_mode")
         val FOLDER_SORT             = stringPreferencesKey("folder_sort")
+        val GESTURE_LEFT_DRAG       = stringPreferencesKey("gesture_left_drag")
+        val GESTURE_RIGHT_DRAG      = stringPreferencesKey("gesture_right_drag")
+        val GESTURE_LEFT_TAP        = stringPreferencesKey("gesture_left_tap")
+        val GESTURE_RIGHT_TAP       = stringPreferencesKey("gesture_right_tap")
         val SUB_PRESET              = stringPreferencesKey("subtitle_preset")
         val SUB_TEXT_SIZE           = floatPreferencesKey("subtitle_text_size")
         val SUB_BOTTOM_PADDING      = floatPreferencesKey("subtitle_bottom_padding")
@@ -83,6 +93,26 @@ class SettingsRepository @Inject constructor(
 
     suspend fun setFolderSort(sort: String) {
         context.dataStore.edit { it[Keys.FOLDER_SORT] = sort }
+    }
+
+    /** Remappable player gestures. Defaults reproduce the original hardcoded behaviour. */
+    val gestureBindings: Flow<GestureBindings> = context.dataStore.data.map { p ->
+        val d = GestureBindings.DEFAULT
+        GestureBindings(
+            leftDrag = p[Keys.GESTURE_LEFT_DRAG]?.let { enumOrNull<DragAction>(it) } ?: d.leftDrag,
+            rightDrag = p[Keys.GESTURE_RIGHT_DRAG]?.let { enumOrNull<DragAction>(it) } ?: d.rightDrag,
+            leftTap = p[Keys.GESTURE_LEFT_TAP]?.let { enumOrNull<TapAction>(it) } ?: d.leftTap,
+            rightTap = p[Keys.GESTURE_RIGHT_TAP]?.let { enumOrNull<TapAction>(it) } ?: d.rightTap,
+        )
+    }
+
+    suspend fun setGestureBindings(b: GestureBindings) {
+        context.dataStore.edit {
+            it[Keys.GESTURE_LEFT_DRAG] = b.leftDrag.name
+            it[Keys.GESTURE_RIGHT_DRAG] = b.rightDrag.name
+            it[Keys.GESTURE_LEFT_TAP] = b.leftTap.name
+            it[Keys.GESTURE_RIGHT_TAP] = b.rightTap.name
+        }
     }
 
     /**

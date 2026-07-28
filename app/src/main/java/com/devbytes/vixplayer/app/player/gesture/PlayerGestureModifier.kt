@@ -6,7 +6,9 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
@@ -25,14 +27,47 @@ private val EDGE_EXCLUSION = 24.dp
  * hold-then-drag scrubs playback speed, while a quick drag (which cancels the
  * long-press before it fires) axis-locks to volume/brightness/seek instead.
  * The drag loop consumes moves, so a committed drag never double-fires a tap.
+ *
+ * When [zoomed] is true (pinch-zoom active), a one-finger drag instead pans the
+ * viewport as free 2D [GestureEvent.Pan] — volume/brightness/seek and speed-hold
+ * are suspended until zoom returns to 1x (double-tap resets it). [zoomed] is read
+ * live via [rememberUpdatedState], so crossing 1x never restarts the detectors.
  */
 @Composable
 fun Modifier.playerGestures(
     enabled: Boolean,
+    zoomed: Boolean,
     onEvent: (GestureEvent) -> Unit,
 ): Modifier {
     val speedActive = remember { mutableStateOf(false) }
+    val zoomedState = rememberUpdatedState(zoomed)
     return this
+        // Pinch-zoom. Placed first, and only acts while two or more fingers are down —
+        // it consumes nothing at one finger, so the verified single-finger loop below is
+        // never starved and the two gestures can't contend.
+        .pointerInput(enabled) {
+            if (!enabled) return@pointerInput
+            awaitEachGesture {
+                awaitFirstDown(requireUnconsumed = false)
+                var prevDistance = 0f
+                while (true) {
+                    val event = awaitPointerEvent()
+                    val pts = event.changes.filter { it.pressed }
+                    if (pts.size < 2) {
+                        prevDistance = 0f
+                        if (pts.isEmpty()) break else continue
+                    }
+                    val (a, b) = pts
+                    val dist = (a.position - b.position).getDistance()
+                    if (prevDistance > 0f && dist > 0f) {
+                        onEvent(GestureEvent.Zoom(dist / prevDistance))
+                    }
+                    prevDistance = dist
+                    // Consume so the single-finger loop doesn't also interpret these.
+                    pts.forEach { it.consume() }
+                }
+            }
+        }
         .pointerInput(enabled) {
             if (!enabled) return@pointerInput
             detectTapGestures(
@@ -42,8 +77,12 @@ fun Modifier.playerGestures(
                     onEvent(GestureEvent.DoubleTapSeek(side))
                 },
                 onLongPress = {
-                    speedActive.value = true
-                    onEvent(GestureEvent.SpeedHoldStart)
+                    // Speed-hold is a drag gesture, so it's suspended while zoomed (the
+                    // pointer belongs to panning); a long-press then does nothing.
+                    if (!zoomedState.value) {
+                        speedActive.value = true
+                        onEvent(GestureEvent.SpeedHoldStart)
+                    }
                 },
             )
         }
@@ -53,6 +92,30 @@ fun Modifier.playerGestures(
             val slop = viewConfiguration.touchSlop
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
+
+                // Zoomed: one finger pans the viewport (free 2D, no axis lock). Decided at
+                // touch-down — a single-finger drag can't change the zoom state mid-gesture.
+                if (zoomedState.value) {
+                    var last = down.position
+                    var panned = false
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        // A second finger means a pinch — let the pinch detector own it.
+                        if (event.changes.count { it.pressed } >= 2) break
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) break
+                        val delta = change.position - last
+                        last = change.position
+                        if (delta != Offset.Zero) {
+                            onEvent(GestureEvent.Pan(delta.x, delta.y))
+                            panned = true
+                            change.consume()
+                        }
+                    }
+                    if (panned) onEvent(GestureEvent.DragEnd)
+                    return@awaitEachGesture
+                }
+
                 var axis: DragAxis? = null
                 var last = down.position
                 var scrubTotal = 0f
@@ -94,11 +157,14 @@ fun Modifier.playerGestures(
                         when (axis) {
                             DragAxis.VERTICAL -> {
                                 val frac = -delta.y / size.height
-                                if (down.position.x < size.width / 2f) {
-                                    onEvent(GestureEvent.BrightnessDrag(frac))
+                                // Report which side; PlayerScreen resolves it to an action
+                                // via the user's bindings. The detection stays binding-blind.
+                                val side = if (down.position.x < size.width / 2f) {
+                                    SeekSide.LEFT
                                 } else {
-                                    onEvent(GestureEvent.VolumeDrag(frac))
+                                    SeekSide.RIGHT
                                 }
+                                onEvent(GestureEvent.VerticalDrag(side, frac))
                             }
                             DragAxis.HORIZONTAL -> {
                                 scrubTotal += delta.x / size.width

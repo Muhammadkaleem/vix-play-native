@@ -66,6 +66,10 @@ screen-by-screen through `/grill-me` sessions.
 | **Video multi-select** | share + trash; shared `SelectionHolder`; audio refactored onto it; ⚠️ not device-verified |
 | **Folder multi-select + rename** | share/rename/trash; `MediaRenamer` across all API levels; ⚠️ not device-verified |
 | **Move / copy** | copy primitive, move = copy-then-delete, modal progress + cancel; ⚠️ not device-verified |
+| **Private folder** | app-private vault, PBKDF2 PIN, recovery code, hide-from-library; ✅ device-verified |
+| **Folder + video listing** | folders A–Z + persisted sort, real compact list row, in-folder resume; ✅ device-verified |
+| **Gesture remap + pinch-zoom** | remap 2 drags + 2 double-taps (DataStore), always-on pinch; ✅ editor + single-finger verified (pinch not injectable on emulator) |
+| **Pan while zoomed** | one-finger pan once pinched in, clamped to bounds, resets on playNext; ✅ not-zoomed regression verified (pan needs a real pinch to reach) |
 
 ## Current grill
 
@@ -236,6 +240,48 @@ actions present. The on-screen title fix is driven by the same resolved value bu
 **not** visually re-confirmed (controls auto-hide, and the test clip's content is itself a
 screen recording, making captures ambiguous) — worth a glance next run.
 
+### Gesture remap + pinch-to-zoom (grill) — built, device-verified except the pinch itself
+Requested as "Gesture remap" **+ "add pinch to zoom in out, as well"**, so pinch became a
+real always-on gesture, not a deferral. `GestureRemapScreen` was a dead `LibraryEmptyState`
+stub since the Settings pass.
+
+- **Design:** the modifier stays binding-blind (emits `VerticalDrag(side)` / `Zoom(scale)`),
+  `PlayerScreen` resolves meaning through the user's `GestureBindings`. Pinch is a strictly
+  ≥2-pointer detector placed *first* in the chain that consumes nothing at one finger, so the
+  verified single-finger loop is never starved. Double-tap doubles as zoom-reset when zoomed.
+  Bindings persist in DataStore (defaults = old hardcoded behaviour); zoom scale is per-video,
+  not persisted.
+- **Verified on device (emulator API 35):** editor renders with defaults; edits (Left-drag→None,
+  Right-tap→Skip 30s) **persisted across navigate-away-and-back**; **Reset** restored defaults.
+  In-player **double-tap-right fired "+10s"** and **vertical-drag-right raised the Volume HUD** —
+  proving the new first-position pinch detector doesn't starve single-finger gestures and the
+  binding path works end-to-end.
+- **Not verifiable here (stated honestly):** a genuine two-finger pinch can't be injected on this
+  emulator — no `adb root` (production build), SELinux blocks `sendevent` to `/dev/input` (shell
+  is in the `input` group but MAC denies it), and `input motionevent` is single-pointer. The pinch
+  code is straightforward + the `graphicsLayer` transform is deterministic; the detector gating is
+  what needed proving and was proven indirectly. **Needs a real finger test.**
+- **Deferred:** per-file zoom persistence, pan-while-zoomed (zoom is centre-anchored today),
+  sensitivity/haptics sliders, remapping the skip amount beyond the two presets, live editor preview.
+
+### Pan while zoomed (grill) — built, not-zoomed regression device-verified
+Finishes the pinch-zoom feature — zoom was centre-anchored, so you couldn't inspect a corner.
+
+- **Design:** while zoomed, a one-finger drag pans (free 2D `Pan(dx, dy)`); brightness/volume/
+  seek/speed-hold suspend until 1× (double-tap resets zoom = the escape hatch). The modifier
+  gained a `zoomed` flag (read live via `rememberUpdatedState`, so crossing 1× never restarts
+  the detectors) and bails the moment a 2nd finger lands so the pinch detector owns it. Pan is
+  clamped to `±(scale−1)·size/2` (content always covers the viewport), 1:1, and the `Zoom`
+  handler re-clamps on pinch-out. Zoom+pan reset on `playNext`. Long-press speed-hold is guarded
+  off while zoomed (else it strands the speed-restore path).
+- **Verified on device (emulator API 35):** with the pan branch added, in-player double-tap seek
+  and vertical-drag volume still fired in the un-zoomed state — the normal single-finger path is
+  unbroken by the new `zoomed` param/branch. **Pan itself couldn't be exercised** — reaching the
+  zoomed state needs a genuine two-finger pinch, un-injectable here (same limit as the pinch pass).
+  The pan/clamp math is deterministic given the zoomed state; needs a real finger test.
+- **Deferred:** elastic overscroll on the bounds, edge-exclusion for pan starts near the system
+  back-gesture gutter (pan can start anywhere today — watch for collision), per-file zoom persistence.
+
 ## Next grill
 
 1. **Same-volume move fast path** — `RELATIVE_PATH` update (API 29+) so moving within one
@@ -243,15 +289,13 @@ screen recording, making captures ambiguous) — worth a glance next run.
    run on hardware.
 2. **New-folder creation at the destination** — a `RELATIVE_PATH` insert can create
    directories on API 29+; needs naming and validation UI.
-2. **In-app Trash screen** — restore trashed items without leaving the app
+3. **In-app Trash screen** — restore trashed items without leaving the app
    (`QUERY_ARG_MATCH_TRASHED`). Weigh carefully: it would reintroduce a permanent-delete
    action, which the trash pass deliberately removed on API 30+.
-3. **Pinch-to-zoom / gesture remap UI** — Step 7 polish; remap needs a persisted binding
-   model (`GestureModels.kt` in the PRD is aspirational, doesn't exist).
 
 **Nothing substantial is left that doesn't need new substrate.** The remaining roadmap
-items (network streaming, Chromecast, private folder, Android TV) each need a data layer
-or dependency that doesn't exist yet — they are new subsystems, not increments.
+items (network streaming, Chromecast, Android TV) each need a data layer or dependency that
+doesn't exist yet — they are new subsystems, not increments.
 
 ## Blocked
 
