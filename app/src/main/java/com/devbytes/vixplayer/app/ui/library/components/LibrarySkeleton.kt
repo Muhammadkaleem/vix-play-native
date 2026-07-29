@@ -24,13 +24,13 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import com.devbytes.vixplayer.app.ui.theme.DarkContentDisabled
 
 /**
  * Placeholder grid shown during the first library scan. Mirrors [VideoCard]'s
@@ -126,18 +126,22 @@ fun FolderListSkeleton(
     }
 }
 
-/** Shared pulsing block tint used by every library/browser skeleton. */
+/**
+ * Shared pulsing block tint used by every library/browser skeleton. Derived from the
+ * theme's `onSurface` so it reads correctly in both light and dark (a fixed dark tint
+ * would be an invisible-then-wrong block on a light surface).
+ */
 @Composable
 private fun shimmerBlockColor(): androidx.compose.ui.graphics.Color {
     val transition = rememberInfiniteTransition(label = "skeleton")
     val alpha by transition.animateFloat(
-        initialValue = 0.12f,
-        targetValue = 0.30f,
+        initialValue = 0.08f,
+        targetValue = 0.20f,
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 900, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse,
         ),
         label = "shimmer",
     )
-    return DarkContentDisabled.copy(alpha = alpha)
+    return MaterialTheme.colorScheme.onSurface.copy(alpha = alpha)
 }

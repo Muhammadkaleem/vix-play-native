@@ -7,16 +7,20 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.devbytes.vixplayer.app.player.PipController
 import com.devbytes.vixplayer.app.ui.VixPlayNavGraph
 import com.devbytes.vixplayer.app.ui.splash.SplashViewModel
+import com.devbytes.vixplayer.app.ui.theme.ThemeViewModel
 import com.devbytes.vixplayer.app.ui.theme.VixPlayTheme
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val splashViewModel: SplashViewModel by viewModels()
+    private val themeViewModel: ThemeViewModel by viewModels()
 
     /** PlayerScreen registers its PiP contract here; the OS hooks below call it. */
     val pipController = PipController()
@@ -26,7 +30,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            VixPlayTheme {
+            val themeState by themeViewModel.themeState.collectAsState()
+            VixPlayTheme(mode = themeState.mode, accent = themeState.accent) {
                 VixPlayNavGraph()
             }
         }

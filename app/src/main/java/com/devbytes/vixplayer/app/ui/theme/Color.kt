@@ -25,6 +25,7 @@ val AmoledSheet      = Color(0xFF0A0A0A)
 // Light
 val LightBackground       = Color(0xFFF7F7F8)
 val LightSurface          = Color(0xFFFFFFFF)
+val LightSheet            = Color(0xFFEDEDF2)
 val LightContentPrimary   = Color(0xFF14151A)
 val LightContentSecondary = Color(0xFF5B5E6B)
 val LightAccent           = Color(0xFF7A4BFF)

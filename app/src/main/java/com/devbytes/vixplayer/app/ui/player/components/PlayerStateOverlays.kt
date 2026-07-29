@@ -30,13 +30,19 @@ import com.devbytes.vixplayer.app.ui.theme.ScrimStrong
 
 /**
  * Full-bleed graceful error state. Swallows touches so nothing reaches the video
- * surface underneath. SW-decoder retry / report actions are deferred (Step 2).
+ * surface underneath.
+ *
+ * [onRetry] is supplied only for recoverable failures (network unreachable / timeout /
+ * HTTP status) — the expected case for streamed URLs — and renders a Retry action above
+ * Back. Codec-type failures pass it null, since re-preparing won't help.
  */
 @Composable
 fun ErrorOverlay(
     message: String,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    title: String = "Can't play this video",
+    onRetry: (() -> Unit)? = null,
 ) {
     Box(
         modifier = modifier
@@ -57,7 +63,7 @@ fun ErrorOverlay(
             )
             Spacer(Modifier.height(16.dp))
             Text(
-                text = "Can't play this video",
+                text = title,
                 style = MaterialTheme.typography.titleMedium,
                 color = OnScrim,
                 textAlign = TextAlign.Center,
@@ -70,6 +76,21 @@ fun ErrorOverlay(
                 textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(24.dp))
+            if (onRetry != null) {
+                Surface(
+                    onClick = onRetry,
+                    shape = RoundedCornerShape(8.dp),
+                    color = ScrimStrong,
+                ) {
+                    Text(
+                        text = "Retry",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = OnScrim,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+            }
             Surface(
                 onClick = onBack,
                 shape = RoundedCornerShape(8.dp),

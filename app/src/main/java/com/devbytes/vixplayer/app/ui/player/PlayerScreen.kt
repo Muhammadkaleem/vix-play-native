@@ -1148,11 +1148,18 @@ fun PlayerScreen(
             )
         }
 
-        // Terminal error state — actionable, never a bare crash.
+        // Terminal error state — actionable, never a bare crash. Network failures are the
+        // expected case for streamed URLs, so they get a recoverable message + Retry;
+        // codec failures keep the informative code string with no (futile) retry.
         playbackError?.let { error ->
+            val networkMessage = networkErrorMessageFor(error)
             ErrorOverlay(
-                message = "Codec: ${error.errorCodeName}",
+                message = networkMessage ?: "Codec: ${error.errorCodeName}",
+                title = if (networkMessage != null) "Can't play this stream" else "Can't play this video",
                 onBack = onBack,
+                onRetry = if (networkMessage != null) {
+                    { playbackError = null; player.prepare() }
+                } else null,
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -1328,6 +1335,27 @@ private fun queryDisplayName(context: Context, uri: Uri): String? =
     context.contentResolver
         .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
         ?.use { if (it.moveToFirst()) it.getString(0) else null }
+
+/**
+ * Maps a recoverable network/IO [PlaybackException] to a user-facing message, or null for
+ * anything else (codec/decoder errors, where re-preparing won't help). A non-null result
+ * is the signal that the error overlay should offer Retry.
+ */
+private fun networkErrorMessageFor(error: PlaybackException): String? =
+    when (error.errorCode) {
+        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
+        PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
+        PlaybackException.ERROR_CODE_IO_NO_PERMISSION,
+        PlaybackException.ERROR_CODE_IO_CLEARTEXT_NOT_PERMITTED ->
+            "Can't reach the server. Check your connection and the URL."
+        PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ->
+            "Access denied or not found. Check the URL or credentials."
+        PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE,
+        PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND ->
+            "This link doesn't point to a playable stream."
+        else -> null
+    }
 
 /** Unwraps the host Activity from a (possibly wrapped) Compose context. */
 private fun Context.findActivity(): Activity? {

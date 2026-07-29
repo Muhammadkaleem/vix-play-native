@@ -12,6 +12,9 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.devbytes.vixplayer.app.player.gesture.DragAction
 import com.devbytes.vixplayer.app.player.gesture.GestureBindings
 import com.devbytes.vixplayer.app.player.gesture.TapAction
+import com.devbytes.vixplayer.app.ui.theme.AccentChoice
+import com.devbytes.vixplayer.app.ui.theme.ThemeMode
+import com.devbytes.vixplayer.app.ui.theme.ThemeState
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -29,7 +32,8 @@ class SettingsRepository @Inject constructor(
 ) {
     private object Keys {
         val PLAYBACK_SPEED          = floatPreferencesKey("playback_speed")
-        val USE_AMOLED_THEME        = booleanPreferencesKey("use_amoled_theme")
+        val THEME_MODE              = stringPreferencesKey("theme_mode")
+        val ACCENT                  = stringPreferencesKey("accent")
         val SHOW_SUBTITLES_DEFAULT  = booleanPreferencesKey("show_subtitles_by_default")
         val BACKGROUND_PLAYBACK     = booleanPreferencesKey("background_playback")
         val VIEW_MODE               = stringPreferencesKey("library_view_mode")
@@ -51,8 +55,17 @@ class SettingsRepository @Inject constructor(
     val playbackSpeed: Flow<Float> = context.dataStore.data
         .map { it[Keys.PLAYBACK_SPEED] ?: 1.0f }
 
-    val useAmoledTheme: Flow<Boolean> = context.dataStore.data
-        .map { it[Keys.USE_AMOLED_THEME] ?: false }
+    /**
+     * Base theme + accent, read together so the theme resolves in one place. Defaults to
+     * DARK to preserve the app's original dark-only behaviour — an existing user sees no
+     * change until they opt into Light/System/Dynamic.
+     */
+    val themeState: Flow<ThemeState> = context.dataStore.data.map { p ->
+        ThemeState(
+            mode = p[Keys.THEME_MODE]?.let { enumOrNull<ThemeMode>(it) } ?: ThemeMode.DARK,
+            accent = p[Keys.ACCENT]?.let { enumOrNull<AccentChoice>(it) } ?: AccentChoice.DEFAULT,
+        )
+    }
 
     val showSubtitlesByDefault: Flow<Boolean> = context.dataStore.data
         .map { it[Keys.SHOW_SUBTITLES_DEFAULT] ?: true }
@@ -69,8 +82,12 @@ class SettingsRepository @Inject constructor(
         context.dataStore.edit { it[Keys.PLAYBACK_SPEED] = speed }
     }
 
-    suspend fun setUseAmoledTheme(enabled: Boolean) {
-        context.dataStore.edit { it[Keys.USE_AMOLED_THEME] = enabled }
+    suspend fun setThemeMode(mode: ThemeMode) {
+        context.dataStore.edit { it[Keys.THEME_MODE] = mode.name }
+    }
+
+    suspend fun setAccent(accent: AccentChoice) {
+        context.dataStore.edit { it[Keys.ACCENT] = accent.name }
     }
 
     suspend fun setShowSubtitlesByDefault(enabled: Boolean) {

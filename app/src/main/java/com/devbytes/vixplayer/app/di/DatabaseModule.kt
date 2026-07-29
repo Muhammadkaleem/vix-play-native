@@ -76,6 +76,23 @@ private val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
+/**
+ * Adds the network-stream recents table. Additive like the migrations above; the DDL is
+ * copied verbatim from Room's exported `schemas/4.json` so schema validation matches
+ * exactly.
+ */
+private val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `network_stream` (" +
+                "`url` TEXT NOT NULL, " +
+                "`label` TEXT NOT NULL, " +
+                "`lastPlayedAt` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`url`))"
+        )
+    }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
@@ -84,7 +101,7 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, "vixplay.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
             .build()
 
     @Provides
@@ -95,4 +112,7 @@ object DatabaseModule {
 
     @Provides
     fun providePlaylistDao(db: AppDatabase) = db.playlistDao()
+
+    @Provides
+    fun provideNetworkStreamDao(db: AppDatabase) = db.networkStreamDao()
 }
