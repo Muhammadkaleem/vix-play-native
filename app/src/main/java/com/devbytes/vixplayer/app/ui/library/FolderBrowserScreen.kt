@@ -49,17 +49,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
-import coil.decode.VideoFrameDecoder
-import coil.request.ImageRequest
 import com.devbytes.vixplayer.app.R
+import com.devbytes.vixplayer.app.ads.AdBanner
+import com.devbytes.vixplayer.app.ads.AdNativeCard
+import com.devbytes.vixplayer.app.ads.AdUnits
+import com.devbytes.vixplayer.app.ads.AdsViewModel
 import com.devbytes.vixplayer.app.data.repository.FolderEntry
 import com.devbytes.vixplayer.app.data.repository.VideoFile
 import com.devbytes.vixplayer.app.ui.library.components.FolderListSkeleton
@@ -72,7 +78,8 @@ import com.devbytes.vixplayer.app.ui.library.components.VideoListRow
 @Composable
 fun FolderBrowserScreen(
     onVideoClick: (Uri) -> Unit = {},
-    onBack: () -> Unit = {},
+    onSearchClick: () -> Unit = {},
+    onHistoryClick: () -> Unit = {},
     viewModel: FolderBrowserViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -100,6 +107,11 @@ fun FolderBrowserScreen(
     val folderSort by viewModel.folderSort.collectAsStateWithLifecycle()
     val resume by viewModel.resume.collectAsStateWithLifecycle()
     var sortMenu by remember { mutableStateOf(false) }
+
+    val adsViewModel: AdsViewModel = hiltViewModel()
+    val canRequestAds by adsViewModel.canRequestAds.collectAsStateWithLifecycle()
+    // Selection mode hides ads (a contextual action bar is up); otherwise gate on consent.
+    val showAds = adsViewModel.adsEnabled && canRequestAds && !selectionMode
 
     val visibleVideos = (state as? FolderBrowserUiState.VideoList)?.videos.orEmpty()
 
@@ -136,7 +148,8 @@ fun FolderBrowserScreen(
     val title = if (state is FolderBrowserUiState.VideoList) {
         (state as FolderBrowserUiState.VideoList).folderName
     } else {
-        "Browse Folders"
+        // Folder list is now the Video tab home, so it carries the app name.
+        "VixPlay"
     }
 
     Scaffold(
@@ -228,13 +241,17 @@ fun FolderBrowserScreen(
                 return@Scaffold
             }
             TopAppBar(
-                title = { Text(title) },
+                title = { if (isInFolder) Text(title) else VideoHeaderTitle() },
                 navigationIcon = {
-                    IconButton(onClick = if (isInFolder) goUp else onBack) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_back),
-                            contentDescription = "Back",
-                        )
+                    // Up arrow only inside a folder; the folder list is the tab home,
+                    // so it has no back affordance.
+                    if (isInFolder) {
+                        IconButton(onClick = goUp) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_back),
+                                contentDescription = "Up",
+                            )
+                        }
                     }
                 },
                 actions = {
@@ -250,7 +267,19 @@ fun FolderBrowserScreen(
                             )
                         }
                     } else {
-                        // Folder list: choose the folder ordering.
+                        // Folder-list home: search, history, and folder ordering.
+                        IconButton(onClick = onSearchClick) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_search),
+                                contentDescription = "Search",
+                            )
+                        }
+                        IconButton(onClick = onHistoryClick) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_history),
+                                contentDescription = "History",
+                            )
+                        }
                         Box {
                             IconButton(onClick = { sortMenu = true }) {
                                 Icon(
@@ -288,8 +317,10 @@ fun FolderBrowserScreen(
     ) { padding ->
         when (val s = state) {
             is FolderBrowserUiState.Loading ->
-                if (pendingGrid) {
-                    LibrarySkeleton(columns = 2, modifier = Modifier.padding(padding))
+                // In-folder grid → grid skeleton; folder list and in-folder list both use
+                // the row-shaped skeleton so content swaps in without a layout shift.
+                if (pendingGrid && viewMode == ViewMode.GRID) {
+                    LibrarySkeleton(columns = 3, modifier = Modifier.padding(padding))
                 } else {
                     FolderListSkeleton(modifier = Modifier.padding(padding))
                 }
@@ -300,6 +331,7 @@ fun FolderBrowserScreen(
                     pendingGrid = true
                     viewModel.enterFolder(folder.bucketId, folder.name)
                 },
+                showAds = showAds,
                 modifier = Modifier.padding(padding),
             )
 
@@ -311,6 +343,7 @@ fun FolderBrowserScreen(
                 viewMode = viewMode,
                 resume = resume,
                 onToggleSelect = { viewModel.toggleSelection(it) },
+                showAds = showAds,
                 modifier = Modifier.padding(padding),
             )
 
@@ -452,10 +485,26 @@ fun FolderBrowserScreen(
     }
 }
 
+/** Video-tab home header: "Vix" bold, "Play" italic + light. */
+@Composable
+private fun VideoHeaderTitle() {
+    Text(
+        text = buildAnnotatedString {
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append("Vix") }
+            withStyle(
+                SpanStyle(fontWeight = FontWeight.Light, fontStyle = FontStyle.Italic),
+            ) { append("Play") }
+        },
+        style = MaterialTheme.typography.titleLarge,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+}
+
 @Composable
 private fun FolderList(
     folders: List<FolderEntry>,
     onFolderClick: (FolderEntry) -> Unit,
+    showAds: Boolean,
     modifier: Modifier = Modifier,
 ) {
     if (folders.isEmpty()) {
@@ -467,10 +516,29 @@ private fun FolderList(
         )
         return
     }
+    // One native card a few rows down (or at the end for short lists), so it's inline and
+    // seen rather than buried at the bottom.
+    val adAfter = if (folders.size > 3) 3 else folders.size
     LazyColumn(modifier = modifier.fillMaxSize()) {
-        items(folders, key = { it.bucketId }) { folder ->
-            FolderRow(folder = folder, onClick = { onFolderClick(folder) })
-            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+        folders.take(adAfter).forEach { folder ->
+            item(key = folder.bucketId) {
+                FolderRow(folder = folder, onClick = { onFolderClick(folder) })
+                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            }
+        }
+        if (showAds) {
+            item(key = "native_folder_ad") {
+                AdNativeCard(
+                    adUnitId = AdUnits.nativeFolderList,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
+        }
+        folders.drop(adAfter).forEach { folder ->
+            item(key = folder.bucketId) {
+                FolderRow(folder = folder, onClick = { onFolderClick(folder) })
+                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            }
         }
     }
 }
@@ -491,19 +559,23 @@ private fun FolderRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            // A folder icon rather than a sample frame: this is a container of videos,
+            // and a single frame misrepresents the folder's contents.
             Surface(
-                shape = RoundedCornerShape(6.dp),
+                shape = RoundedCornerShape(8.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant,
             ) {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(folder.sampleUri)
-                        .decoderFactory(VideoFrameDecoder.Factory())
-                        .build(),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(width = 96.dp, height = 54.dp),
-                )
+                Box(
+                    modifier = Modifier.size(56.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_folder),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(30.dp),
+                    )
+                }
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -545,6 +617,8 @@ private fun shareFolderVideos(context: android.content.Context, videos: List<Vid
     context.startActivity(Intent.createChooser(intent, "Share"))
 }
 
+private const val VIDEO_LIST_AD_INTERVAL = 8
+
 @Composable
 private fun VideoGrid(
     videos: List<VideoFile>,
@@ -554,6 +628,7 @@ private fun VideoGrid(
     viewMode: ViewMode,
     resume: Map<Long, Float>,
     onToggleSelect: (VideoFile) -> Unit,
+    showAds: Boolean,
     modifier: Modifier = Modifier,
 ) {
     if (videos.isEmpty()) {
@@ -565,33 +640,57 @@ private fun VideoGrid(
         )
         return
     }
+    val isList = viewMode == ViewMode.LIST
+    val fullSpan: androidx.compose.foundation.lazy.grid.LazyGridItemSpanScope.() -> GridItemSpan =
+        { GridItemSpan(maxLineSpan) }
     LazyVerticalGrid(
-        columns = GridCells.Fixed(if (viewMode == ViewMode.LIST) 1 else 2),
-        contentPadding = PaddingValues(if (viewMode == ViewMode.LIST) 0.dp else 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(if (viewMode == ViewMode.LIST) 0.dp else 8.dp),
+        columns = GridCells.Fixed(if (isList) 1 else 3),
+        contentPadding = PaddingValues(if (isList) 0.dp else 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (isList) 0.dp else 8.dp),
+        verticalArrangement = Arrangement.spacedBy(if (isList) 0.dp else 8.dp),
         modifier = modifier.fillMaxSize(),
     ) {
-        items(videos, key = { it.mediaStoreId }) { video ->
-            val onClick: () -> Unit = {
-                if (selectionMode) onToggleSelect(video) else onVideoClick(video.uri)
+        // Banner across the top of the video list.
+        if (showAds) {
+            item(span = fullSpan, key = "video_banner") {
+                AdBanner(
+                    adUnitId = AdUnits.bannerVideoList,
+                    modifier = Modifier.padding(vertical = 4.dp),
+                )
             }
-            if (viewMode == ViewMode.LIST) {
-                VideoListRow(
-                    video = video,
-                    resumeFraction = resume[video.mediaStoreId] ?: 0f,
-                    isSelected = video.mediaStoreId in selected,
-                    onClick = onClick,
-                    onLongClick = { onToggleSelect(video) },
-                )
-            } else {
-                VideoCard(
-                    video = video,
-                    resumeFraction = resume[video.mediaStoreId] ?: 0f,
-                    isSelected = video.mediaStoreId in selected,
-                    onClick = onClick,
-                    onLongClick = { onToggleSelect(video) },
-                )
+        }
+        videos.forEachIndexed { index, video ->
+            item(key = video.mediaStoreId) {
+                val onClick: () -> Unit = {
+                    if (selectionMode) onToggleSelect(video) else onVideoClick(video.uri)
+                }
+                if (isList) {
+                    VideoListRow(
+                        video = video,
+                        resumeFraction = resume[video.mediaStoreId] ?: 0f,
+                        isSelected = video.mediaStoreId in selected,
+                        onClick = onClick,
+                        onLongClick = { onToggleSelect(video) },
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                } else {
+                    VideoCard(
+                        video = video,
+                        resumeFraction = resume[video.mediaStoreId] ?: 0f,
+                        isSelected = video.mediaStoreId in selected,
+                        onClick = onClick,
+                        onLongClick = { onToggleSelect(video) },
+                    )
+                }
+            }
+            // Native card inline every N videos.
+            if (showAds && (index + 1) % VIDEO_LIST_AD_INTERVAL == 0 && index != videos.lastIndex) {
+                item(span = fullSpan, key = "native_video_ad_$index") {
+                    AdNativeCard(
+                        adUnitId = AdUnits.nativeVideoList,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    )
+                }
             }
         }
     }

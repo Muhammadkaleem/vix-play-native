@@ -93,6 +93,30 @@ private val MIGRATION_3_4 = object : Migration(3, 4) {
     }
 }
 
+/**
+ * Adds the network-shares (SMB/FTP) server table. Additive; DDL copied from Room's
+ * exported `schemas/5.json`. The password is NOT a column — it lives in
+ * EncryptedSharedPreferences (see `CredentialStore`).
+ */
+private val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `network_server` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`protocol` TEXT NOT NULL, " +
+                "`host` TEXT NOT NULL, " +
+                "`port` INTEGER NOT NULL, " +
+                "`share` TEXT NOT NULL, " +
+                "`path` TEXT NOT NULL, " +
+                "`username` TEXT NOT NULL, " +
+                "`domain` TEXT NOT NULL, " +
+                "`isGuest` INTEGER NOT NULL, " +
+                "`displayName` TEXT NOT NULL, " +
+                "`addedAt` INTEGER NOT NULL)"
+        )
+    }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
@@ -101,7 +125,7 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, "vixplay.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
             .build()
 
     @Provides
@@ -115,4 +139,7 @@ object DatabaseModule {
 
     @Provides
     fun provideNetworkStreamDao(db: AppDatabase) = db.networkStreamDao()
+
+    @Provides
+    fun provideNetworkServerDao(db: AppDatabase) = db.networkServerDao()
 }

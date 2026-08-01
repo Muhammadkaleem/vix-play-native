@@ -98,8 +98,8 @@ class SettingsRepository @Inject constructor(
         context.dataStore.edit { it[Keys.BACKGROUND_PLAYBACK] = enabled }
     }
 
-    /** Grid vs list, shared by the video library and the folder browser. */
-    val viewMode: Flow<String> = context.dataStore.data.map { it[Keys.VIEW_MODE] ?: "GRID" }
+    /** Grid vs list, shared by the video library and the folder browser. Defaults to LIST. */
+    val viewMode: Flow<String> = context.dataStore.data.map { it[Keys.VIEW_MODE] ?: "LIST" }
 
     suspend fun setViewMode(mode: String) {
         context.dataStore.edit { it[Keys.VIEW_MODE] = mode }

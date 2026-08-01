@@ -45,6 +45,9 @@ import kotlinx.coroutines.delay
 /** Vertical drag past this (upward) expands to the full player. */
 private const val EXPAND_DRAG_THRESHOLD = -48f
 
+/** Vertical drag past this (downward) dismisses the bar (stops playback). */
+private const val DISMISS_DRAG_THRESHOLD = 48f
+
 /**
  * Persistent bar above the bottom nav while audio is loaded.
  *
@@ -104,11 +107,13 @@ fun MiniPlayer(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surfaceVariant)
-                // Tap is the discoverable way in; an upward drag matches the PRD gesture.
+                // Tap is the discoverable way in; an upward drag matches the PRD gesture,
+                // a downward drag dismisses (stops) — symmetric and the expected gesture.
                 .clickable(onClick = onExpand)
                 .pointerInput(Unit) {
                     detectVerticalDragGestures { _, dragAmount ->
                         if (dragAmount < EXPAND_DRAG_THRESHOLD) onExpand()
+                        else if (dragAmount > DISMISS_DRAG_THRESHOLD) viewModel.dismiss()
                     }
                 },
         ) {

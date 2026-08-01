@@ -20,8 +20,8 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -261,7 +261,7 @@ fun VideoLibraryScreen(
                 modifier = Modifier.padding(padding),
             )
             uiState.isLoading -> LibrarySkeleton(
-                columns = if (uiState.viewMode == ViewMode.GRID) 2 else 1,
+                columns = if (uiState.viewMode == ViewMode.GRID) 3 else 1,
                 modifier = Modifier.padding(padding),
             )
             uiState.error != null -> Box(
@@ -342,13 +342,14 @@ private fun LibraryGrid(
     modifier: Modifier = Modifier,
 ) {
     val resumeMap = uiState.continueWatching.associate { it.video.mediaStoreId to it.progressFraction }
-    val columns = if (uiState.viewMode == ViewMode.GRID) 2 else 1
+    val isList = uiState.viewMode == ViewMode.LIST
 
     LazyVerticalGrid(
-        columns = GridCells.Fixed(columns),
-        contentPadding = PaddingValues(12.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        columns = GridCells.Fixed(if (isList) 1 else 3),
+        // List mode is full-bleed with dividers, matching the folder list; grid keeps its padding.
+        contentPadding = PaddingValues(if (isList) 0.dp else 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (isList) 0.dp else 8.dp),
+        verticalArrangement = Arrangement.spacedBy(if (isList) 0.dp else 8.dp),
         modifier = modifier.fillMaxSize(),
     ) {
         // Hidden while selecting: the rail's cards aren't selection-aware, so leaving it
@@ -366,7 +367,7 @@ private fun LibraryGrid(
             val onClick: () -> Unit = {
                 if (selectionMode) onToggleSelect(video) else onVideoClick(video.uri)
             }
-            if (uiState.viewMode == ViewMode.LIST) {
+            if (isList) {
                 VideoListRow(
                     video = video,
                     resumeFraction = resumeMap[video.mediaStoreId] ?: 0f,
@@ -374,6 +375,8 @@ private fun LibraryGrid(
                     onClick = onClick,
                     onLongClick = { onToggleSelect(video) },
                 )
+                // Divider between rows, matching the folder list's look.
+                HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
             } else {
                 VideoCard(
                     video = video,

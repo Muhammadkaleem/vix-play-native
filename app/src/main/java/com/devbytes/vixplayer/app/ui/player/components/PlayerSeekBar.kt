@@ -1,7 +1,8 @@
 package com.devbytes.vixplayer.app.ui.player.components
 
 import android.graphics.Bitmap
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -78,27 +79,28 @@ fun PlayerSeekBar(
                 .fillMaxWidth()
                 // Comfortable scrub target; the drawn track stays 4dp, centered.
                 .height(32.dp)
+                // One handler for both tap and drag: on press we jump to the touch's
+                // absolute x (so a tap seeks to that point), track the finger while held,
+                // and commit the seek on release. Absolute-position (not accumulated
+                // delta) is what makes tap-to-seek land where you tapped.
                 .pointerInput(durationMs) {
-                    detectHorizontalDragGestures(
-                        onDragStart = { offset ->
-                            isDragging = true
-                            onScrubbingChange(true)
-                            dragFraction = (offset.x / size.width.toFloat()).coerceIn(0f, 1f)
-                        },
-                        onDragEnd = {
-                            isDragging = false
-                            onScrubbingChange(false)
-                            onSeek((dragFraction * durationMs).toLong())
-                        },
-                        onDragCancel = {
-                            isDragging = false
-                            onScrubbingChange(false)
-                        },
-                        onHorizontalDrag = { change, dragAmount ->
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        isDragging = true
+                        onScrubbingChange(true)
+                        dragFraction = (down.position.x / size.width.toFloat()).coerceIn(0f, 1f)
+                        down.consume()
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            dragFraction = (change.position.x / size.width.toFloat()).coerceIn(0f, 1f)
                             change.consume()
-                            dragFraction = (dragFraction + dragAmount / size.width.toFloat()).coerceIn(0f, 1f)
-                        },
-                    )
+                            if (!change.pressed) break
+                        }
+                        isDragging = false
+                        onScrubbingChange(false)
+                        onSeek((dragFraction * durationMs).toLong())
+                    }
                 },
         ) {
             val trackY = size.height / 2f

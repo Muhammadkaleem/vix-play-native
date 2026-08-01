@@ -10,17 +10,21 @@ import androidx.activity.viewModels
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import com.devbytes.vixplayer.app.ads.AdsController
 import com.devbytes.vixplayer.app.player.PipController
 import com.devbytes.vixplayer.app.ui.VixPlayNavGraph
 import com.devbytes.vixplayer.app.ui.splash.SplashViewModel
 import com.devbytes.vixplayer.app.ui.theme.ThemeViewModel
 import com.devbytes.vixplayer.app.ui.theme.VixPlayTheme
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val splashViewModel: SplashViewModel by viewModels()
     private val themeViewModel: ThemeViewModel by viewModels()
+
+    @Inject lateinit var adsController: AdsController
 
     /** PlayerScreen registers its PiP contract here; the OS hooks below call it. */
     val pipController = PipController()
@@ -29,6 +33,9 @@ class MainActivity : ComponentActivity() {
         installSplashScreen().setKeepOnScreenCondition { !splashViewModel.checkDone.value }
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Gather EEA consent (UMP) then initialize ads; the banner stays hidden until this
+        // resolves, so no ad loads before consent.
+        adsController.ensureConsentAndInit(this)
         setContent {
             val themeState by themeViewModel.themeState.collectAsState()
             VixPlayTheme(mode = themeState.mode, accent = themeState.accent) {

@@ -9,6 +9,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import com.devbytes.vixplayer.app.player.datasource.NetworkDataSource
 import com.devbytes.vixplayer.app.player.subtitle.OffsetSubtitleParserFactory
 import com.devbytes.vixplayer.app.player.subtitle.SubtitleOffsetHolder
 import android.net.Uri
@@ -76,7 +77,9 @@ class PlayerController @Inject constructor(
 
     val player: ExoPlayer = ExoPlayer.Builder(context)
         .setMediaSourceFactory(
-            DefaultMediaSourceFactory(context)
+            // NetworkDataSource adds smb:// and ftp:// on top of the default schemes
+            // (file/content/http/https/…) so network shares play on the same path.
+            DefaultMediaSourceFactory(NetworkDataSource.Factory(context))
                 .setSubtitleParserFactory(OffsetSubtitleParserFactory(subtitleOffset))
         )
         // handleAudioFocus = true gives pause-on-transient-loss, ducking, and resume,

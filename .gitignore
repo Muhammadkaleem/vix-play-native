@@ -14,5 +14,11 @@
 .cxx
 local.properties
 
+# Release signing — never commit the keystore or its credentials
+keystore.properties
+*.keystore
+*.jks
+Vix Play - Certificate*.zip
+
 # Claude Code local machine state (permission grants); agents/ is tracked
 .claude/settings.local.json

@@ -70,8 +70,20 @@ screen-by-screen through `/grill-me` sessions.
 | **Folder + video listing** | folders A–Z + persisted sort, real compact list row, in-folder resume; ✅ device-verified |
 | **Gesture remap + pinch-zoom** | remap 2 drags + 2 double-taps (DataStore), always-on pinch; ✅ editor + single-finger verified (pinch not injectable on emulator) |
 | **Pan while zoomed** | one-finger pan once pinched in, clamped to bounds, resets on playNext; ✅ not-zoomed regression verified (pan needs a real pinch to reach) |
+| **Network streaming — URL slice** | HTTP(S)/HLS/DASH/RTSP; media3 hls/dash/rtsp + INTERNET; NetworkScreen hub + NetworkStreamScreen; recents in Room v3→v4; network-aware Retry on ErrorOverlay; ✅ device-verified (HLS plays, error/retry) |
+| **Theme & Skins (closes Step 5)** | ThemeMode {SYSTEM,LIGHT,DARK,AMOLED,DYNAMIC} + curated accent; live-applied via ThemeViewModel; orphaned useAmoledTheme removed; LibrarySkeleton de-leaked; ✅ device-verified |
+| **Folder-first Video home + list default** | Video tab opens to FOLDER_BROWSER_ROUTE (flat VideoLibraryScreen dropped; Search+History moved into folder top bar); default view GRID→LIST; folder icon on folder rows; thumbnail frame@10% + video-glyph fallback; mini-player swipe-down dismiss; ✅ device-verified |
+| **AdMob banner integration** | `MobileAds` init + UMP (EEA) consent gate before any ad loads; test-unit-in-debug / real-in-release via `BuildConfig`; anchored adaptive banner in app `bottomBar` (Video/Audio/Network — never Settings, never the player, via `isFullScreen`); `adsEnabled` seam reserved for a future Pro toggle; ✅ device-verified (banners render) |
+| **Per-list ad placements** | Folder list gets an inline **Native** card; in-folder video list gets a top **Banner** + inline **Native** every ~8 rows; app-level Main banner suppressed on the folder browser to avoid stacking; `ads/AdUnits.kt` + `AdsController`/`AdsViewModel`/`AdBanner`/`AdNativeCard`; ⚠️ **native ads fail to load on the emulator** (internal error 0 — reproduced on 2 SDK versions; banners fine, degrades to rendering nothing) — needs a real-device check |
+| **16 KB page-size support** | `libmmkv.so` was 4 KB-aligned; MMKV 1.3.9 → 2.4.1; all native libs now 16 KB-aligned; ✅ verified in the AAB |
 
 ## Current grill
+
+None in progress. The most recent grill (AdMob monetization + 16 KB page-size compliance,
+above) is shipped and device-verified except for the native-ad-on-emulator caveat. See
+**Next grill** below for the recommendation.
+
+## Prior device-verification pass (historical log)
 
 **FIRST DEVICE RUN COMPLETED** (emulator, API 35 / Android 15). Three real bugs found and
 fixed, one open finding. The unverified backlog is no longer hypothetical — it contained
@@ -282,20 +294,56 @@ Finishes the pinch-zoom feature — zoom was centre-anchored, so you couldn't in
 - **Deferred:** elastic overscroll on the bounds, edge-exclusion for pan starts near the system
   back-gesture gutter (pan can start anywhere today — watch for collision), per-file zoom persistence.
 
+## Release stage
+
+The app is now at **Play-release stage**: signed release `signingConfig` (git-ignored
+`keystore.properties`, `vixplay-release-key`), app name **VixPlay**, **versionCode 60 /
+3.0.0**, AdMob is now **live** (`play-services-ads` 25.4.0 + `user-messaging-platform`
+3.1.0, UMP consent gate, real ad units in release), 16 KB page-size compliant. Signed AAB
+builds and verifies (`jar verified`).
+
+**Monetization gap, stated plainly: ads now show to every user, with no way to remove
+them.** The `adsEnabled` seam exists in `AdsController` specifically so a future Pro
+entitlement can flip it off, but nothing flips it yet — there is no billing integration
+and no purchase surface. This is the natural next increment (see recommendation below).
+
+## Grilled — design locked, HELD on external blockers
+
+- **Subtitle online search** (OpenSubtitles .com REST) — full design locked (BuildConfig
+  API key, moviehash+filename match, `PlayerSheet.SubtitleSearch`, login-gated download to
+  app-cache, Retrofit+OkHttp+kotlinx-serialization). **HELD: needs the user's registered
+  OpenSubtitles API key.**
+- **Chromecast / Cast** — full design locked (media3-cast `CastPlayer` dual-player swap in
+  `PlayerController`, NanoHTTPD token-scoped local-file server, framework `MediaRouteButton`,
+  Default Media Receiver, Play-Services-gated). **HELD: needs a real Chromecast to verify.**
+
 ## Next grill
 
-1. **Same-volume move fast path** — `RELATIVE_PATH` update (API 29+) so moving within one
-   volume doesn't copy the whole file. Deliberately held back until the safe copy path has
-   run on hardware.
-2. **New-folder creation at the destination** — a `RELATIVE_PATH` insert can create
-   directories on API 29+; needs naming and validation UI.
-3. **In-app Trash screen** — restore trashed items without leaving the app
-   (`QUERY_ARG_MATCH_TRASHED`). Weigh carefully: it would reintroduce a permanent-delete
-   action, which the trash pass deliberately removed on API 30+.
-
-**Nothing substantial is left that doesn't need new substrate.** The remaining roadmap
-items (network streaming, Chromecast, Android TV) each need a data layer or dependency that
-doesn't exist yet — they are new subsystems, not increments.
+1. **Pro entitlement / Google Play Billing v6 — RECOMMENDED NEXT.** Ads now show to every
+   user with no relief, and the `adsEnabled` seam in `AdsController` was built for exactly
+   this. It's the direct, small continuation of the just-shipped monetization work (one
+   product: "Remove ads", local Play verification per the CLAUDE.md-locked decision, no
+   backend needed), and it closes the one glaring gap the AdMob grill deliberately left
+   open rather than papering over. It also unblocks the two parked ad formats below —
+   interstitial makes little sense to design without first deciding what a Pro purchase
+   exempts it from, and rewarded is explicitly gated on the entitlement existing at all.
+2. **Interstitial ads (player-exit, capped)** — parked pending Q1: does purchasing Pro
+   suppress interstitials as part of "remove ads," or is Pro scoped to banners/native only?
+   That question is now answerable once billing exists. Frequency cap + "never mid-playback"
+   (CLAUDE.md: no interstitials during playback) still need a grill.
+3. **Rewarded ads** — needs the Pro entitlement to exist first (e.g. "watch an ad to unlock
+   a Pro feature for 24h"), so it is sequenced after item 1 by construction, not preference.
+4. **SMB/FTP network shares** — the deferred heavy half of network streaming (browse a NAS).
+   Needs SMBJ + a custom Media3 `DataSource` + encrypted credentials + a browse UI. The
+   single biggest genuinely-missing feature in the app; own subsystem, own grill. Not
+   monetization-relevant, which is why it sits behind the ads/billing cluster now that
+   ads are live and asymmetric (paying users can't opt out yet).
+5. **Same-volume move fast path** — `RELATIVE_PATH` update (API 29+) so moving within one
+   volume doesn't copy the whole file.
+6. **New-folder creation at the destination** — `RELATIVE_PATH` insert can create dirs on
+   API 29+; needs naming/validation UI.
+7. **In-app Trash screen** — restore trashed items (`QUERY_ARG_MATCH_TRASHED`); weigh the
+   reintroduced permanent-delete action.
 
 ## Blocked
 
@@ -304,9 +352,10 @@ doesn't exist yet — they are new subsystems, not increments.
   (opt-in power mode per CLAUDE.md, needs a Play Console declaration). Needs the storage
   access decision revisited, not a feature pass.
 
-- **Cast (Step 6)** — needs the Cast SDK dependency added to `libs.versions.toml`.
-  Still the last stub in `PlayerSheet` (`Text("Cast — Step 6")`).
+- **Cast** and **Online subtitle search** — no longer "blocked", they are **grilled and
+  design-locked**; see the "Grilled — HELD" section above (waiting on a Chromecast and an
+  OpenSubtitles API key respectively, not on design or dependencies).
 - **libass** — required for full ASS/SSA *rendering fidelity* (karaoke, complex
   positioning, effects). NOT required for user styling, which shipped via
   `SubtitleView`/`CaptionStyleCompat`. Native/JNI integration, not yet started.
-- **Online subtitle search** — needs an OpenSubtitles client and API credentials.
+- **Android TV (Compose for TV)** — new UI paradigm; large, lower priority.

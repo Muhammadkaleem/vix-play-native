@@ -5,8 +5,11 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -14,6 +17,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.devbytes.vixplayer.app.ads.AdBanner
+import com.devbytes.vixplayer.app.ads.AdsViewModel
 import com.devbytes.vixplayer.app.navigation.ABOUT_PRO_ROUTE
 import com.devbytes.vixplayer.app.navigation.SPLASH_ROUTE
 import com.devbytes.vixplayer.app.navigation.AUDIO_PLAYER_ROUTE
@@ -23,7 +28,6 @@ import com.devbytes.vixplayer.app.navigation.EQUALIZER_ROUTE
 import com.devbytes.vixplayer.app.navigation.FOLDER_BROWSER_ROUTE
 import com.devbytes.vixplayer.app.navigation.GESTURE_REMAP_ROUTE
 import com.devbytes.vixplayer.app.navigation.HISTORY_ROUTE
-import com.devbytes.vixplayer.app.navigation.LIBRARY_ROUTE
 import com.devbytes.vixplayer.app.navigation.NETWORK_ROUTE
 import com.devbytes.vixplayer.app.navigation.NETWORK_STREAM_ROUTE
 import com.devbytes.vixplayer.app.navigation.PLAYBACK_DEFAULTS_ROUTE
@@ -42,7 +46,6 @@ import com.devbytes.vixplayer.app.navigation.TAB_SETTINGS_ROUTE
 import com.devbytes.vixplayer.app.navigation.TAB_VIDEO_ROUTE
 import com.devbytes.vixplayer.app.navigation.THEME_SKINS_ROUTE
 import com.devbytes.vixplayer.app.navigation.audioPlayerRoute
-import com.devbytes.vixplayer.app.navigation.folderBrowserRoute
 import com.devbytes.vixplayer.app.navigation.playerRoute
 import com.devbytes.vixplayer.app.navigation.searchRoute
 import com.devbytes.vixplayer.app.navigation.smbBrowserRoute
@@ -57,7 +60,6 @@ import com.devbytes.vixplayer.app.ui.common.VixBottomNav
 import com.devbytes.vixplayer.app.ui.library.FolderBrowserScreen
 import com.devbytes.vixplayer.app.ui.library.HistoryScreen
 import com.devbytes.vixplayer.app.ui.library.SearchScreen
-import com.devbytes.vixplayer.app.ui.library.VideoLibraryScreen
 import com.devbytes.vixplayer.app.ui.network.CastScreen
 import com.devbytes.vixplayer.app.ui.network.NetworkScreen
 import com.devbytes.vixplayer.app.ui.network.NetworkStreamScreen
@@ -90,12 +92,27 @@ fun VixPlayNavGraph() {
             || currentRoute == AUDIO_PLAYER_ROUTE
             || currentRoute == SPLASH_ROUTE
 
+    // "Library chrome" excludes Settings — no ads while configuring the app or reading
+    // legal text. Players/splash are already excluded by isFullScreen.
+    val inSettingsTab = currentDestination?.hierarchy?.any { it.route == TAB_SETTINGS_ROUTE } == true
+    // The folder browser hosts its own inline native/banner ads, so the app-level banner
+    // is suppressed there to avoid stacking two ads on one screen.
+    val inFolderBrowser = currentRoute == FOLDER_BROWSER_ROUTE
+
+    val adsViewModel: AdsViewModel = hiltViewModel()
+    val canRequestAds by adsViewModel.canRequestAds.collectAsState()
+
     Scaffold(
         bottomBar = {
             if (!isFullScreen) {
                 // Mini-player sits above the tabs and inside the same slot, so Scaffold
                 // padding accounts for both and content is never hidden behind it.
                 Column {
+                    // Anchored banner on top (furthest from the nav thumb), only where
+                    // ads are allowed and once consent + SDK are ready.
+                    if (adsViewModel.adsEnabled && canRequestAds && !inSettingsTab && !inFolderBrowser) {
+                        AdBanner()
+                    }
                     MiniPlayer(
                         onExpand = {
                             navController.navigate(audioPlayerRoute(NOW_PLAYING_ID)) {
@@ -162,17 +179,8 @@ fun VixPlayNavGraph() {
             }
 
             // ── Tab: Video ───────────────────────────────────────────────────
-            navigation(startDestination = LIBRARY_ROUTE, route = TAB_VIDEO_ROUTE) {
-
-                composable(LIBRARY_ROUTE) {
-                    VideoLibraryScreen(
-                        onVideoClick = { uri ->
-                            navController.navigate(playerRoute(Uri.encode(uri.toString())))
-                        },
-                        onSearchClick = { navController.navigate(searchRoute()) },
-                        onFolderBrowseClick = { navController.navigate(folderBrowserRoute()) },
-                    )
-                }
+            // Folder listing is the Video-tab home; Search and History are reached from it.
+            navigation(startDestination = FOLDER_BROWSER_ROUTE, route = TAB_VIDEO_ROUTE) {
 
                 composable(
                     route = FOLDER_BROWSER_ROUTE,
@@ -188,7 +196,8 @@ fun VixPlayNavGraph() {
                         onVideoClick = { uri ->
                             navController.navigate(playerRoute(Uri.encode(uri.toString())))
                         },
-                        onBack = { navController.popBackStack() },
+                        onSearchClick = { navController.navigate(searchRoute()) },
+                        onHistoryClick = { navController.navigate(HISTORY_ROUTE) },
                     )
                 }
 

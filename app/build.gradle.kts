@@ -1,8 +1,19 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt.android)
+}
+
+// Release signing credentials are read from keystore.properties (git-ignored) so no
+// passwords live in tracked files. If the file is absent (e.g. debug-only work or CI
+// without secrets), the release signingConfig is simply not created and release builds
+// fall back to unsigned — nothing breaks.
+val keystorePropsFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) keystorePropsFile.inputStream().use { load(it) }
 }
 
 android {
@@ -17,25 +28,46 @@ android {
         applicationId = "com.devbytes.vixplayer.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 58
+        versionName = "3.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (keystoreProps.isNotEmpty()) {
+            create("release") {
+                storeFile = file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // Signed only when keystore.properties is present; otherwise unsigned.
+            signingConfig = signingConfigs.findByName("release")
             optimization {
                 enable = false
+            }
+            // Bundle native debug symbols (mmkv/BouncyCastle/etc.) so Play can symbolicate
+            // native crashes/ANRs. Lives in bundle metadata — does not affect user download size.
+            ndk {
+                debugSymbolLevel = "FULL"
             }
         }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        // SMBJ uses java.time / java.nio APIs that need desugaring below API 26.
+        isCoreLibraryDesugaringEnabled = true
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -86,6 +118,17 @@ dependencies {
     // Coil
     implementation(libs.coil.compose)
     implementation(libs.coil.video)
+
+    // Ads (AdMob) + EEA consent
+    implementation(libs.play.services.ads)
+    implementation(libs.user.messaging.platform)
+
+    // Network shares (SMB + FTP)
+    implementation(libs.smbj)
+    implementation(libs.commons.net)
+    runtimeOnly(libs.slf4j.nop)
+    implementation(libs.security.crypto)
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.espresso.core)

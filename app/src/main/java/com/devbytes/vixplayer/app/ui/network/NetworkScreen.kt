@@ -57,20 +57,12 @@ fun NetworkScreen(
                 NetworkHubRow(
                     iconRes = R.drawable.ic_folder,
                     title = "Network shares",
-                    description = "Browse SMB/FTP servers",
-                    comingSoon = true,
+                    description = "Browse SMB and FTP servers",
+                    onClick = onSmbClick,
                 )
                 HubDivider()
             }
-            item {
-                NetworkHubRow(
-                    iconRes = R.drawable.ic_cast,
-                    title = "Cast to device",
-                    description = "Send playback to a TV or Chromecast",
-                    comingSoon = true,
-                )
-                HubDivider()
-            }
+            // "Cast to device" stays hidden until it ships (needs a Chromecast to verify).
         }
     }
 }

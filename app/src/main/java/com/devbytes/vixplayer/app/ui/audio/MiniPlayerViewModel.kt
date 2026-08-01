@@ -9,7 +9,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class MiniPlayerViewModel @Inject constructor(
-    playerController: PlayerController,
+    private val playerController: PlayerController,
 ) : ViewModel() {
 
     val player = playerController.player
@@ -19,4 +19,11 @@ class MiniPlayerViewModel @Inject constructor(
      * keys off what was actually loaded rather than "is something queued".
      */
     val kind: StateFlow<PlaybackKind> = playerController.kind
+
+    /**
+     * Dismisses the bar by stopping playback (kind → NONE, which hides it). There is no
+     * "hide but keep playing" — without a visible bar there'd be no way back to it, and
+     * the notification already offers a keep-playing surface.
+     */
+    fun dismiss() = playerController.stop()
 }

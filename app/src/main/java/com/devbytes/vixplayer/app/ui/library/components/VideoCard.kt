@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -20,11 +22,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.decode.VideoFrameDecoder
 import coil.request.ImageRequest
+import coil.request.videoFramePercent
+import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.data.repository.VideoFile
 import com.devbytes.vixplayer.app.ui.theme.OnScrim
 import com.devbytes.vixplayer.app.ui.theme.ScrimStrong
@@ -60,11 +65,22 @@ fun VideoCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(16f / 9f),
+                contentAlignment = Alignment.Center,
             ) {
+                // Fallback behind the frame: visible while decoding and if the frame
+                // can't be extracted, so a failed thumbnail reads as a video glyph.
+                Icon(
+                    painter = painterResource(R.drawable.ic_nav_video),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                    modifier = Modifier.size(32.dp),
+                )
                 AsyncImage(
+                    // Grab a frame 10% in — the first frame is often black.
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(video.uri)
                         .decoderFactory(VideoFrameDecoder.Factory())
+                        .videoFramePercent(0.1)
                         .build(),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,

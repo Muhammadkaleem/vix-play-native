@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -21,11 +22,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.decode.VideoFrameDecoder
 import coil.request.ImageRequest
+import coil.request.videoFramePercent
+import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.data.repository.VideoFile
 import com.devbytes.vixplayer.app.ui.theme.TrackInactive
 
@@ -66,11 +70,25 @@ fun VideoListRow(
             shape = RoundedCornerShape(6.dp),
             color = MaterialTheme.colorScheme.surfaceVariant,
         ) {
-            Box(modifier = Modifier.size(width = 96.dp, height = 54.dp)) {
+            Box(
+                modifier = Modifier.size(width = 96.dp, height = 54.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                // Fallback shown behind the frame: visible while decoding and if the
+                // frame can't be extracted, so a failed thumbnail is a clear video glyph
+                // rather than an empty box.
+                Icon(
+                    painter = painterResource(R.drawable.ic_nav_video),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                    modifier = Modifier.size(22.dp),
+                )
                 AsyncImage(
+                    // Grab a frame 10% in — the first frame is often black.
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(video.uri)
                         .decoderFactory(VideoFrameDecoder.Factory())
+                        .videoFramePercent(0.1)
                         .build(),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
@@ -97,7 +115,7 @@ fun VideoListRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = video.name,
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
