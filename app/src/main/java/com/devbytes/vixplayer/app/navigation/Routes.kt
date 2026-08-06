@@ -36,6 +36,7 @@ const val THEME_SKINS_ROUTE       = "theme_skins"
 const val SUBTITLE_DEFAULTS_ROUTE = "subtitle_defaults"
 const val PLAYBACK_DEFAULTS_ROUTE = "playback_defaults"
 const val PRIVATE_FOLDER_ROUTE    = "private_folder"
+const val NOTIFICATIONS_ROUTE     = "notifications"
 const val ABOUT_PRO_ROUTE         = "about_pro"
 
 // Top-level destinations (full-screen, no bottom nav)

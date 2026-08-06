@@ -44,13 +44,15 @@ class PlayerViewModel @Inject constructor(
     val displayTitle: StateFlow<String> = _displayTitle.asStateFlow()
 
     /** Opens a video, resetting per-file state. See [PlayerController.prepareFor]. */
-    fun prepareFor(uri: String, subtitleOffsetMs: Long) {
-        // Fall back to the URI's own tail for non-MediaStore sources (external intents),
-        // where there is no row to look up.
-        val fallback = Uri.parse(uri).lastPathSegment
-            ?.substringBeforeLast('.')
-            ?.takeIf { it.toLongOrNull() == null }
-            .orEmpty()
+    fun prepareFor(uri: String, subtitleOffsetMs: Long, resolvedName: String? = null) {
+        // Prefer a name the caller already resolved (external content:// URIs, via
+        // OpenableColumns); otherwise fall back to the URI's own tail, skipping the numeric
+        // id that a MediaStore URI exposes there.
+        val fallback = resolvedName?.takeIf { it.isNotBlank() }
+            ?: Uri.parse(uri).lastPathSegment
+                ?.substringBeforeLast('.')
+                ?.takeIf { it.toLongOrNull() == null }
+                .orEmpty()
         _displayTitle.value = fallback
         playerController.prepareFor(uri, subtitleOffsetMs, fallback.ifBlank { null })
 
@@ -135,4 +137,16 @@ class PlayerViewModel @Inject constructor(
     /** The next video in the current item's folder, or null if there's no next (last file / non-MediaStore). */
     suspend fun nextInFolder(): VideoFile? =
         currentMediaStoreId?.let { mediaRepository.nextInFolder(it) }
+
+    /**
+     * Records a watched-to-completion and reports whether the Play review prompt should be
+     * offered now (≥ [REVIEW_PROMPT_THRESHOLD] completions). The API itself enforces
+     * frequency/quotas, so we only supply the "they've enjoyed enough" signal.
+     */
+    suspend fun recordCompletionAndShouldAskReview(): Boolean =
+        settingsRepository.recordCompletedPlaybackAndGet() >= REVIEW_PROMPT_THRESHOLD
+
+    private companion object {
+        const val REVIEW_PROMPT_THRESHOLD = 3
+    }
 }

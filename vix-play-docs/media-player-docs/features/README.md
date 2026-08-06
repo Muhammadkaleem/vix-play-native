@@ -9,4 +9,11 @@ Cross-cutting features that span multiple screens. Each defines capability, tech
 - `background-pip.md` — background audio, media session, PiP
 - `storage-scanning.md` — scoped storage, media scan, thumbnails
 - `cloud.md` — cloud provider integration
-- `monetization.md` — free tier, Pro, billing
+- `monetization.md` — free tier, Pro, billing (ad model)
+- `analytics.md` — Firebase Analytics + Crashlytics, funnel, targets (Growth 3.1)
+- `distribution.md` — `ACTION_VIEW`/`ACTION_SEND`, default player, review prompt (Growth 3.1)
+- `pro-billing.md` — Play Billing v6, entitlement seam, paywall (Growth 3.1)
+- `notifications.md` — Library Pulse re-engagement notifications (Growth 3.1)
+- `daily-briefing.md` — AI morning briefing (`:feature:briefing`, `screens/16–18`)
+
+See `product/05-growth-foundation.md` for the release umbrella tying the Growth 3.1 features together.

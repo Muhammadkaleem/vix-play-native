@@ -1,13 +1,16 @@
 package com.devbytes.vixplayer.app.ui
 
+import android.app.Activity
 import android.net.Uri
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavType
@@ -30,6 +33,7 @@ import com.devbytes.vixplayer.app.navigation.GESTURE_REMAP_ROUTE
 import com.devbytes.vixplayer.app.navigation.HISTORY_ROUTE
 import com.devbytes.vixplayer.app.navigation.NETWORK_ROUTE
 import com.devbytes.vixplayer.app.navigation.NETWORK_STREAM_ROUTE
+import com.devbytes.vixplayer.app.navigation.NOTIFICATIONS_ROUTE
 import com.devbytes.vixplayer.app.navigation.PLAYBACK_DEFAULTS_ROUTE
 import com.devbytes.vixplayer.app.navigation.PLAYER_ROUTE
 import com.devbytes.vixplayer.app.navigation.PLAYLISTS_ROUTE
@@ -67,6 +71,7 @@ import com.devbytes.vixplayer.app.ui.network.SmbBrowserScreen
 import com.devbytes.vixplayer.app.ui.player.PlayerScreen
 import com.devbytes.vixplayer.app.ui.settings.AboutProScreen
 import com.devbytes.vixplayer.app.ui.settings.GestureRemapScreen
+import com.devbytes.vixplayer.app.ui.settings.NotificationsScreen
 import com.devbytes.vixplayer.app.ui.settings.PlaybackDefaultsScreen
 import com.devbytes.vixplayer.app.ui.settings.PrivateFolderScreen
 import com.devbytes.vixplayer.app.ui.settings.SettingsScreen
@@ -82,11 +87,47 @@ import com.devbytes.vixplayer.app.ui.splash.SplashScreen
 private const val NOW_PLAYING_ID = -1L
 
 @Composable
-fun VixPlayNavGraph() {
+fun VixPlayNavGraph(
+    pendingExternalMedia: List<Uri> = emptyList(),
+    onExternalMediaConsumed: () -> Unit = {},
+    pulsePlayUri: String? = null,
+    onPulsePlayConsumed: () -> Unit = {},
+) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
     val currentRoute = currentDestination?.route
+    val context = LocalContext.current
+
+    // An external open jumps straight into the player, popping the splash gate — the intent
+    // already granted read access, so no permission request is needed. Popping splash
+    // inclusive makes the player the back-stack root, so Back finishes to the caller (see the
+    // PLAYER_ROUTE onBack below). A warm open (onNewIntent) has no splash to pop, so Back
+    // returns to wherever the user was.
+    val externalUri = pendingExternalMedia.firstOrNull()?.toString()
+    LaunchedEffect(externalUri) {
+        if (externalUri != null) {
+            navController.navigate(playerRoute(Uri.encode(externalUri))) {
+                popUpTo(SPLASH_ROUTE) { inclusive = true }
+                launchSingleTop = true
+            }
+            onExternalMediaConsumed()
+        }
+    }
+
+    // Resume-nudge tap: establish the Video home first, then push the player on top, so Back
+    // returns to the library rather than exiting (unlike an external open). The video
+    // auto-resumes from its saved position via the player's existing MediaStore-id path.
+    LaunchedEffect(pulsePlayUri) {
+        if (pulsePlayUri != null) {
+            navController.navigate(TAB_VIDEO_ROUTE) {
+                popUpTo(SPLASH_ROUTE) { inclusive = true }
+                launchSingleTop = true
+            }
+            navController.navigate(playerRoute(Uri.encode(pulsePlayUri)))
+            onPulsePlayConsumed()
+        }
+    }
 
     val isFullScreen = currentRoute == PLAYER_ROUTE
             || currentRoute == AUDIO_PLAYER_ROUTE
@@ -145,6 +186,10 @@ fun VixPlayNavGraph() {
             // ── Splash / Permission gate ─────────────────────────────────────
             composable(SPLASH_ROUTE) {
                 SplashScreen(
+                    // Suppress the permission request + auto-navigate while an external open
+                    // or a resume-nudge deep-link is in flight — the graph is about to route
+                    // past splash to the player.
+                    autoRequest = externalUri == null && pulsePlayUri == null,
                     onNavigateToLibrary = {
                         navController.navigate(TAB_VIDEO_ROUTE) {
                             popUpTo(SPLASH_ROUTE) { inclusive = true }
@@ -161,7 +206,11 @@ fun VixPlayNavGraph() {
                 val encodedUri = entry.arguments?.getString("uri") ?: return@composable
                 PlayerScreen(
                     uri = Uri.decode(encodedUri),
-                    onBack = { navController.popBackStack() },
+                    // Nothing left to pop ⇒ this was an external open and the player is the
+                    // root, so finish and return to the launching app.
+                    onBack = {
+                        if (!navController.popBackStack()) (context as? Activity)?.finish()
+                    },
                 )
             }
 
@@ -342,6 +391,10 @@ fun VixPlayNavGraph() {
                             navController.navigate(playerRoute(Uri.encode(uri)))
                         },
                     )
+                }
+
+                composable(NOTIFICATIONS_ROUTE) {
+                    NotificationsScreen(onBack = { navController.popBackStack() })
                 }
 
                 composable(ABOUT_PRO_ROUTE) {

@@ -76,12 +76,18 @@ screen-by-screen through `/grill-me` sessions.
 | **AdMob banner integration** | `MobileAds` init + UMP (EEA) consent gate before any ad loads; test-unit-in-debug / real-in-release via `BuildConfig`; anchored adaptive banner in app `bottomBar` (Video/Audio/Network — never Settings, never the player, via `isFullScreen`); `adsEnabled` seam reserved for a future Pro toggle; ✅ device-verified (banners render) |
 | **Per-list ad placements** | Folder list gets an inline **Native** card; in-folder video list gets a top **Banner** + inline **Native** every ~8 rows; app-level Main banner suppressed on the folder browser to avoid stacking; `ads/AdUnits.kt` + `AdsController`/`AdsViewModel`/`AdBanner`/`AdNativeCard`; ⚠️ **native ads fail to load on the emulator** (internal error 0 — reproduced on 2 SDK versions; banners fine, degrades to rendering nothing) — needs a real-device check |
 | **16 KB page-size support** | `libmmkv.so` was 4 KB-aligned; MMKV 1.3.9 → 2.4.1; all native libs now 16 KB-aligned; ✅ verified in the AAB |
+| **SMB/FTP network shares** | `player/datasource/SmbDataSource.kt` + `FtpDataSource.kt`; `data/network/NetworkServerRepository.kt` + `NetworkShareBrowser.kt` + `CredentialStore.kt`; `ui/network/SmbBrowserScreen.kt` ("Network shares") + `NetworkSharesViewModel.kt`; `data/db/entity/NetworkServer.kt` + dao; smbj 0.14.0 + commons-net 3.11.1 + security-crypto; Room v4→v5; ✅ **FTP verified end-to-end against a local pyftpdlib server**; ⚠️ SMB not runtime-verified (no SMB server available in this environment) |
+| **Distribution & Open-With (Growth 3.1 — A)** | `ACTION_VIEW`/`SEND`/`SEND_MULTIPLE` intent filters (MIME + extension) → play any handed-in URI, bypassing the splash permission gate (Back returns to caller); "Set as default player" Settings row deep-linking `ACTION_APP_OPEN_BY_DEFAULT_SETTINGS` (**no RoleManager media role exists — spec corrected**); Play in-app review after ≥3 completions, no error, once/screen (`review-ktx` 2.0.2); Android 14 partial-media (`READ_MEDIA_VISUAL_USER_SELECTED`) as a first-class state + folder-home "Manage" banner. `MainActivity`/`VixPlayNavGraph`/`Splash*`/`PlayerScreen`+VM/`SettingsScreen`/`FolderBrowser*`; ✅ **device-verified (emulator API 36):** external `VIEW` plays full-screen bypassing splash/permission, Back→caller, "Set as default player" opens the system Open-by-default screen, partial-media gate + "Manage" banner confirmed. Only the in-app review prompt is unverifiable off-Play |
+| **Library Pulse notifications (Growth 3.1 — C)** | All 3 triggers (resume nudge / new-in-library / weekly digest) via WorkManager periodic + `hilt-work` `HiltWorkerFactory` (`VixPlayApp` = `Configuration.Provider`, default `WorkManagerInitializer` removed); `PulseEvaluator` (one/run, precedence, 3-day min-gap cap, quiet hours 22–08, acknowledge-on-open), own `pulse` channel, dedicated Notifications settings screen + per-trigger toggles + "Turn off" action (`PulseActionReceiver`), resume tap deep-links into the player (auto-resume) with home beneath. `notifications/*`, `Media/SettingsRepository` (+`DATE_ADDED` queries, 9 DataStore keys), `MainActivity`/`VixPlayNavGraph`. ✅ **partially device-verified (emulator API 36):** settings screen + master-gates-subtoggles + persistence + worker scheduled (~24h/BATNOTLOW) and ran once returning SUCCESS. **Real crash found + fixed** — `LIMIT` in a `ContentResolver.query` sort order crashed startup. ⚠️ actual notification delivery / Turn-off / quiet-hours / deep-link taps still unrun (need a qualifying trigger over days) |
 
 ## Current grill
 
-None in progress. The most recent grill (AdMob monetization + 16 KB page-size compliance,
-above) is shipped and device-verified except for the native-ad-on-emulator caveat. See
-**Next grill** below for the recommendation.
+None in progress. The two most recent grills (Distribution & Open-With, Library Pulse) are
+built and **device-verified on emulator API 36** — Distribution fully (external open plays,
+Back→caller, default-player deep-link, partial-media gate + banner), Pulse partially (settings
++ gating + persistence + worker scheduled/ran; a real startup crash was found and fixed). What
+still needs a device: Pulse's actual notification delivery/taps (need a qualifying trigger over
+days) and the Play-only in-app review prompt. See **Next grill** below.
 
 ## Prior device-verification pass (historical log)
 
@@ -297,7 +303,7 @@ Finishes the pinch-zoom feature — zoom was centre-anchored, so you couldn't in
 ## Release stage
 
 The app is now at **Play-release stage**: signed release `signingConfig` (git-ignored
-`keystore.properties`, `vixplay-release-key`), app name **VixPlay**, **versionCode 60 /
+`keystore.properties`, `vixplay-release-key`), app name **VixPlay**, **versionCode 58 /
 3.0.0**, AdMob is now **live** (`play-services-ads` 25.4.0 + `user-messaging-platform`
 3.1.0, UMP consent gate, real ad units in release), 16 KB page-size compliant. Signed AAB
 builds and verifies (`jar verified`).
@@ -305,7 +311,9 @@ builds and verifies (`jar verified`).
 **Monetization gap, stated plainly: ads now show to every user, with no way to remove
 them.** The `adsEnabled` seam exists in `AdsController` specifically so a future Pro
 entitlement can flip it off, but nothing flips it yet — there is no billing integration
-and no purchase surface. This is the natural next increment (see recommendation below).
+and no purchase surface. **The user has explicitly decided Pro/Billing is built dead
+last** (see Next grill below) — this gap stays open on purpose until every other
+buildable-now item is done.
 
 ## Grilled — design locked, HELD on external blockers
 
@@ -316,34 +324,59 @@ and no purchase surface. This is the natural next increment (see recommendation 
 - **Chromecast / Cast** — full design locked (media3-cast `CastPlayer` dual-player swap in
   `PlayerController`, NanoHTTPD token-scoped local-file server, framework `MediaRouteButton`,
   Default Media Receiver, Play-Services-gated). **HELD: needs a real Chromecast to verify.**
+- **Pro entitlement / Google Play Billing v6** — grilled through Q1–Q4 (locked: single
+  "Remove ads" product, local Play verification per the CLAUDE.md decision, no backend),
+  paused at Q5. **HELD, not on a blocker — the user has explicitly decided this is built
+  dead last**, after every other buildable-now item. See Next grill ranking below.
 
 ## Next grill
 
-1. **Pro entitlement / Google Play Billing v6 — RECOMMENDED NEXT.** Ads now show to every
-   user with no relief, and the `adsEnabled` seam in `AdsController` was built for exactly
-   this. It's the direct, small continuation of the just-shipped monetization work (one
-   product: "Remove ads", local Play verification per the CLAUDE.md-locked decision, no
-   backend needed), and it closes the one glaring gap the AdMob grill deliberately left
-   open rather than papering over. It also unblocks the two parked ad formats below —
-   interstitial makes little sense to design without first deciding what a Pro purchase
-   exempts it from, and rewarded is explicitly gated on the entitlement existing at all.
-2. **Interstitial ads (player-exit, capped)** — parked pending Q1: does purchasing Pro
-   suppress interstitials as part of "remove ads," or is Pro scoped to banners/native only?
-   That question is now answerable once billing exists. Frequency cap + "never mid-playback"
-   (CLAUDE.md: no interstitials during playback) still need a grill.
-3. **Rewarded ads** — needs the Pro entitlement to exist first (e.g. "watch an ad to unlock
-   a Pro feature for 24h"), so it is sequenced after item 1 by construction, not preference.
-4. **SMB/FTP network shares** — the deferred heavy half of network streaming (browse a NAS).
-   Needs SMBJ + a custom Media3 `DataSource` + encrypted credentials + a browse UI. The
-   single biggest genuinely-missing feature in the app; own subsystem, own grill. Not
-   monetization-relevant, which is why it sits behind the ads/billing cluster now that
-   ads are live and asymmetric (paying users can't opt out yet).
-5. **Same-volume move fast path** — `RELATIVE_PATH` update (API 29+) so moving within one
+New PRD material landed under `vix-play-docs/media-player-docs/` from a growth-foundation
+PRD split: `features/distribution.md`, `features/analytics.md`, `features/pro-billing.md`,
+`features/notifications.md`, `features/daily-briefing.md`, `product/05-growth-foundation.md`,
+and screens `16-daily-briefing` / `17-briefing-setup` / `18-briefing-settings`. These are
+buildable feature specs, not aspirational — folded into the ranking below.
+
+Distribution & Open-With and Notifications (Library Pulse) are both **built and shipped** —
+see the Shipped table. Their shared remaining debt is a device-verification pass (Distribution:
+external open / Back-to-caller / review-off-Play / API-34 partial banner; Pulse: scheduling /
+delivery / quiet-hours+cap / deep-link taps, the cap+idle needing multi-day observation).
+
+1. **Analytics foundation — RECOMMENDED NEXT.** `features/analytics.md`. CLAUDE.md already scopes this to
+   Firebase Crashlytics only for MVP, "add Analytics at beta when real users exist" — grill
+   should confirm whether that gate has been reached before building, per the locked
+   architectural decision. (Distribution's review prompt already lands a local
+   `completed_playbacks` counter that a real funnel can build on.)
+2. **Daily briefing (screens 16–18)** — `features/daily-briefing.md` + `product/05-growth-
+   foundation.md`. Larger, more speculative feature surface; the notification-delivery
+   primitive it leans on now exists (Library Pulse channel + WorkManager scheduling).
+3. **Same-volume move fast path** — `RELATIVE_PATH` update (API 29+) so moving within one
    volume doesn't copy the whole file.
-6. **New-folder creation at the destination** — `RELATIVE_PATH` insert can create dirs on
+4. **New-folder creation at the destination** — `RELATIVE_PATH` insert can create dirs on
    API 29+; needs naming/validation UI.
-7. **In-app Trash screen** — restore trashed items (`QUERY_ARG_MATCH_TRASHED`); weigh the
+5. **In-app Trash screen** — restore trashed items (`QUERY_ARG_MATCH_TRASHED`); weigh the
    reintroduced permanent-delete action.
+6. **Remaining device-verification (Pulse delivery, review, SMB)** — most of Distribution +
+   Pulse is now verified on emulator API 36 (see Shipped table). Still unrun: **Pulse's actual
+   notification delivery** and its Turn-off / quiet-hours / deep-link-tap paths (need a
+   qualifying trigger over days), the **in-app review** flow (Play-track only), and **SMB**
+   (FTP was verified against a local server; SMB never had a server available). Not a grill —
+   a targeted verification task.
+
+### Deferred to last, by explicit user decision
+
+7. **Pro entitlement / Google Play Billing v6.** Ads now show to every user with no
+   relief, and the `adsEnabled` seam in `AdsController` exists for exactly this. It would
+   otherwise be a strong "next" candidate (small, closes the AdMob grill's deliberate
+   gap, unblocks the two ad formats below) — **but the user has explicitly chosen to
+   build this dead last**, after every other buildable-now feature. Design is already
+   locked through Q4 (see "Grilled — HELD" above); only Q5 and implementation remain.
+8. **Interstitial ads (player-exit, capped)** — parked pending Q1: does purchasing Pro
+   suppress interstitials as part of "remove ads," or is Pro scoped to banners/native
+   only? Sequenced after Pro/Billing by construction, and therefore also last.
+9. **Rewarded ads** — needs the Pro entitlement to exist first (e.g. "watch an ad to
+   unlock a Pro feature for 24h"), so it is sequenced after item 7, and therefore also
+   last.
 
 ## Blocked
 

@@ -1,6 +1,8 @@
 package com.devbytes.vixplayer.app
 
+import android.content.Intent
 import android.content.res.Configuration
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -9,14 +11,23 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.core.content.IntentCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.lifecycleScope
 import com.devbytes.vixplayer.app.ads.AdsController
+import com.devbytes.vixplayer.app.data.repository.SettingsRepository
+import com.devbytes.vixplayer.app.notifications.PulseEvaluator
+import com.devbytes.vixplayer.app.notifications.PulseNotifier
+import com.devbytes.vixplayer.app.notifications.PulseScheduler
 import com.devbytes.vixplayer.app.player.PipController
 import com.devbytes.vixplayer.app.ui.VixPlayNavGraph
 import com.devbytes.vixplayer.app.ui.splash.SplashViewModel
 import com.devbytes.vixplayer.app.ui.theme.ThemeViewModel
 import com.devbytes.vixplayer.app.ui.theme.VixPlayTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -25,23 +36,79 @@ class MainActivity : ComponentActivity() {
     private val themeViewModel: ThemeViewModel by viewModels()
 
     @Inject lateinit var adsController: AdsController
+    @Inject lateinit var pulseScheduler: PulseScheduler
+    @Inject lateinit var pulseEvaluator: PulseEvaluator
+    @Inject lateinit var settingsRepository: SettingsRepository
 
     /** PlayerScreen registers its PiP contract here; the OS hooks below call it. */
     val pipController = PipController()
+
+    /**
+     * Media handed to us by another app via ACTION_VIEW / ACTION_SEND. A one-shot the nav
+     * graph consumes to jump straight into the player, bypassing the splash permission gate
+     * — the launching app already granted read access through the intent. Cleared once the
+     * graph has routed it so a rotation or process return doesn't replay the launch.
+     */
+    val pendingExternalMedia = mutableStateOf<List<Uri>>(emptyList())
+
+    /**
+     * A resume-nudge notification tap carries the video URI here. Distinct from
+     * [pendingExternalMedia]: this lands on the player with the library beneath it (Back →
+     * library), whereas an external open makes the player the root (Back → caller).
+     */
+    val pendingPulsePlayUri = mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen().setKeepOnScreenCondition { !splashViewModel.checkDone.value }
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        pendingExternalMedia.value = extractMedia(intent)
+        pendingPulsePlayUri.value = intent?.getStringExtra(PulseNotifier.EXTRA_PLAY_URI)
+        // Record app usage (kills the idle nudge condition, acknowledges the library) and
+        // (re)schedule the Pulse job if enabled.
+        lifecycleScope.launch {
+            // Pulse bookkeeping must never take down app startup.
+            runCatching {
+                pulseEvaluator.onAppOpened()
+                if (settingsRepository.pulseSettings.first().master) pulseScheduler.schedule()
+            }
+        }
         // Gather EEA consent (UMP) then initialize ads; the banner stays hidden until this
         // resolves, so no ad loads before consent.
         adsController.ensureConsentAndInit(this)
         setContent {
             val themeState by themeViewModel.themeState.collectAsState()
             VixPlayTheme(mode = themeState.mode, accent = themeState.accent) {
-                VixPlayNavGraph()
+                VixPlayNavGraph(
+                    pendingExternalMedia = pendingExternalMedia.value,
+                    onExternalMediaConsumed = { pendingExternalMedia.value = emptyList() },
+                    pulsePlayUri = pendingPulsePlayUri.value,
+                    onPulsePlayConsumed = { pendingPulsePlayUri.value = null },
+                )
             }
         }
+    }
+
+    // A file opened (or a Pulse tap) while the app is already running arrives here.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val media = extractMedia(intent)
+        if (media.isNotEmpty()) pendingExternalMedia.value = media
+        intent.getStringExtra(PulseNotifier.EXTRA_PLAY_URI)?.let { pendingPulsePlayUri.value = it }
+    }
+
+    /** Pulls playable URIs out of a VIEW / SEND / SEND_MULTIPLE intent (empty otherwise). */
+    private fun extractMedia(intent: Intent?): List<Uri> = when (intent?.action) {
+        Intent.ACTION_VIEW -> intent.data?.let { listOf(it) } ?: emptyList()
+        Intent.ACTION_SEND ->
+            (IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
+                ?: intent.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri)
+                ?.let { listOf(it) } ?: emptyList()
+        Intent.ACTION_SEND_MULTIPLE ->
+            IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
+                ?: emptyList()
+        else -> emptyList()
     }
 
     // Home / recents while a video is actively playing → seamless PiP. The decision

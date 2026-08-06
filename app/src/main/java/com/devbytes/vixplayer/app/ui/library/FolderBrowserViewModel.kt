@@ -369,6 +369,9 @@ class FolderBrowserViewModel @Inject constructor(
         loadFolders()
     }
 
+    /** Re-scan folders — used after a media-permission grant widens what MediaStore returns. */
+    fun refreshFolders() = loadFolders()
+
     private fun loadFolders() {
         viewModelScope.launch {
             _state.value = FolderBrowserUiState.Loading

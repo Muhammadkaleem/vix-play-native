@@ -59,6 +59,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import com.google.android.play.core.ktx.launchReview
+import com.google.android.play.core.ktx.requestReview
+import com.google.android.play.core.review.ReviewManagerFactory
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -210,8 +213,15 @@ fun PlayerScreen(
     val backgroundPlayback by viewModel.backgroundPlayback.collectAsState()
     val subtitleStyle by viewModel.subtitleStyle.collectAsState()
 
+    // For a foreign content:// URI (external open) MediaStore has no row to name it, so
+    // resolve the display name via OpenableColumns once and hand it to prepareFor as the
+    // immediate title. MediaStore URIs still get their canonical name from the async lookup.
+    val externalName = remember(uri) {
+        queryDisplayName(context, Uri.parse(uri))?.substringBeforeLast('.')
+    }
+
     // Opening a video is one call so per-file state can't leak from the previous one.
-    LaunchedEffect(Unit) { viewModel.prepareFor(uri, subtitleOffsetMs) }
+    LaunchedEffect(Unit) { viewModel.prepareFor(uri, subtitleOffsetMs, externalName) }
 
     // Held so the screenshot capture can reach the video SurfaceView for PixelCopy.
     var playerView by remember { mutableStateOf<PlayerView?>(null) }
@@ -339,6 +349,24 @@ fun PlayerScreen(
         nextVideo = if (ended) viewModel.nextInFolder() else null
     }
 
+    // In-app review: watching a video to the end is a positive signal. Track whether a codec
+    // error occurred this visit (never ask after a bad experience), ask at most once per
+    // screen instance, and let the Play API enforce its own frequency/quota. No-op unless the
+    // build was installed from Play — runCatching keeps a failed flow from touching playback.
+    var hadPlaybackError by remember { mutableStateOf(false) }
+    var reviewRequested by remember { mutableStateOf(false) }
+    val reviewManager = remember { ReviewManagerFactory.create(context) }
+    LaunchedEffect(ended) {
+        if (ended && !hadPlaybackError && !reviewRequested &&
+            viewModel.recordCompletionAndShouldAskReview()
+        ) {
+            reviewRequested = true
+            activity?.let { act ->
+                runCatching { reviewManager.launchReview(act, reviewManager.requestReview()) }
+            }
+        }
+    }
+
     // Persisted global playback speed — the stored value drives the player on load
     // and on every pick. The speed-hold gesture reverts to this (reads player speed).
     val playbackSpeed by viewModel.playbackSpeed.collectAsState()
@@ -360,6 +388,8 @@ fun PlayerScreen(
 
             override fun onPlayerError(error: PlaybackException) {
                 playbackError = error
+                // A failed playback must never lead into a review prompt.
+                hadPlaybackError = true
             }
 
             override fun onTracksChanged(newTracks: Tracks) {
@@ -534,6 +564,9 @@ fun PlayerScreen(
         showResumeChip = false
         ended = false
         nextVideo = null
+        // Fresh file → fresh error-tracking for the review signal (a prior file's error
+        // shouldn't suppress a prompt after this one plays cleanly to the end).
+        hadPlaybackError = false
         // A zoom is a "look closer at this shot" intent tied to the current file; a new
         // video (likely a different resolution) starts un-zoomed and centred.
         zoomScale = 1f

@@ -59,16 +59,24 @@ class SplashViewModel @Inject constructor(
         checkPermission()
     }
 
-    fun checkPermission() {
-        val granted = ContextCompat.checkSelfPermission(
-            context,
-            requiredPermission,
-        ) == PackageManager.PERMISSION_GRANTED
-        _permissionGranted.value = granted
-        _checkDone.value = true
+    private fun granted(permission: String): Boolean =
+        ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+
+    /**
+     * Whether the app has enough video access to be usable. On Android 14+ a **partial**
+     * grant ("Select photos and videos") leaves [Manifest.permission.READ_MEDIA_VIDEO]
+     * denied but `READ_MEDIA_VISUAL_USER_SELECTED` granted — that is a usable state, not a
+     * denial, so entry must not be gated behind full access alone.
+     */
+    fun hasVideoAccess(): Boolean = when {
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE ->
+            granted(Manifest.permission.READ_MEDIA_VIDEO) ||
+                granted("android.permission.READ_MEDIA_VISUAL_USER_SELECTED")
+        else -> granted(requiredPermission)
     }
 
-    fun onPermissionResult(granted: Boolean) {
-        _permissionGranted.value = granted
+    fun checkPermission() {
+        _permissionGranted.value = hasVideoAccess()
+        _checkDone.value = true
     }
 }

@@ -1,7 +1,12 @@
 package com.devbytes.vixplayer.app.ui.library
 
+import android.Manifest
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
+import androidx.core.content.ContextCompat
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
@@ -136,6 +141,17 @@ fun FolderBrowserScreen(
                 androidx.activity.result.IntentSenderRequest.Builder(sender).build()
             )
         }
+    }
+
+    // Android 14 partial media access: the user granted only selected videos, so the library
+    // is honestly a subset. Re-requesting on 34+ re-opens the "Select more / Allow all" system
+    // sheet; on the result we re-check and re-scan so newly-allowed videos appear.
+    var partialAccess by remember { mutableStateOf(isPartialMediaAccess(context)) }
+    val mediaAccessLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) {
+        partialAccess = isPartialMediaAccess(context)
+        viewModel.refreshFolders()
     }
 
     message?.let { text ->
@@ -325,15 +341,29 @@ fun FolderBrowserScreen(
                     FolderListSkeleton(modifier = Modifier.padding(padding))
                 }
 
-            is FolderBrowserUiState.FolderList -> FolderList(
-                folders = s.folders,
-                onFolderClick = { folder ->
-                    pendingGrid = true
-                    viewModel.enterFolder(folder.bucketId, folder.name)
-                },
-                showAds = showAds,
-                modifier = Modifier.padding(padding),
-            )
+            is FolderBrowserUiState.FolderList -> Column(modifier = Modifier.padding(padding)) {
+                if (partialAccess && !selectionMode) {
+                    PartialAccessBanner(
+                        onManage = {
+                            mediaAccessLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.READ_MEDIA_VIDEO,
+                                    "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+                                ),
+                            )
+                        },
+                    )
+                }
+                FolderList(
+                    folders = s.folders,
+                    onFolderClick = { folder ->
+                        pendingGrid = true
+                        viewModel.enterFolder(folder.bucketId, folder.name)
+                    },
+                    showAds = showAds,
+                    modifier = Modifier.weight(1f),
+                )
+            }
 
             is FolderBrowserUiState.VideoList -> VideoGrid(
                 videos = s.videos,
@@ -482,6 +512,43 @@ fun FolderBrowserScreen(
                 TextButton(onClick = { renaming = false }) { Text("Cancel") }
             },
         )
+    }
+}
+
+/** True only on Android 14+ when access is the partial "selected videos" grant, not full. */
+private fun isPartialMediaAccess(context: Context): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return false
+    fun granted(p: String) =
+        ContextCompat.checkSelfPermission(context, p) == PackageManager.PERMISSION_GRANTED
+    return !granted(Manifest.permission.READ_MEDIA_VIDEO) &&
+        granted("android.permission.READ_MEDIA_VISUAL_USER_SELECTED")
+}
+
+/**
+ * A calm, non-blocking notice that only some videos are shared, with a one-tap path to widen
+ * the grant. Reuses the surface/token vocabulary rather than a hardcoded style.
+ */
+@Composable
+private fun PartialAccessBanner(onManage: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "You've shared only some videos.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onManage) { Text("Manage") }
+        }
     }
 }
 

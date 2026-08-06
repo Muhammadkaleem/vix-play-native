@@ -123,6 +123,15 @@ dependencies {
     implementation(libs.play.services.ads)
     implementation(libs.user.messaging.platform)
 
+    // Play In-App Review (post-positive-signal review prompt)
+    implementation(libs.play.review)
+    implementation(libs.play.review.ktx)
+
+    // WorkManager + Hilt worker injection (Library Pulse notifications)
+    implementation(libs.work.runtime.ktx)
+    implementation(libs.hilt.work)
+    ksp(libs.hilt.work.compiler)
+
     // Network shares (SMB + FTP)
     implementation(libs.smbj)
     implementation(libs.commons.net)

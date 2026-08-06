@@ -214,4 +214,33 @@ class MediaRepository @Inject constructor(
         }
         videos
     }
+
+    /** Epoch millis of the most recently added video, or 0 if the library is empty. */
+    suspend fun queryNewestVideoAddedDate(): Long = withContext(Dispatchers.IO) {
+        // Note: no "LIMIT 1" in the sort string — ContentResolver.query validates the sort
+        // clause and rejects LIMIT on modern Android. We just read the first (newest) row.
+        context.contentResolver.query(
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+            arrayOf(MediaStore.Video.Media.DATE_ADDED),
+            null, null,
+            "${MediaStore.Video.Media.DATE_ADDED} DESC",
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                // DATE_ADDED is seconds since epoch.
+                cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_ADDED)) * 1000L
+            } else 0L
+        } ?: 0L
+    }
+
+    /** How many videos were added strictly after [sinceMillis]. Powers the "new in library" nudge. */
+    suspend fun countVideosAddedAfter(sinceMillis: Long): Int = withContext(Dispatchers.IO) {
+        val sinceSeconds = sinceMillis / 1000L
+        context.contentResolver.query(
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+            arrayOf(MediaStore.Video.Media._ID),
+            "${MediaStore.Video.Media.DATE_ADDED} > ?",
+            arrayOf(sinceSeconds.toString()),
+            null,
+        )?.use { it.count } ?: 0
+    }
 }

@@ -23,10 +23,13 @@ Home (bottom nav: Video · Audio · Network · Settings)
                     ├─> Subtitle defaults
                     ├─> Playback defaults
                     ├─> Private Folder (PIN)
+                    ├─> Daily Briefing ─> Briefing Settings / Setup Wizard
                     └─> About / Pro
 
 Video Player ─> Subtitle Manager (sheet), Cast picker (sheet), File Info (sheet), PiP
 Audio Player ─> Equalizer, Sleep timer, Queue
+
+Daily Briefing (notification / home card / setup) ─> Briefing · Setup Wizard · Briefing Settings
 ```
 
 ## Screen list
@@ -48,3 +51,6 @@ Audio Player ─> Equalizer, Sleep timer, Queue
 | 13 | Private Folder | P1 | `13-private-folder.md` |
 | 14 | Settings | P0 | `14-settings.md` |
 | 15 | File Info | P1 | `15-file-info.md` |
+| 16 | Daily Briefing | P1 | `16-daily-briefing.md` |
+| 17 | Briefing Setup Wizard | P1 | `17-briefing-setup.md` |
+| 18 | Briefing Settings | P1 | `18-briefing-settings.md` |

@@ -1,5 +1,10 @@
 package com.devbytes.vixplayer.app.ui.settings
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,14 +21,35 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.navigation.ABOUT_PRO_ROUTE
 import com.devbytes.vixplayer.app.navigation.GESTURE_REMAP_ROUTE
+import com.devbytes.vixplayer.app.navigation.NOTIFICATIONS_ROUTE
 import com.devbytes.vixplayer.app.navigation.PLAYBACK_DEFAULTS_ROUTE
 import com.devbytes.vixplayer.app.navigation.PRIVATE_FOLDER_ROUTE
 import com.devbytes.vixplayer.app.navigation.SUBTITLE_DEFAULTS_ROUTE
 import com.devbytes.vixplayer.app.navigation.THEME_SKINS_ROUTE
+
+/**
+ * Opens the system "Open by default" screen for VixPlay (API 31+), where the user manages
+ * which file types the app handles; falls back to the app-details screen below 31 and if the
+ * dedicated screen is unavailable on an OEM build. Never throws into the UI.
+ */
+private fun openDefaultAppSettings(context: Context) {
+    val pkgUri = Uri.fromParts("package", context.packageName, null)
+    val primary = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        Intent(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, pkgUri)
+    } else {
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri)
+    }
+    runCatching { context.startActivity(primary) }.onFailure {
+        runCatching {
+            context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkgUri))
+        }
+    }
+}
 
 private data class SettingsItem(
     val label: String,
@@ -38,6 +64,7 @@ private val SETTINGS_ITEMS = listOf(
     SettingsItem("Subtitles", "Default language, styling, and encoding", R.drawable.ic_subtitles, SUBTITLE_DEFAULTS_ROUTE),
     SettingsItem("Playback", "Speed, decoder, resume, and autoplay", R.drawable.ic_speed, PLAYBACK_DEFAULTS_ROUTE),
     SettingsItem("Private Folder", "Lock videos behind a PIN", R.drawable.ic_lock, PRIVATE_FOLDER_ROUTE),
+    SettingsItem("Notifications", "Resume reminders, new videos, weekly recap", R.drawable.ic_timer, NOTIFICATIONS_ROUTE),
     SettingsItem("About / Pro", "Version, licenses, and app info", R.drawable.ic_info, ABOUT_PRO_ROUTE),
 )
 
@@ -46,6 +73,7 @@ private val SETTINGS_ITEMS = listOf(
 fun SettingsScreen(
     onNavigate: (String) -> Unit = {},
 ) {
+    val context = LocalContext.current
     Scaffold(
         topBar = {
             TopAppBar(
@@ -60,6 +88,43 @@ fun SettingsScreen(
             modifier = Modifier.fillMaxSize(),
             contentPadding = padding,
         ) {
+            // Not a nav route — deep-links to the OS "Open by default" screen so the user
+            // can make VixPlay the default handler for video/audio file types. Android has
+            // no programmatic default-media-player role, so this is the real mechanism.
+            item {
+                ListItem(
+                    leadingContent = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_play),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    },
+                    headlineContent = { Text("Set as default player") },
+                    supportingContent = {
+                        Text(
+                            text = "Choose which video and audio files open in VixPlay",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                    trailingContent = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_chevron_right),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                    colors = ListItemDefaults.colors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                    ),
+                    modifier = Modifier.clickable { openDefaultAppSettings(context) },
+                )
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                )
+            }
+
             items(SETTINGS_ITEMS) { item ->
                 ListItem(
                     leadingContent = {

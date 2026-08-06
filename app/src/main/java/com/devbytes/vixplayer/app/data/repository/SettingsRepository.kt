@@ -7,8 +7,11 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.devbytes.vixplayer.app.notifications.PulseSettings
+import com.devbytes.vixplayer.app.notifications.PulseState
 import com.devbytes.vixplayer.app.player.gesture.DragAction
 import com.devbytes.vixplayer.app.player.gesture.GestureBindings
 import com.devbytes.vixplayer.app.player.gesture.TapAction
@@ -17,6 +20,7 @@ import com.devbytes.vixplayer.app.ui.theme.ThemeMode
 import com.devbytes.vixplayer.app.ui.theme.ThemeState
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -50,6 +54,17 @@ class SettingsRepository @Inject constructor(
         val SUB_EDGE_TYPE           = intPreferencesKey("subtitle_edge_type")
         val SUB_TYPEFACE            = stringPreferencesKey("subtitle_typeface")
         val SUB_OVERRIDE_EMBEDDED   = booleanPreferencesKey("subtitle_override_embedded")
+        val COMPLETED_PLAYBACKS     = intPreferencesKey("completed_playbacks")
+        // Library Pulse notifications: per-trigger toggles + scheduling bookkeeping.
+        val PULSE_MASTER            = booleanPreferencesKey("pulse_master")
+        val PULSE_RESUME            = booleanPreferencesKey("pulse_resume")
+        val PULSE_NEW_VIDEOS        = booleanPreferencesKey("pulse_new_videos")
+        val PULSE_DIGEST            = booleanPreferencesKey("pulse_digest")
+        val PULSE_LAST_OPEN         = longPreferencesKey("pulse_last_open")
+        val PULSE_LAST_NOTIF        = longPreferencesKey("pulse_last_notif")
+        val PULSE_LAST_SEEN_VIDEO   = longPreferencesKey("pulse_last_seen_video")
+        val PULSE_LAST_DIGEST       = longPreferencesKey("pulse_last_digest")
+        val PULSE_LAST_RESUME_ID    = longPreferencesKey("pulse_last_resume_id")
     }
 
     val playbackSpeed: Flow<Float> = context.dataStore.data
@@ -152,6 +167,75 @@ class SettingsRepository @Inject constructor(
             } ?: default.typeface,
             overrideEmbedded = prefs[Keys.SUB_OVERRIDE_EMBEDDED] ?: default.overrideEmbedded,
         )
+    }
+
+    /** Library Pulse per-trigger toggles + master switch, for the Notifications screen. */
+    val pulseSettings: Flow<PulseSettings> = context.dataStore.data.map { p ->
+        PulseSettings(
+            master = p[Keys.PULSE_MASTER] ?: true,
+            resume = p[Keys.PULSE_RESUME] ?: true,
+            newVideos = p[Keys.PULSE_NEW_VIDEOS] ?: true,
+            digest = p[Keys.PULSE_DIGEST] ?: true,
+        )
+    }
+
+    suspend fun setPulseMaster(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.PULSE_MASTER] = enabled }
+    }
+
+    suspend fun setPulseResume(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.PULSE_RESUME] = enabled }
+    }
+
+    suspend fun setPulseNewVideos(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.PULSE_NEW_VIDEOS] = enabled }
+    }
+
+    suspend fun setPulseDigest(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.PULSE_DIGEST] = enabled }
+    }
+
+    /** One-shot read of the scheduling bookkeeping the Pulse worker evaluates. */
+    suspend fun pulseState(): PulseState = context.dataStore.data.first().let { p ->
+        PulseState(
+            lastAppOpenAt = p[Keys.PULSE_LAST_OPEN] ?: 0L,
+            lastNotificationAt = p[Keys.PULSE_LAST_NOTIF] ?: 0L,
+            lastSeenNewestVideoDate = p[Keys.PULSE_LAST_SEEN_VIDEO] ?: 0L,
+            lastDigestAt = p[Keys.PULSE_LAST_DIGEST] ?: 0L,
+            lastResumeNudgeId = p[Keys.PULSE_LAST_RESUME_ID] ?: 0L,
+        )
+    }
+
+    suspend fun setPulseLastAppOpenAt(ts: Long) {
+        context.dataStore.edit { it[Keys.PULSE_LAST_OPEN] = ts }
+    }
+
+    suspend fun setPulseLastNotificationAt(ts: Long) {
+        context.dataStore.edit { it[Keys.PULSE_LAST_NOTIF] = ts }
+    }
+
+    suspend fun setPulseLastSeenNewestVideoDate(ts: Long) {
+        context.dataStore.edit { it[Keys.PULSE_LAST_SEEN_VIDEO] = ts }
+    }
+
+    suspend fun setPulseLastDigestAt(ts: Long) {
+        context.dataStore.edit { it[Keys.PULSE_LAST_DIGEST] = ts }
+    }
+
+    suspend fun setPulseLastResumeNudgeId(id: Long) {
+        context.dataStore.edit { it[Keys.PULSE_LAST_RESUME_ID] = id }
+    }
+
+    /**
+     * Lifetime count of videos watched to completion — the positive signal that gates the
+     * Play in-app review prompt. Increments atomically and returns the new total so the
+     * caller can decide in one step.
+     */
+    suspend fun recordCompletedPlaybackAndGet(): Int {
+        val prefs = context.dataStore.edit {
+            it[Keys.COMPLETED_PLAYBACKS] = (it[Keys.COMPLETED_PLAYBACKS] ?: 0) + 1
+        }
+        return prefs[Keys.COMPLETED_PLAYBACKS] ?: 0
     }
 
     suspend fun setSubtitleStyle(style: SubtitleStyle) {

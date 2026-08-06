@@ -58,6 +58,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun SplashScreen(
     onNavigateToLibrary: () -> Unit,
+    autoRequest: Boolean = true,
     viewModel: SplashViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -68,11 +69,12 @@ fun SplashScreen(
 
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
-    ) { results ->
-        // Entry is gated on the video permission; audio may be declined independently.
-        val granted = results[viewModel.requiredPermission] == true
-        viewModel.onPermissionResult(granted)
-        if (!granted) {
+    ) { _ ->
+        // Re-read the real permission state rather than trust the results map: on Android 14
+        // a "Select photos and videos" (partial) grant leaves READ_MEDIA_VIDEO false yet is
+        // usable, and hasVideoAccess() accounts for it. Audio may be declined independently.
+        viewModel.checkPermission()
+        if (!viewModel.permissionGranted.value) {
             val activity = context as? Activity
             val canAskAgain = activity
                 ?.shouldShowRequestPermissionRationale(viewModel.requiredPermission) == true
@@ -81,13 +83,15 @@ fun SplashScreen(
     }
 
     // Splash owns the cold-start permission request — auto-request on entry if not granted.
-    LaunchedEffect(Unit) {
-        if (!permissionGranted) launcher.launch(viewModel.requiredPermissions)
+    // Suppressed during an external open: the graph routes straight to the player and the
+    // intent already granted read access, so no storage permission is needed.
+    LaunchedEffect(autoRequest) {
+        if (autoRequest && !permissionGranted) launcher.launch(viewModel.requiredPermissions)
     }
 
     // Navigate as soon as the permission flips to granted.
-    LaunchedEffect(permissionGranted) {
-        if (permissionGranted) onNavigateToLibrary()
+    LaunchedEffect(permissionGranted, autoRequest) {
+        if (autoRequest && permissionGranted) onNavigateToLibrary()
     }
 
     // PRD: no progress indicator unless init takes longer than 400ms.
