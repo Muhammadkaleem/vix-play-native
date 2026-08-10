@@ -62,6 +62,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.google.android.play.core.ktx.launchReview
 import com.google.android.play.core.ktx.requestReview
 import com.google.android.play.core.review.ReviewManagerFactory
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -390,6 +391,13 @@ fun PlayerScreen(
                 playbackError = error
                 // A failed playback must never lead into a review prompt.
                 hadPlaybackError = true
+                // The one curated non-fatal: quantifies the real "plays everything" gap
+                // (the FFmpeg go/no-go signal) — a swallowed error the UI shows but no one
+                // would otherwise see aggregated. Keyed by code so Crashlytics groups them.
+                FirebaseCrashlytics.getInstance().apply {
+                    setCustomKey("codec_error", error.errorCodeName)
+                    recordException(error)
+                }
             }
 
             override fun onTracksChanged(newTracks: Tracks) {

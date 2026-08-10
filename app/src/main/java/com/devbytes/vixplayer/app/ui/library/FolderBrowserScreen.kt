@@ -85,6 +85,7 @@ fun FolderBrowserScreen(
     onVideoClick: (Uri) -> Unit = {},
     onSearchClick: () -> Unit = {},
     onHistoryClick: () -> Unit = {},
+    onOpenBriefing: () -> Unit = {},
     viewModel: FolderBrowserViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -342,6 +343,9 @@ fun FolderBrowserScreen(
                 }
 
             is FolderBrowserUiState.FolderList -> Column(modifier = Modifier.padding(padding)) {
+                if (!selectionMode) {
+                    com.devbytes.vixplayer.app.briefing.ui.BriefingHomeCard(onOpen = onOpenBriefing)
+                }
                 if (partialAccess && !selectionMode) {
                     PartialAccessBanner(
                         onManage = {

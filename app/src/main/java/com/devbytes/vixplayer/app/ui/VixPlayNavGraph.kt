@@ -11,6 +11,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavType
@@ -23,6 +24,9 @@ import androidx.navigation.navArgument
 import com.devbytes.vixplayer.app.ads.AdBanner
 import com.devbytes.vixplayer.app.ads.AdsViewModel
 import com.devbytes.vixplayer.app.navigation.ABOUT_PRO_ROUTE
+import com.devbytes.vixplayer.app.navigation.BRIEFING_ROUTE
+import com.devbytes.vixplayer.app.navigation.BRIEFING_SETTINGS_ROUTE
+import com.devbytes.vixplayer.app.navigation.BRIEFING_SETUP_ROUTE
 import com.devbytes.vixplayer.app.navigation.SPLASH_ROUTE
 import com.devbytes.vixplayer.app.navigation.AUDIO_PLAYER_ROUTE
 import com.devbytes.vixplayer.app.navigation.AUDIO_ROUTE
@@ -54,6 +58,9 @@ import com.devbytes.vixplayer.app.navigation.playerRoute
 import com.devbytes.vixplayer.app.navigation.searchRoute
 import com.devbytes.vixplayer.app.navigation.smbBrowserRoute
 import androidx.compose.foundation.layout.Column
+import com.devbytes.vixplayer.app.briefing.ui.BriefingScreen
+import com.devbytes.vixplayer.app.briefing.ui.BriefingSettingsScreen
+import com.devbytes.vixplayer.app.briefing.ui.SetupWizardScreen
 import com.devbytes.vixplayer.app.ui.audio.AudioLibraryScreen
 import com.devbytes.vixplayer.app.ui.audio.MiniPlayer
 import com.devbytes.vixplayer.app.ui.audio.AudioPlayerScreen
@@ -92,12 +99,19 @@ fun VixPlayNavGraph(
     onExternalMediaConsumed: () -> Unit = {},
     pulsePlayUri: String? = null,
     onPulsePlayConsumed: () -> Unit = {},
+    openBriefing: Boolean = false,
+    onBriefingConsumed: () -> Unit = {},
 ) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
     val currentRoute = currentDestination?.route
     val context = LocalContext.current
+
+    // Crash breadcrumb: which screen the user was on when a crash hit.
+    LaunchedEffect(currentRoute) {
+        FirebaseCrashlytics.getInstance().setCustomKey("route", currentRoute ?: "none")
+    }
 
     // An external open jumps straight into the player, popping the splash gate — the intent
     // already granted read access, so no permission request is needed. Popping splash
@@ -129,9 +143,24 @@ fun VixPlayNavGraph(
         }
     }
 
+    // Briefing notification tap: land on the brief with the library home beneath (Back → home).
+    LaunchedEffect(openBriefing) {
+        if (openBriefing) {
+            navController.navigate(TAB_VIDEO_ROUTE) {
+                popUpTo(SPLASH_ROUTE) { inclusive = true }
+                launchSingleTop = true
+            }
+            navController.navigate(BRIEFING_ROUTE)
+            onBriefingConsumed()
+        }
+    }
+
     val isFullScreen = currentRoute == PLAYER_ROUTE
             || currentRoute == AUDIO_PLAYER_ROUTE
             || currentRoute == SPLASH_ROUTE
+            || currentRoute == BRIEFING_ROUTE
+            || currentRoute == BRIEFING_SETUP_ROUTE
+            || currentRoute == BRIEFING_SETTINGS_ROUTE
 
     // "Library chrome" excludes Settings — no ads while configuring the app or reading
     // legal text. Players/splash are already excluded by isFullScreen.
@@ -189,7 +218,7 @@ fun VixPlayNavGraph(
                     // Suppress the permission request + auto-navigate while an external open
                     // or a resume-nudge deep-link is in flight — the graph is about to route
                     // past splash to the player.
-                    autoRequest = externalUri == null && pulsePlayUri == null,
+                    autoRequest = externalUri == null && pulsePlayUri == null && !openBriefing,
                     onNavigateToLibrary = {
                         navController.navigate(TAB_VIDEO_ROUTE) {
                             popUpTo(SPLASH_ROUTE) { inclusive = true }
@@ -227,6 +256,24 @@ fun VixPlayNavGraph(
                 )
             }
 
+            // ── Daily Briefing (full-screen; reached from Settings / notification / home card) ──
+            composable(BRIEFING_ROUTE) {
+                BriefingScreen(onBack = { navController.popBackStack() })
+            }
+            composable(BRIEFING_SETUP_ROUTE) {
+                SetupWizardScreen(
+                    onExit = { navController.popBackStack() },
+                    onFinished = { navController.popBackStack() },
+                )
+            }
+            composable(BRIEFING_SETTINGS_ROUTE) {
+                BriefingSettingsScreen(
+                    onBack = { navController.popBackStack() },
+                    onSetup = { navController.navigate(BRIEFING_SETUP_ROUTE) },
+                    onViewBrief = { navController.navigate(BRIEFING_ROUTE) },
+                )
+            }
+
             // ── Tab: Video ───────────────────────────────────────────────────
             // Folder listing is the Video-tab home; Search and History are reached from it.
             navigation(startDestination = FOLDER_BROWSER_ROUTE, route = TAB_VIDEO_ROUTE) {
@@ -247,6 +294,7 @@ fun VixPlayNavGraph(
                         },
                         onSearchClick = { navController.navigate(searchRoute()) },
                         onHistoryClick = { navController.navigate(HISTORY_ROUTE) },
+                        onOpenBriefing = { navController.navigate(BRIEFING_ROUTE) },
                     )
                 }
 

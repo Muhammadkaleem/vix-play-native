@@ -15,7 +15,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.core.content.IntentCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.devbytes.vixplayer.app.ads.AdsController
+import com.devbytes.vixplayer.app.briefing.BriefingNotifier
 import com.devbytes.vixplayer.app.data.repository.SettingsRepository
 import com.devbytes.vixplayer.app.notifications.PulseEvaluator
 import com.devbytes.vixplayer.app.notifications.PulseNotifier
@@ -58,12 +60,21 @@ class MainActivity : ComponentActivity() {
      */
     val pendingPulsePlayUri = mutableStateOf<String?>(null)
 
+    /** A Daily Briefing notification tap asks to open today's brief with the library beneath. */
+    val pendingOpenBriefing = mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen().setKeepOnScreenCondition { !splashViewModel.checkDone.value }
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         pendingExternalMedia.value = extractMedia(intent)
         pendingPulsePlayUri.value = intent?.getStringExtra(PulseNotifier.EXTRA_PLAY_URI)
+        pendingOpenBriefing.value = intent?.getBooleanExtra(BriefingNotifier.EXTRA_OPEN_BRIEFING, false) == true
+        // Crash breadcrumb: external-open sessions exercise a different (intent-granted URI)
+        // code path than in-app browsing.
+        if (pendingExternalMedia.value.isNotEmpty()) {
+            FirebaseCrashlytics.getInstance().setCustomKey("external_open", true)
+        }
         // Record app usage (kills the idle nudge condition, acknowledges the library) and
         // (re)schedule the Pulse job if enabled.
         lifecycleScope.launch {
@@ -84,6 +95,8 @@ class MainActivity : ComponentActivity() {
                     onExternalMediaConsumed = { pendingExternalMedia.value = emptyList() },
                     pulsePlayUri = pendingPulsePlayUri.value,
                     onPulsePlayConsumed = { pendingPulsePlayUri.value = null },
+                    openBriefing = pendingOpenBriefing.value,
+                    onBriefingConsumed = { pendingOpenBriefing.value = false },
                 )
             }
         }
@@ -96,6 +109,7 @@ class MainActivity : ComponentActivity() {
         val media = extractMedia(intent)
         if (media.isNotEmpty()) pendingExternalMedia.value = media
         intent.getStringExtra(PulseNotifier.EXTRA_PLAY_URI)?.let { pendingPulsePlayUri.value = it }
+        if (intent.getBooleanExtra(BriefingNotifier.EXTRA_OPEN_BRIEFING, false)) pendingOpenBriefing.value = true
     }
 
     /** Pulls playable URIs out of a VIEW / SEND / SEND_MULTIPLE intent (empty otherwise). */

@@ -9,6 +9,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.devbytes.vixplayer.app.player.datasource.NetworkDataSource
 import com.devbytes.vixplayer.app.player.subtitle.OffsetSubtitleParserFactory
 import com.devbytes.vixplayer.app.player.subtitle.SubtitleOffsetHolder
@@ -75,6 +76,13 @@ class PlayerController @Inject constructor(
     /** Drives mini-player visibility: audio should surface a bar, video should not. */
     val kind: StateFlow<PlaybackKind> = _kind.asStateFlow()
 
+    /** Single mutation point for [_kind] — also mirrors it to Crashlytics as a crash breadcrumb
+     *  (a background-audio crash reads very differently from a video-player one). */
+    private fun updateKind(kind: PlaybackKind) {
+        _kind.value = kind
+        FirebaseCrashlytics.getInstance().setCustomKey("playback_kind", kind.name)
+    }
+
     val player: ExoPlayer = ExoPlayer.Builder(context)
         .setMediaSourceFactory(
             // NetworkDataSource adds smb:// and ftp:// on top of the default schemes
@@ -122,7 +130,7 @@ class PlayerController @Inject constructor(
         )
         player.prepare()
         player.playWhenReady = true
-        _kind.value = PlaybackKind.VIDEO
+        updateKind(PlaybackKind.VIDEO)
     }
 
     /**
@@ -164,7 +172,7 @@ class PlayerController @Inject constructor(
         )
         player.prepare()
         player.playWhenReady = true
-        _kind.value = PlaybackKind.AUDIO
+        updateKind(PlaybackKind.AUDIO)
     }
 
     /**
@@ -196,7 +204,7 @@ class PlayerController @Inject constructor(
             return
         }
         player.addMediaItems(items.map { it.toMediaItem() })
-        _kind.value = PlaybackKind.AUDIO
+        updateKind(PlaybackKind.AUDIO)
     }
 
     /**
@@ -218,7 +226,7 @@ class PlayerController @Inject constructor(
         if (player.mediaItemCount == 0) {
             player.stop()
             player.clearMediaItems()
-            _kind.value = PlaybackKind.NONE
+            updateKind(PlaybackKind.NONE)
         }
     }
 
@@ -244,6 +252,6 @@ class PlayerController @Inject constructor(
     fun stop() {
         player.stop()
         player.clearMediaItems()
-        _kind.value = PlaybackKind.NONE
+        updateKind(PlaybackKind.NONE)
     }
 }

@@ -25,6 +25,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.navigation.ABOUT_PRO_ROUTE
+import com.devbytes.vixplayer.app.navigation.BRIEFING_SETTINGS_ROUTE
 import com.devbytes.vixplayer.app.navigation.GESTURE_REMAP_ROUTE
 import com.devbytes.vixplayer.app.navigation.NOTIFICATIONS_ROUTE
 import com.devbytes.vixplayer.app.navigation.PLAYBACK_DEFAULTS_ROUTE
@@ -65,6 +66,7 @@ private val SETTINGS_ITEMS = listOf(
     SettingsItem("Playback", "Speed, decoder, resume, and autoplay", R.drawable.ic_speed, PLAYBACK_DEFAULTS_ROUTE),
     SettingsItem("Private Folder", "Lock videos behind a PIN", R.drawable.ic_lock, PRIVATE_FOLDER_ROUTE),
     SettingsItem("Notifications", "Resume reminders, new videos, weekly recap", R.drawable.ic_timer, NOTIFICATIONS_ROUTE),
+    SettingsItem("Daily Briefing", "A short brief of your day each morning", R.drawable.ic_timer, BRIEFING_SETTINGS_ROUTE),
     SettingsItem("About / Pro", "Version, licenses, and app info", R.drawable.ic_info, ABOUT_PRO_ROUTE),
 )
 

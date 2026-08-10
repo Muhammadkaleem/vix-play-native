@@ -5,6 +5,8 @@ plugins {
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt.android)
+    alias(libs.plugins.google.services)
+    alias(libs.plugins.firebase.crashlytics)
 }
 
 // Release signing credentials are read from keystore.properties (git-ignored) so no
@@ -56,6 +58,14 @@ android {
             // native crashes/ANRs. Lives in bundle metadata — does not affect user download size.
             ndk {
                 debugSymbolLevel = "FULL"
+            }
+            configure<com.google.firebase.crashlytics.buildtools.gradle.CrashlyticsExtension> {
+                // Minify is disabled, so there is no R8 mapping file to upload.
+                mappingFileUploadEnabled = false
+                // Native crashes are captured by firebase-crashlytics-ndk. Symbol upload for
+                // precise native symbolication can be turned on later (it adds a network step to
+                // release assembly); Play already receives FULL debug symbols for Android vitals.
+                nativeSymbolUploadEnabled = false
             }
         }
     }
@@ -126,6 +136,11 @@ dependencies {
     // Play In-App Review (post-positive-signal review prompt)
     implementation(libs.play.review)
     implementation(libs.play.review.ktx)
+
+    // Firebase Crashlytics — crash, ANR, and native-crash reporting
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.crashlytics)
+    implementation(libs.firebase.crashlytics.ndk)
 
     // WorkManager + Hilt worker injection (Library Pulse notifications)
     implementation(libs.work.runtime.ktx)

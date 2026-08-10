@@ -39,6 +39,11 @@ const val PRIVATE_FOLDER_ROUTE    = "private_folder"
 const val NOTIFICATIONS_ROUTE     = "notifications"
 const val ABOUT_PRO_ROUTE         = "about_pro"
 
+// Daily Briefing destinations (full-screen; reached from Settings, notification, home card)
+const val BRIEFING_ROUTE          = "briefing"
+const val BRIEFING_SETUP_ROUTE    = "briefing/setup"
+const val BRIEFING_SETTINGS_ROUTE = "briefing/settings"
+
 // Top-level destinations (full-screen, no bottom nav)
 const val PLAYER_ROUTE       = "player/{uri}"
 const val AUDIO_PLAYER_ROUTE = "audio_player/{mediaStoreId}"
