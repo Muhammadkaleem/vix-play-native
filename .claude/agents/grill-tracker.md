@@ -78,6 +78,7 @@ screen-by-screen through `/grill-me` sessions.
 | **16 KB page-size support** | `libmmkv.so` was 4 KB-aligned; MMKV 1.3.9 → 2.4.1; all native libs now 16 KB-aligned; ✅ verified in the AAB |
 | **SMB/FTP network shares** | `player/datasource/SmbDataSource.kt` + `FtpDataSource.kt`; `data/network/NetworkServerRepository.kt` + `NetworkShareBrowser.kt` + `CredentialStore.kt`; `ui/network/SmbBrowserScreen.kt` ("Network shares") + `NetworkSharesViewModel.kt`; `data/db/entity/NetworkServer.kt` + dao; smbj 0.14.0 + commons-net 3.11.1 + security-crypto; Room v4→v5; ✅ **FTP verified end-to-end against a local pyftpdlib server**; ⚠️ SMB not runtime-verified (no SMB server available in this environment) |
 | **Distribution & Open-With (Growth 3.1 — A)** | `ACTION_VIEW`/`SEND`/`SEND_MULTIPLE` intent filters (MIME + extension) → play any handed-in URI, bypassing the splash permission gate (Back returns to caller); "Set as default player" Settings row deep-linking `ACTION_APP_OPEN_BY_DEFAULT_SETTINGS` (**no RoleManager media role exists — spec corrected**); Play in-app review after ≥3 completions, no error, once/screen (`review-ktx` 2.0.2); Android 14 partial-media (`READ_MEDIA_VISUAL_USER_SELECTED`) as a first-class state + folder-home "Manage" banner. `MainActivity`/`VixPlayNavGraph`/`Splash*`/`PlayerScreen`+VM/`SettingsScreen`/`FolderBrowser*`; ✅ **device-verified (emulator API 36):** external `VIEW` plays full-screen bypassing splash/permission, Back→caller, "Set as default player" opens the system Open-by-default screen, partial-media gate + "Manage" banner confirmed. Only the in-app review prompt is unverifiable off-Play |
+| **New-folder creation at destination** | Move/copy picker gains a "New folder…" entry → name dialog (strict validation + collision reject, Create disabled until valid) → transfer into `Movies/<name>`; MediaStore can't make empty dirs, so the folder is created lazily when the files land (`RELATIVE_PATH` insert/update). Shared `runTransfer` core so a new-folder move gets the same-volume fast path for free. `FolderBrowserViewModel` (+`transferToNewFolder`/`runTransfer`), `FolderBrowserScreen` (+picker row + name dialog + `newFolderNameError`). ✅ **device-verified (emulator API 36):** created "Archive2026" via a move — write-consent, same MediaStore `_id`, dir created + file landed, source emptied, folder home lists the new folder. |
 | **Same-volume move fast path** | Move within one volume is now an in-place `RELATIVE_PATH` update (API 30+) — instant, no byte copy, atomic per file — behind one `createWriteRequest` batch consent; path-prefix volume detection decides fast-vs-copy before prompting; cross-volume / API ≤29 / failures fall through to the existing copy-then-delete. `MediaTransfer` (+`writeRequest`/`applyMove`), `FolderBrowserViewModel` (+`pendingFastMove`/`sameVolume`, reuses the delete-consent launcher). ✅ **device-verified (emulator API 36):** "modify" write-consent shown (not copy/trash), same MediaStore `_id` with updated `relative_path`, source folder emptied, UI reloaded. ⚠️ cross-volume fallback not exercisable (single-volume emulator) |
 | **Daily Briefing (P1 differentiator — Calendar slice)** | Net-new `briefing` package (kept in `:app`, single-module). Calendar-only via `CalendarContract` (`READ_CALENDAR`, no OAuth/backend) + local heuristics for the day-shape/conflicts (no LLM); exact-alarm→WorkManager scheduling with inexact fallback + boot/time/tz re-register; DataStore config with `sampleApprovedAt` go-live gate (FR-6); full conversational wizard (Intent→Sources→Schedule→Connect→Sample→Go-live→Confirm); own `briefing` notification channel + lock-screen redaction; no new tab (Settings + notification + before-noon home card). Email/Mentions/News deferred behind a `Connector` seam (OAuth+backends). ✅ **device-verified end-to-end (emulator API 36):** full wizard, calendar-permission grant, real sample + watermark, Go-live schedules the alarm (`dumpsys`), settings on-state, view brief, home card before/after noon. **Real crash found + fixed** — LazyColumn nested in a verticalScroll parent on the Sample step. ⚠️ actual scheduled morning delivery not waited out |
 | **Crashlytics + crash reporting (Growth 3.1 — B, measurement half)** | Firebase Crashlytics + ANR + **NDK native-crash** capture wired onto the pre-existing (unused) `google-services.json`; `firebase-bom` 33.7.0 + `google-services`/`crashlytics` plugins; collection **on in release / off in debug** (`isCrashlyticsCollectionEnabled = !BuildConfig.DEBUG`), independent of UMP ad-consent; global custom keys (`route` / `playback_kind` via `PlayerController.updateKind` / `external_open`) + one curated **codec non-fatal** at `onPlayerError` (the "plays everything" signal). `VixPlayApp`/`PlayerController`/`VixPlayNavGraph`/`MainActivity`/`PlayerScreen`. ✅ **device-verified init (emulator API 36):** Crashlytics 19.3.0 + native handler 3.2.0 initialize, app launches clean. ⚠️ actual dashboard upload is release-only by design (debug collection off); **Firebase Analytics funnel deferred** (locked "at beta") |
@@ -348,15 +349,13 @@ NOT built (Q1 of the Crashlytics grill): CLAUDE.md locks it to "add at beta when
 exist," so it stays gated until there are installs to measure (the `completed_playbacks` counter
 is its seed). The remaining queue is smaller storage/verification items before the billing cluster.
 
-1. **New-folder creation at the destination — RECOMMENDED NEXT.** `RELATIVE_PATH` insert can
-   create dirs on API 29+; needs a naming/validation UI in the move/copy destination picker.
-   Natural pairing with the just-shipped move fast path (both are `RELATIVE_PATH` mechanics).
-2. **In-app Trash screen** — restore trashed items (`QUERY_ARG_MATCH_TRASHED`); weigh the
-   reintroduced permanent-delete action.
-3. **Daily Briefing — account sources (Email/Mentions/News)** — the deferred `Connector`
+1. **In-app Trash screen — RECOMMENDED NEXT.** Restore trashed items (`QUERY_ARG_MATCH_TRASHED`);
+   weigh whether to reintroduce a permanent-delete action. The last self-contained storage item
+   before the queue turns to external-blocked / deferred work.
+2. **Daily Briefing — account sources (Email/Mentions/News)** — the deferred `Connector`
    implementations. **HELD** on external services: OAuth apps (Google/MS/Slack), a summarization
    backend, and a news API — none configured. Grill/design when those exist (the seam is ready).
-4. **Remaining device-verification (Pulse + Briefing delivery, review, Crashlytics upload, SMB)** —
+3. **Remaining device-verification (Pulse + Briefing delivery, review, Crashlytics upload, SMB)** —
    most of Distribution + Pulse + Crashlytics + Briefing is verified on emulator API 36 (see
    Shipped). Still unrun: **actual scheduled notification delivery** for Pulse (idle trigger over
    days) and Briefing (a real morning fire), the **in-app review** flow (Play-track only),
@@ -372,17 +371,17 @@ is its seed). The remaining queue is smaller storage/verification items before t
 
 ### Deferred to last, by explicit user decision
 
-5. **Pro entitlement / Google Play Billing v6.** Ads now show to every user with no
+4. **Pro entitlement / Google Play Billing v6.** Ads now show to every user with no
    relief, and the `adsEnabled` seam in `AdsController` exists for exactly this. It would
    otherwise be a strong "next" candidate (small, closes the AdMob grill's deliberate
    gap, unblocks the two ad formats below) — **but the user has explicitly chosen to
    build this dead last**, after every other buildable-now feature. Design is already
    locked through Q4 (see "Grilled — HELD" above); only Q5 and implementation remain.
-6. **Interstitial ads (player-exit, capped)** — parked pending Q1: does purchasing Pro
+5. **Interstitial ads (player-exit, capped)** — parked pending Q1: does purchasing Pro
    suppress interstitials as part of "remove ads," or is Pro scoped to banners/native
    only? Sequenced after Pro/Billing by construction, and therefore also last.
-7. **Rewarded ads** — needs the Pro entitlement to exist first (e.g. "watch an ad to
-   unlock a Pro feature for 24h"), so it is sequenced after item 5, and therefore also
+6. **Rewarded ads** — needs the Pro entitlement to exist first (e.g. "watch an ad to
+   unlock a Pro feature for 24h"), so it is sequenced after item 4, and therefore also
    last.
 
 ## Blocked

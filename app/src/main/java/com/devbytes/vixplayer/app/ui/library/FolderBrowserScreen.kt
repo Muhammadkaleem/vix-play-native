@@ -107,6 +107,9 @@ fun FolderBrowserScreen(
     var selectionMenu by remember { mutableStateOf(false) }
     // Non-null while choosing a destination; the flag says move vs copy.
     var choosingDestination by remember { mutableStateOf<Boolean?>(null) }
+    // Non-null (isMove) while the "new folder" name dialog is open, carried over from the picker.
+    var newFolderMove by remember { mutableStateOf<Boolean?>(null) }
+    var newFolderName by remember { mutableStateOf("") }
     val destinations by viewModel.destinations.collectAsStateWithLifecycle()
     val transfer by viewModel.transfer.collectAsStateWithLifecycle()
     val viewMode by viewModel.viewMode.collectAsStateWithLifecycle()
@@ -397,14 +400,29 @@ fun FolderBrowserScreen(
             onDismissRequest = { choosingDestination = null },
             title = { Text(if (isMove) "Move to…" else "Copy to…") },
             text = {
-                if (destinations.isEmpty()) {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    // Create-a-new-folder entry, always available (even with no existing folders).
                     Text(
-                        text = "No other folders contain videos yet.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = "+  New folder…",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                choosingDestination = null
+                                newFolderName = ""
+                                newFolderMove = isMove
+                            }
+                            .padding(vertical = 12.dp),
                     )
-                } else {
-                    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    if (destinations.isEmpty()) {
+                        Text(
+                            text = "No other folders with videos yet.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 12.dp),
+                        )
+                    } else {
                         destinations.forEach { folder ->
                             Text(
                                 text = folder.name,
@@ -430,6 +448,53 @@ fun FolderBrowserScreen(
             confirmButton = {},
             dismissButton = {
                 TextButton(onClick = { choosingDestination = null }) { Text("Cancel") }
+            },
+        )
+    }
+
+    // Name a new destination folder. MediaStore can't make an empty dir, so the folder
+    // appears once the moved/copied files land in it.
+    newFolderMove?.let { isMove ->
+        val existing = remember(destinations) { destinations.map { it.name.lowercase() }.toSet() }
+        val error = newFolderNameError(newFolderName, existing)
+        AlertDialog(
+            onDismissRequest = { newFolderMove = null },
+            title = { Text("New folder") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = newFolderName,
+                        onValueChange = { newFolderName = it },
+                        singleLine = true,
+                        isError = newFolderName.isNotEmpty() && error != null,
+                        label = { Text("Folder name") },
+                    )
+                    if (newFolderName.isNotEmpty() && error != null) {
+                        Text(
+                            text = error,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = error == null,
+                    onClick = {
+                        val name = newFolderName
+                        newFolderMove = null
+                        viewModel.transferToNewFolder(name, isMove) { sender ->
+                            deleteConsent.launch(
+                                androidx.activity.result.IntentSenderRequest.Builder(sender).build()
+                            )
+                        }
+                    },
+                ) { Text("Create") }
+            },
+            dismissButton = {
+                TextButton(onClick = { newFolderMove = null }) { Text("Cancel") }
             },
         )
     }
@@ -516,6 +581,20 @@ fun FolderBrowserScreen(
                 TextButton(onClick = { renaming = false }) { Text("Cancel") }
             },
         )
+    }
+}
+
+/** Validates a proposed new-folder name; returns an error message, or null when valid. */
+private fun newFolderNameError(raw: String, existingLowercase: Set<String>): String? {
+    val name = raw.trim()
+    return when {
+        name.isBlank() -> "Enter a name"
+        name.startsWith(".") -> "Name can't start with a dot"
+        name.any { it in "/\\:*?\"<>|" || it.code < 32 } -> "Name has invalid characters"
+        name.length > 100 -> "Name is too long"
+        name.trimEnd('.', ' ').lowercase() in existingLowercase ->
+            "A folder with that name already exists"
+        else -> null
     }
 }
 

@@ -250,17 +250,40 @@ class FolderBrowserViewModel @Inject constructor(
         destination: FolderEntry,
         deleteSource: Boolean,
         onNeedsConsent: (android.content.IntentSender) -> Unit,
+    ) = runTransfer(deleteSource, onNeedsConsent) {
+        // Resolve the destination directory from a file that already lives there;
+        // FolderEntry carries no path of its own.
+        runCatching {
+            mediaRepository.queryVideosInFolder(destination.bucketId)
+                .firstOrNull()?.path?.substringBeforeLast('/')
+        }.getOrNull()
+    }
+
+    /**
+     * Copies (or moves) the selection into a **new** folder [name] under the primary volume's
+     * Movies directory. MediaStore can't create an empty dir, so the folder materialises when
+     * the files land there (RELATIVE_PATH insert/update). Same volume, so a move gets the
+     * in-place fast path for free. [name] is assumed already validated by the caller.
+     */
+    fun transferToNewFolder(
+        name: String,
+        deleteSource: Boolean,
+        onNeedsConsent: (android.content.IntentSender) -> Unit,
+    ) = runTransfer(deleteSource, onNeedsConsent) {
+        "/storage/emulated/0/Movies/${name.trim().trimEnd('.', ' ')}"
+    }
+
+    /** Shared move/copy core, keyed on a lazily-resolved destination directory. */
+    private fun runTransfer(
+        deleteSource: Boolean,
+        onNeedsConsent: (android.content.IntentSender) -> Unit,
+        dirResolver: suspend () -> String?,
     ) {
         val videos = selectedVideos(visibleVideos())
         if (videos.isEmpty()) return
 
         transferJob = viewModelScope.launch {
-            // Resolve the destination directory from a file that already lives there;
-            // FolderEntry carries no path of its own.
-            val dir = runCatching {
-                mediaRepository.queryVideosInFolder(destination.bucketId)
-                    .firstOrNull()?.path?.substringBeforeLast('/')
-            }.getOrNull()
+            val dir = dirResolver()
 
             if (dir.isNullOrBlank()) {
                 _message.value = "Couldn't resolve that folder"
