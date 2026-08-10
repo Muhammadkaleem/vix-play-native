@@ -79,6 +79,20 @@ class MediaDeleter @Inject constructor(
         DeleteResult.Deleted(deleted)
     }
 
+    /**
+     * Restores trashed items — the inverse of [delete] on API 30+. Same `createTrashRequest`
+     * API with `value = false`, so it takes the batch and shows one OS confirmation. Trash only
+     * exists on API 30+, so below that there is nothing to restore.
+     */
+    suspend fun restore(uris: List<Uri>): DeleteResult = withContext(Dispatchers.IO) {
+        if (uris.isEmpty()) return@withContext DeleteResult.Deleted(0)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            return@withContext DeleteResult.Failed("Nothing to restore")
+        }
+        val pending = MediaStore.createTrashRequest(context.contentResolver, uris, /* value = */ false)
+        DeleteResult.NeedsConsent(pending.intentSender)
+    }
+
     /** True when removal goes to the system trash and is therefore recoverable. */
     fun isRecoverable(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
 

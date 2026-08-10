@@ -48,6 +48,7 @@ import com.devbytes.vixplayer.app.navigation.SEARCH_ROUTE
 import com.devbytes.vixplayer.app.navigation.SETTINGS_ROUTE
 import com.devbytes.vixplayer.app.navigation.SMB_BROWSER_ROUTE
 import com.devbytes.vixplayer.app.navigation.SUBTITLE_DEFAULTS_ROUTE
+import com.devbytes.vixplayer.app.navigation.TRASH_ROUTE
 import com.devbytes.vixplayer.app.navigation.TAB_AUDIO_ROUTE
 import com.devbytes.vixplayer.app.navigation.TAB_NETWORK_ROUTE
 import com.devbytes.vixplayer.app.navigation.TAB_SETTINGS_ROUTE
@@ -71,6 +72,7 @@ import com.devbytes.vixplayer.app.ui.common.VixBottomNav
 import com.devbytes.vixplayer.app.ui.library.FolderBrowserScreen
 import com.devbytes.vixplayer.app.ui.library.HistoryScreen
 import com.devbytes.vixplayer.app.ui.library.SearchScreen
+import com.devbytes.vixplayer.app.ui.library.TrashScreen
 import com.devbytes.vixplayer.app.ui.network.CastScreen
 import com.devbytes.vixplayer.app.ui.network.NetworkScreen
 import com.devbytes.vixplayer.app.ui.network.NetworkStreamScreen
@@ -294,6 +296,7 @@ fun VixPlayNavGraph(
                         },
                         onSearchClick = { navController.navigate(searchRoute()) },
                         onHistoryClick = { navController.navigate(HISTORY_ROUTE) },
+                        onTrashClick = { navController.navigate(TRASH_ROUTE) },
                         onOpenBriefing = { navController.navigate(BRIEFING_ROUTE) },
                     )
                 }
@@ -324,6 +327,10 @@ fun VixPlayNavGraph(
                         },
                         onBack = { navController.popBackStack() },
                     )
+                }
+
+                composable(TRASH_ROUTE) {
+                    TrashScreen(onBack = { navController.popBackStack() })
                 }
             }
 

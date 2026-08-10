@@ -14,6 +14,7 @@ const val LIBRARY_ROUTE        = "library"
 const val FOLDER_BROWSER_ROUTE = "folder_browser?bucketId={bucketId}"
 const val SEARCH_ROUTE         = "search?query={query}"
 const val HISTORY_ROUTE        = "history"
+const val TRASH_ROUTE          = "trash"
 
 // Audio tab destinations
 const val AUDIO_ROUTE     = "audio"

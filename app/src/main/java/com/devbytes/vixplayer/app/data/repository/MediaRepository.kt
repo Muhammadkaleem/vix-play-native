@@ -1,9 +1,13 @@
 package com.devbytes.vixplayer.app.data.repository
 
+import android.content.ContentResolver
 import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
+import android.os.Build
+import android.os.Bundle
 import android.provider.MediaStore
+import androidx.annotation.RequiresApi
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -192,6 +196,52 @@ class MediaRepository @Inject constructor(
             "${MediaStore.Video.Media.BUCKET_ID} = ?",
             arrayOf(bucketId.toString()),
             "${MediaStore.Video.Media.DATE_MODIFIED} DESC",
+        )?.use { cursor ->
+            val idCol   = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+            val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
+            val durCol  = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
+            val pathCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATA)
+            val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
+            while (cursor.moveToNext()) {
+                val id = cursor.getLong(idCol)
+                videos.add(
+                    VideoFile(
+                        mediaStoreId = id,
+                        uri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id),
+                        name = cursor.getString(nameCol) ?: "Unknown",
+                        durationMs = cursor.getLong(durCol),
+                        path = cursor.getString(pathCol) ?: "",
+                        sizeBytes = cursor.getLong(sizeCol),
+                    )
+                )
+            }
+        }
+        videos
+    }
+
+    /**
+     * Videos currently in the system trash (API 30+ only; there is no trash below 30).
+     * `MATCH_ONLY` flips the default query, which *excludes* trashed items, to return only them.
+     */
+    @RequiresApi(Build.VERSION_CODES.R)
+    suspend fun queryTrashedVideos(): List<VideoFile> = withContext(Dispatchers.IO) {
+        val videos = mutableListOf<VideoFile>()
+        val projection = arrayOf(
+            MediaStore.Video.Media._ID,
+            MediaStore.Video.Media.DISPLAY_NAME,
+            MediaStore.Video.Media.DURATION,
+            MediaStore.Video.Media.DATA,
+            MediaStore.Video.Media.SIZE,
+        )
+        val args = Bundle().apply {
+            putInt(MediaStore.QUERY_ARG_MATCH_TRASHED, MediaStore.MATCH_ONLY)
+            putString(
+                ContentResolver.QUERY_ARG_SQL_SORT_ORDER,
+                "${MediaStore.Video.Media.DATE_MODIFIED} DESC",
+            )
+        }
+        context.contentResolver.query(
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI, projection, args, null,
         )?.use { cursor ->
             val idCol   = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
             val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)

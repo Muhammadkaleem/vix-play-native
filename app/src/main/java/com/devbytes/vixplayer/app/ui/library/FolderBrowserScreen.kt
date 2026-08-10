@@ -85,6 +85,7 @@ fun FolderBrowserScreen(
     onVideoClick: (Uri) -> Unit = {},
     onSearchClick: () -> Unit = {},
     onHistoryClick: () -> Unit = {},
+    onTrashClick: () -> Unit = {},
     onOpenBriefing: () -> Unit = {},
     viewModel: FolderBrowserViewModel = hiltViewModel(),
 ) {
@@ -299,6 +300,16 @@ fun FolderBrowserScreen(
                                 painter = painterResource(R.drawable.ic_history),
                                 contentDescription = "History",
                             )
+                        }
+                        // Trash only exists on API 30+, so the entry is hidden below that
+                        // (there would be nothing to show).
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            IconButton(onClick = onTrashClick) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_delete),
+                                    contentDescription = "Trash",
+                                )
+                            }
                         }
                         Box {
                             IconButton(onClick = { sortMenu = true }) {
