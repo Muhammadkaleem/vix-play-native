@@ -1,5 +1,6 @@
 package com.devbytes.vixplayer.app.ui.library
 
+import android.os.Build
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.devbytes.vixplayer.app.data.repository.FolderEntry
@@ -120,6 +121,10 @@ class FolderBrowserViewModel @Inject constructor(
     /** True while a move is awaiting consent to remove the originals. */
     private var movePending = false
 
+    /** Non-null while a same-volume fast move waits for its write-consent result:
+     *  (source uris, destination dir). Set before prompting, applied on consent. */
+    private var pendingFastMove: Pair<List<android.net.Uri>, String>? = null
+
     /** The rename awaiting system consent, if any. */
     private var pendingRename: Triple<android.net.Uri, String, String>? = null
 
@@ -168,6 +173,23 @@ class FolderBrowserViewModel @Inject constructor(
     }
 
     fun onDeleteConsentResult(granted: Boolean) {
+        // Same-volume fast move: consent granted the writes, so apply the RELATIVE_PATH
+        // updates now (a granted delete-request would have been performed by the OS itself).
+        pendingFastMove?.let { (uris, dir) ->
+            pendingFastMove = null
+            viewModelScope.launch {
+                val result = if (granted) {
+                    mediaTransfer.applyMove(uris, dir)
+                } else {
+                    TransferResult.Cancelled(0)
+                }
+                reloadCurrentFolder()
+                clearSelection()
+                _message.value = describe(result, moved = true)
+            }
+            return
+        }
+
         val wasMove = movePending
         movePending = false
         if (!granted) {
@@ -246,6 +268,18 @@ class FolderBrowserViewModel @Inject constructor(
                 return@launch
             }
 
+            // Same-volume fast path (API 30+): move in place via a RELATIVE_PATH update — no
+            // byte copy — behind one batch write-consent. Decided before prompting so we never
+            // show the wrong dialog. Anything else falls through to copy-then-delete below.
+            if (deleteSource &&
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+                sameVolume(videos, dir)
+            ) {
+                pendingFastMove = videos.map { it.uri } to dir
+                onNeedsConsent(mediaTransfer.writeRequest(videos.map { it.uri }))
+                return@launch
+            }
+
             _transfer.value = TransferProgress(0, videos.size, "", 0f)
             val result = mediaTransfer.transfer(videos, dir, deleteSource) { progress ->
                 _transfer.value = progress
@@ -276,6 +310,25 @@ class FolderBrowserViewModel @Inject constructor(
         transferJob?.cancel()
         transferJob = null
         _transfer.value = null
+    }
+
+    /** True only when every source and the destination sit on the same storage volume —
+     *  the precondition for an in-place RELATIVE_PATH move. */
+    private fun sameVolume(videos: List<VideoFile>, destDir: String): Boolean {
+        val destVol = volumeRoot(destDir) ?: return false
+        return videos.all { volumeRoot(it.path) == destVol }
+    }
+
+    /** Extracts the volume root of an absolute media path:
+     *  `/storage/emulated/0/…` → `/storage/emulated/0`; `/storage/1AF3-2B0C/…` → `/storage/1AF3-2B0C`. */
+    private fun volumeRoot(path: String): String? {
+        val parts = path.split('/').filter { it.isNotEmpty() }
+        return when {
+            parts.size >= 3 && parts[0] == "storage" && parts[1] == "emulated" ->
+                "/storage/emulated/${parts[2]}"
+            parts.size >= 2 && parts[0] == "storage" -> "/storage/${parts[1]}"
+            else -> null
+        }
     }
 
     private fun describe(result: TransferResult, moved: Boolean): String {

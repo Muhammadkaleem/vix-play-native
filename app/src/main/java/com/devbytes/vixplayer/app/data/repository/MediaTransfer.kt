@@ -2,9 +2,11 @@ package com.devbytes.vixplayer.app.data.repository
 
 import android.content.ContentValues
 import android.content.Context
+import android.content.IntentSender
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
+import androidx.annotation.RequiresApi
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
@@ -101,6 +103,39 @@ class MediaTransfer @Inject constructor(
     }
 
     /**
+     * Same-volume fast path (API 30+). Instead of copying bytes then deleting, the file is
+     * moved in place by updating its `RELATIVE_PATH` — instant regardless of size, and atomic
+     * per file (it ends up at the source or the destination, never lost or duplicated).
+     *
+     * The app doesn't own these files, so the batch of updates needs write consent first:
+     * [writeRequest] builds a single [IntentSender] for all [uris]; once the user approves,
+     * [applyMove] performs the updates.
+     */
+    @RequiresApi(Build.VERSION_CODES.R)
+    fun writeRequest(uris: List<Uri>): IntentSender =
+        MediaStore.createWriteRequest(context.contentResolver, uris).intentSender
+
+    /** Applies the in-place move after [writeRequest] consent. A per-file failure (e.g. a
+     *  name collision at the destination) leaves that file at its source and is counted. */
+    suspend fun applyMove(uris: List<Uri>, destinationDir: String): TransferResult.Completed =
+        withContext(Dispatchers.IO) {
+            val resolver = context.contentResolver
+            val relative = relativePathFor(destinationDir).trimEnd('/') + "/"
+            var succeeded = 0
+            var failed = 0
+            for (uri in uris) {
+                val moved = runCatching {
+                    val values = ContentValues().apply {
+                        put(MediaStore.MediaColumns.RELATIVE_PATH, relative)
+                    }
+                    resolver.update(uri, values, null, null) > 0
+                }.getOrDefault(false)
+                if (moved) succeeded++ else failed++
+            }
+            TransferResult.Completed(succeeded, failed)
+        }
+
+    /**
      * Streams one file into [destinationDir], returning the new URI.
      *
      * Throws on any failure, having first removed the partial destination — the caller
@@ -166,7 +201,7 @@ class MediaTransfer @Inject constructor(
      * Falls back to the standard Movies directory if the shape is unrecognised, so a
      * transfer never writes somewhere unexpected.
      */
-    private fun relativePathFor(absoluteDir: String): String {
+    fun relativePathFor(absoluteDir: String): String {
         val marker = "/0/"
         val index = absoluteDir.indexOf(marker)
         val relative = if (index >= 0) {
