@@ -155,6 +155,26 @@
             </intent-filter>
         </service>
 
+        <!-- Firebase Cloud Messaging: receives push notifications. -->
+        <service
+            android:name=".notifications.VixMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- Defaults the system uses to render FCM notification messages in the background. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_play" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/dark_accent" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="push" />
+
         <!-- Library Pulse re-engagement notifications: one-tap "turn off" action. -->
         <receiver
             android:name=".notifications.PulseActionReceiver"

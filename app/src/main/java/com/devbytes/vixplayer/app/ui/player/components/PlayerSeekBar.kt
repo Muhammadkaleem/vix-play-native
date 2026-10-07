@@ -28,8 +28,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.Canvas
 import com.devbytes.vixplayer.app.ui.theme.OnScrim
+import com.devbytes.vixplayer.app.ui.theme.ScrimStrong
 import com.devbytes.vixplayer.app.ui.theme.TimecodeStyle
-import com.devbytes.vixplayer.app.ui.theme.TrackInactive
 
 @Composable
 fun PlayerSeekBar(
@@ -104,33 +104,34 @@ fun PlayerSeekBar(
                 },
         ) {
             val trackY = size.height / 2f
-            val trackH = 4.dp.toPx()
+            // Slight capsule at rest; thickens while actively seeking.
+            val trackH = (if (isDragging) 9.dp else 5.dp).toPx()
             val r = CornerRadius(trackH / 2f)
 
-            // Background track
+            // Background capsule track (dark, like the gesture pill track)
             drawRoundRect(
-                color = TrackInactive,
+                color = ScrimStrong,
                 topLeft = Offset(0f, trackY - trackH / 2f),
                 size = Size(size.width, trackH),
                 cornerRadius = r,
             )
             // Buffered
             drawRoundRect(
-                color = OnScrim.copy(alpha = 0.35f),
+                color = OnScrim.copy(alpha = 0.3f),
                 topLeft = Offset(0f, trackY - trackH / 2f),
                 size = Size(size.width * bufferedFraction, trackH),
                 cornerRadius = r,
             )
-            // Progress
+            // Progress — white fill, matching the pill sliders
             drawRoundRect(
-                color = accent,
+                color = OnScrim,
                 topLeft = Offset(0f, trackY - trackH / 2f),
                 size = Size(size.width * displayFraction, trackH),
                 cornerRadius = r,
             )
-            // Thumb
+            // Thumb — accent, legible on both the white fill and the dark track
             drawCircle(
-                color = OnScrim,
+                color = accent,
                 radius = if (isDragging) 8.dp.toPx() else 6.dp.toPx(),
                 center = Offset(size.width * displayFraction, trackY),
             )

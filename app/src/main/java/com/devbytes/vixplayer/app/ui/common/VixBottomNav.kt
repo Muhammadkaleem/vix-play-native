@@ -11,6 +11,7 @@ import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
 import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.navigation.TAB_AUDIO_ROUTE
+import com.devbytes.vixplayer.app.navigation.TAB_HOME_ROUTE
 import com.devbytes.vixplayer.app.navigation.TAB_NETWORK_ROUTE
 import com.devbytes.vixplayer.app.navigation.TAB_SETTINGS_ROUTE
 import com.devbytes.vixplayer.app.navigation.TAB_VIDEO_ROUTE
@@ -18,6 +19,7 @@ import com.devbytes.vixplayer.app.navigation.TAB_VIDEO_ROUTE
 private data class NavItem(val tabRoute: String, val iconRes: Int, val label: String)
 
 private val NAV_ITEMS = listOf(
+    NavItem(TAB_HOME_ROUTE,     R.drawable.ic_home,        "Home"),
     NavItem(TAB_VIDEO_ROUTE,    R.drawable.ic_nav_video,   "Video"),
     NavItem(TAB_AUDIO_ROUTE,    R.drawable.ic_nav_audio,   "Audio"),
     NavItem(TAB_NETWORK_ROUTE,  R.drawable.ic_nav_network, "Network"),

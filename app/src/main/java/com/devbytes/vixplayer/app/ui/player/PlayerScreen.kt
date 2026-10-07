@@ -213,6 +213,8 @@ fun PlayerScreen(
     val player = viewModel.player
     val backgroundPlayback by viewModel.backgroundPlayback.collectAsState()
     val subtitleStyle by viewModel.subtitleStyle.collectAsState()
+    val isFavorite by viewModel.isFavorite.collectAsState()
+    val canFavorite by viewModel.canFavorite.collectAsState()
 
     // For a foreign content:// URI (external open) MediaStore has no row to name it, so
     // resolve the display name via OpenableColumns once and hand it to prepareFor as the
@@ -1140,6 +1142,9 @@ fun PlayerScreen(
             onScreenshotClick = { takeScreenshot() },
             onFileInfoClick = { currentSheet = PlayerSheet.FileInfo },
             onLockClick = { locked = true; controlsVisible = false },
+            showFavorite = canFavorite,
+            isFavorite = isFavorite,
+            onFavoriteClick = { viewModel.toggleFavorite() },
             onMenuOpenChange = { menuOpen = it },
             onScrubbingChange = { seekBarDragging = it },
             frameLoader = { thumbnails.frameAt(it) },

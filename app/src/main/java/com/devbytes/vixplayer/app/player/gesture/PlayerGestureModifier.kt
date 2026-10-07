@@ -126,6 +126,15 @@ fun Modifier.playerGestures(
                     val change = event.changes.firstOrNull { it.id == down.id } ?: break
                     if (!change.pressed) break
 
+                    // A second finger means a pinch is starting — hand the gesture to the
+                    // pinch detector and abandon any single-finger interpretation, so the
+                    // leading finger's motion isn't read as volume/brightness/seek while
+                    // zooming. (The zoomed one-finger pan path has the same guard.)
+                    if (event.changes.count { it.pressed } >= 2) {
+                        axis = null
+                        break
+                    }
+
                     // Speed-hold takes over the pointer once long-press engages —
                     // vertical movement varies the multiplier, no axis lock.
                     if (speedActive.value) {

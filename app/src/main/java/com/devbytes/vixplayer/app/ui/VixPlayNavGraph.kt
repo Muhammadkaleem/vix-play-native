@@ -2,6 +2,17 @@ package com.devbytes.vixplayer.app.ui
 
 import android.app.Activity
 import android.net.Uri
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
@@ -11,8 +22,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -35,6 +49,14 @@ import com.devbytes.vixplayer.app.navigation.EQUALIZER_ROUTE
 import com.devbytes.vixplayer.app.navigation.FOLDER_BROWSER_ROUTE
 import com.devbytes.vixplayer.app.navigation.GESTURE_REMAP_ROUTE
 import com.devbytes.vixplayer.app.navigation.HISTORY_ROUTE
+import com.devbytes.vixplayer.app.navigation.HOME_ROUTE
+import com.devbytes.vixplayer.app.navigation.TAB_HOME_ROUTE
+import com.devbytes.vixplayer.app.navigation.VIDEO_LIST_ROUTE
+import com.devbytes.vixplayer.app.navigation.videoListRoute
+import com.devbytes.vixplayer.app.navigation.FOLDER_VIDEOS_ROUTE
+import com.devbytes.vixplayer.app.navigation.folderVideosRoute
+import com.devbytes.vixplayer.app.navigation.SHORTS_FEED_ROUTE
+import com.devbytes.vixplayer.app.ui.dashboard.ShortsFeedScreen
 import com.devbytes.vixplayer.app.navigation.NETWORK_ROUTE
 import com.devbytes.vixplayer.app.navigation.NETWORK_STREAM_ROUTE
 import com.devbytes.vixplayer.app.navigation.NOTIFICATIONS_ROUTE
@@ -63,6 +85,9 @@ import com.devbytes.vixplayer.app.briefing.ui.BriefingScreen
 import com.devbytes.vixplayer.app.briefing.ui.BriefingSettingsScreen
 import com.devbytes.vixplayer.app.briefing.ui.SetupWizardScreen
 import com.devbytes.vixplayer.app.ui.audio.AudioLibraryScreen
+import com.devbytes.vixplayer.app.ui.dashboard.DashboardScreen
+import com.devbytes.vixplayer.app.ui.dashboard.DashboardSource
+import com.devbytes.vixplayer.app.ui.dashboard.VideoListScreen
 import com.devbytes.vixplayer.app.ui.audio.MiniPlayer
 import com.devbytes.vixplayer.app.ui.audio.AudioPlayerScreen
 import com.devbytes.vixplayer.app.ui.audio.EqualizerScreen
@@ -94,6 +119,87 @@ import com.devbytes.vixplayer.app.ui.splash.SplashScreen
  * opens the now-playing screen without disturbing the queue.
  */
 private const val NOW_PLAYING_ID = -1L
+
+// ── Navigation motion system ─────────────────────────────────────────────────
+// A single classifier picks one of three motions per transition (see classifyMotion),
+// so all ~35 destinations share one coherent language with nothing configured per-screen.
+// Durations/easings live here as the one place to retune on-device.
+
+private const val DUR_SLIDE = 300           // forward / back shared-axis
+private const val DUR_MODAL = 300           // full-screen fade + scale
+private const val FADE_THROUGH_OUT = 90     // tab switch: outgoing fade
+private const val FADE_THROUGH_IN = 180     // tab switch: incoming fade (delayed by _OUT)
+
+/** Material 3 emphasized easings — the "settles into place" quality that reads as designed. */
+private val EmphasizedDecelerate = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
+private val EmphasizedAccelerate = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)
+
+/** Full-screen surfaces get the modal fade+scale (not a lateral page motion). */
+private val FULLSCREEN_ROUTES = setOf(
+    PLAYER_ROUTE, AUDIO_PLAYER_ROUTE, SHORTS_FEED_ROUTE, SPLASH_ROUTE,
+    BRIEFING_ROUTE, BRIEFING_SETUP_ROUTE, BRIEFING_SETTINGS_ROUTE,
+)
+
+private enum class NavMotion { FORWARD, TAB, FULLSCREEN }
+
+/**
+ * Classifies a transition by the relationship between the two destinations — not by which
+ * screen it is — so a tab switch that *restores a deep sub-screen* is still detected as a
+ * tab switch (cross-graph), resolving the saveState/restoreState vs forward-slide conflict.
+ */
+private fun classifyMotion(initial: NavBackStackEntry, target: NavBackStackEntry): NavMotion {
+    val ir = initial.destination.route
+    val tr = target.destination.route
+    if (ir in FULLSCREEN_ROUTES || tr in FULLSCREEN_ROUTES) return NavMotion.FULLSCREEN
+    // Peer tabs live in different nested graphs (tab_home / tab_video / …).
+    return if (initial.destination.parent?.route != target.destination.parent?.route)
+        NavMotion.TAB else NavMotion.FORWARD
+}
+
+private fun enterFor(motion: NavMotion, slidePx: Int): EnterTransition = when (motion) {
+    NavMotion.FULLSCREEN -> fadeIn(tween(DUR_MODAL, easing = FastOutSlowInEasing)) +
+        scaleIn(initialScale = 0.92f, animationSpec = tween(DUR_MODAL, easing = EmphasizedDecelerate))
+    NavMotion.TAB -> fadeIn(tween(FADE_THROUGH_IN, delayMillis = FADE_THROUGH_OUT, easing = FastOutSlowInEasing)) +
+        scaleIn(initialScale = 0.92f, animationSpec = tween(FADE_THROUGH_IN, delayMillis = FADE_THROUGH_OUT, easing = EmphasizedDecelerate))
+    NavMotion.FORWARD -> fadeIn(tween(DUR_SLIDE, easing = FastOutSlowInEasing)) +
+        slideInHorizontally(tween(DUR_SLIDE, easing = EmphasizedDecelerate)) { slidePx }
+}
+
+private fun exitFor(motion: NavMotion, slidePx: Int): ExitTransition = when (motion) {
+    NavMotion.FULLSCREEN -> fadeOut(tween(DUR_MODAL, easing = FastOutSlowInEasing)) +
+        scaleOut(targetScale = 0.92f, animationSpec = tween(DUR_MODAL, easing = EmphasizedAccelerate))
+    NavMotion.TAB -> fadeOut(tween(FADE_THROUGH_OUT, easing = FastOutSlowInEasing))
+    NavMotion.FORWARD -> fadeOut(tween(DUR_SLIDE, easing = FastOutSlowInEasing)) +
+        slideOutHorizontally(tween(DUR_SLIDE, easing = EmphasizedAccelerate)) { -slidePx }
+}
+
+private fun popEnterFor(motion: NavMotion, slidePx: Int): EnterTransition = when (motion) {
+    NavMotion.FULLSCREEN -> fadeIn(tween(DUR_MODAL, easing = FastOutSlowInEasing)) +
+        scaleIn(initialScale = 0.92f, animationSpec = tween(DUR_MODAL, easing = EmphasizedDecelerate))
+    NavMotion.TAB -> fadeIn(tween(FADE_THROUGH_IN, delayMillis = FADE_THROUGH_OUT, easing = FastOutSlowInEasing)) +
+        scaleIn(initialScale = 0.92f, animationSpec = tween(FADE_THROUGH_IN, delayMillis = FADE_THROUGH_OUT, easing = EmphasizedDecelerate))
+    // Returning screen slides back in from the left.
+    NavMotion.FORWARD -> fadeIn(tween(DUR_SLIDE, easing = FastOutSlowInEasing)) +
+        slideInHorizontally(tween(DUR_SLIDE, easing = EmphasizedDecelerate)) { -slidePx }
+}
+
+private fun popExitFor(motion: NavMotion, slidePx: Int): ExitTransition = when (motion) {
+    NavMotion.FULLSCREEN -> fadeOut(tween(DUR_MODAL, easing = FastOutSlowInEasing)) +
+        scaleOut(targetScale = 0.92f, animationSpec = tween(DUR_MODAL, easing = EmphasizedAccelerate))
+    NavMotion.TAB -> fadeOut(tween(FADE_THROUGH_OUT, easing = FastOutSlowInEasing))
+    // Current screen exits to the right on back.
+    NavMotion.FORWARD -> fadeOut(tween(DUR_SLIDE, easing = FastOutSlowInEasing)) +
+        slideOutHorizontally(tween(DUR_SLIDE, easing = EmphasizedAccelerate)) { slidePx }
+}
+
+/** Switches bottom-nav tabs the same way VixBottomNav does (save/restore per-tab state). */
+private fun switchTab(navController: androidx.navigation.NavController, tabRoute: String) {
+    navController.navigate(tabRoute) {
+        popUpTo(TAB_HOME_ROUTE) { saveState = true }
+        launchSingleTop = true
+        restoreState = true
+    }
+}
 
 @Composable
 fun VixPlayNavGraph(
@@ -136,7 +242,7 @@ fun VixPlayNavGraph(
     // auto-resumes from its saved position via the player's existing MediaStore-id path.
     LaunchedEffect(pulsePlayUri) {
         if (pulsePlayUri != null) {
-            navController.navigate(TAB_VIDEO_ROUTE) {
+            navController.navigate(TAB_HOME_ROUTE) {
                 popUpTo(SPLASH_ROUTE) { inclusive = true }
                 launchSingleTop = true
             }
@@ -148,7 +254,7 @@ fun VixPlayNavGraph(
     // Briefing notification tap: land on the brief with the library home beneath (Back → home).
     LaunchedEffect(openBriefing) {
         if (openBriefing) {
-            navController.navigate(TAB_VIDEO_ROUTE) {
+            navController.navigate(TAB_HOME_ROUTE) {
                 popUpTo(SPLASH_ROUTE) { inclusive = true }
                 launchSingleTop = true
             }
@@ -159,6 +265,7 @@ fun VixPlayNavGraph(
 
     val isFullScreen = currentRoute == PLAYER_ROUTE
             || currentRoute == AUDIO_PLAYER_ROUTE
+            || currentRoute == SHORTS_FEED_ROUTE
             || currentRoute == SPLASH_ROUTE
             || currentRoute == BRIEFING_ROUTE
             || currentRoute == BRIEFING_SETUP_ROUTE
@@ -196,7 +303,7 @@ fun VixPlayNavGraph(
                         currentDestination = currentDestination,
                         onNavigate = { tabRoute ->
                             navController.navigate(tabRoute) {
-                                popUpTo(TAB_VIDEO_ROUTE) { saveState = true }
+                                popUpTo(TAB_HOME_ROUTE) { saveState = true }
                                 launchSingleTop = true
                                 restoreState = true
                             }
@@ -208,10 +315,17 @@ fun VixPlayNavGraph(
         contentWindowInsets = WindowInsets(0),
     ) { padding ->
 
+        // 30dp shared-axis offset in px (needs density; computed once per recomposition).
+        val slidePx = with(LocalDensity.current) { 30.dp.roundToPx() }
+
         NavHost(
             navController = navController,
             startDestination = SPLASH_ROUTE,
             modifier = if (isFullScreen) Modifier else Modifier.padding(padding),
+            enterTransition = { enterFor(classifyMotion(initialState, targetState), slidePx) },
+            exitTransition = { exitFor(classifyMotion(initialState, targetState), slidePx) },
+            popEnterTransition = { popEnterFor(classifyMotion(initialState, targetState), slidePx) },
+            popExitTransition = { popExitFor(classifyMotion(initialState, targetState), slidePx) },
         ) {
 
             // ── Splash / Permission gate ─────────────────────────────────────
@@ -222,7 +336,7 @@ fun VixPlayNavGraph(
                     // past splash to the player.
                     autoRequest = externalUri == null && pulsePlayUri == null && !openBriefing,
                     onNavigateToLibrary = {
-                        navController.navigate(TAB_VIDEO_ROUTE) {
+                        navController.navigate(TAB_HOME_ROUTE) {
                             popUpTo(SPLASH_ROUTE) { inclusive = true }
                         }
                     },
@@ -243,6 +357,11 @@ fun VixPlayNavGraph(
                         if (!navController.popBackStack()) (context as? Activity)?.finish()
                     },
                 )
+            }
+
+            // ── Top-level: Shorts feed (TikTok-style vertical pager) ─────────
+            composable(SHORTS_FEED_ROUTE) {
+                ShortsFeedScreen(onBack = { navController.popBackStack() })
             }
 
             // ── Top-level: Audio Player ──────────────────────────────────────
@@ -274,6 +393,61 @@ fun VixPlayNavGraph(
                     onSetup = { navController.navigate(BRIEFING_SETUP_ROUTE) },
                     onViewBrief = { navController.navigate(BRIEFING_ROUTE) },
                 )
+            }
+
+            // ── Tab: Home (dashboard) ────────────────────────────────────────
+            navigation(startDestination = HOME_ROUTE, route = TAB_HOME_ROUTE) {
+
+                composable(HOME_ROUTE) {
+                    DashboardScreen(
+                        onVideoClick = { video ->
+                            navController.navigate(playerRoute(Uri.encode(video.uri.toString())))
+                        },
+                        // Tap a folder tile → its video list; "Browse all" → the Videos tab.
+                        onFolderClick = { bucketId, name ->
+                            navController.navigate(folderVideosRoute(bucketId, Uri.encode(name)))
+                        },
+                        onBrowseFolders = { switchTab(navController, TAB_VIDEO_ROUTE) },
+                        onViewAll = { source -> navController.navigate(videoListRoute(source.name)) },
+                        onOpenShorts = { navController.navigate(SHORTS_FEED_ROUTE) },
+                        onSearch = { navController.navigate(searchRoute()) },
+                    )
+                }
+
+                composable(
+                    route = VIDEO_LIST_ROUTE,
+                    arguments = listOf(navArgument("source") { type = NavType.StringType }),
+                ) { entry ->
+                    val source = entry.arguments?.getString("source")
+                        ?.let { runCatching { DashboardSource.valueOf(it) }.getOrNull() }
+                        ?: DashboardSource.RECENTLY_ADDED
+                    VideoListScreen(
+                        source = source,
+                        onVideoClick = { video ->
+                            navController.navigate(playerRoute(Uri.encode(video.uri.toString())))
+                        },
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+
+                composable(
+                    route = FOLDER_VIDEOS_ROUTE,
+                    arguments = listOf(
+                        navArgument("bucketId") { type = NavType.LongType },
+                        navArgument("title") { type = NavType.StringType },
+                    ),
+                ) { entry ->
+                    val bucketId = entry.arguments?.getLong("bucketId") ?: return@composable
+                    val title = entry.arguments?.getString("title")?.let { Uri.decode(it) }.orEmpty()
+                    VideoListScreen(
+                        folderBucketId = bucketId,
+                        folderTitle = title,
+                        onVideoClick = { video ->
+                            navController.navigate(playerRoute(Uri.encode(video.uri.toString())))
+                        },
+                        onBack = { navController.popBackStack() },
+                    )
+                }
             }
 
             // ── Tab: Video ───────────────────────────────────────────────────

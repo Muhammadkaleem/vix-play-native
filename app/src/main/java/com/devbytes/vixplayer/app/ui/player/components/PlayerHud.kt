@@ -64,6 +64,9 @@ fun PlayerHud(
     onScreenshotClick: () -> Unit = {},
     onFileInfoClick: () -> Unit = {},
     onLockClick: () -> Unit = {},
+    showFavorite: Boolean = false,
+    isFavorite: Boolean = false,
+    onFavoriteClick: () -> Unit = {},
     onMenuOpenChange: (Boolean) -> Unit = {},
     onScrubbingChange: (Boolean) -> Unit = {},
     /** Supplies scrub-preview frames; null disables the seek-bar thumbnail. */
@@ -132,6 +135,16 @@ fun PlayerHud(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
+                // Favourite the current video (hidden for non-MediaStore URIs).
+                if (showFavorite) {
+                    IconButton(onClick = onFavoriteClick) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_favorite),
+                            contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
+                            tint = if (isFavorite) MaterialTheme.colorScheme.primary else OnScrim,
+                        )
+                    }
+                }
                 // Priority controls, promoted from the overflow to direct top-bar
                 // buttons (most-used first): Subtitles, Audio track, Speed, then Lock.
                 IconButton(onClick = onSubtitlesClick) {

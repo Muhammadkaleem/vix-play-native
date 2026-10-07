@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.devbytes.vixplayer.app.notifications.PulseSettings
 import com.devbytes.vixplayer.app.notifications.PulseState
@@ -55,6 +56,7 @@ class SettingsRepository @Inject constructor(
         val SUB_TYPEFACE            = stringPreferencesKey("subtitle_typeface")
         val SUB_OVERRIDE_EMBEDDED   = booleanPreferencesKey("subtitle_override_embedded")
         val COMPLETED_PLAYBACKS     = intPreferencesKey("completed_playbacks")
+        val PINNED_FOLDERS          = stringSetPreferencesKey("pinned_folders")
         // Library Pulse notifications: per-trigger toggles + scheduling bookkeeping.
         val PULSE_MASTER            = booleanPreferencesKey("pulse_master")
         val PULSE_RESUME            = booleanPreferencesKey("pulse_resume")
@@ -167,6 +169,19 @@ class SettingsRepository @Inject constructor(
             } ?: default.typeface,
             overrideEmbedded = prefs[Keys.SUB_OVERRIDE_EMBEDDED] ?: default.overrideEmbedded,
         )
+    }
+
+    /** Folders the user pinned to the top of the folder lists (a small config-like set). */
+    val pinnedFolders: Flow<Set<Long>> = context.dataStore.data.map { p ->
+        (p[Keys.PINNED_FOLDERS] ?: emptySet()).mapNotNull { it.toLongOrNull() }.toSet()
+    }
+
+    suspend fun togglePinnedFolder(bucketId: Long) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[Keys.PINNED_FOLDERS] ?: emptySet()
+            val key = bucketId.toString()
+            prefs[Keys.PINNED_FOLDERS] = if (key in current) current - key else current + key
+        }
     }
 
     /** Library Pulse per-trigger toggles + master switch, for the Notifications screen. */

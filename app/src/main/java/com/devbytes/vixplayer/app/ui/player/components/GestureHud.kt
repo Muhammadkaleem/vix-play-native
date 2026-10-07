@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -20,6 +21,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -63,9 +68,11 @@ enum class OrientationMode(val label: String) {
 }
 
 /**
- * Centered transient pill shown while a vertical drag adjusts brightness/volume.
- * Orthogonal to the persistent control chrome — it fades on its own dismiss
- * timer and never touches [controlsVisible]. [fraction] is 0f..1f.
+ * Transient vertical pill slider shown while a vertical drag adjusts brightness/volume
+ * (One UI quick-panel style: dark capsule track, white fill rising from the bottom, with
+ * the type glyph fixed just below the capsule). Side-anchored to the matching gesture zone —
+ * brightness on the left, volume on the right. Orthogonal to the persistent control chrome:
+ * it fades on its own dismiss timer and never touches [controlsVisible]. [fraction] is 0f..1f.
  */
 @Composable
 fun GestureHud(
@@ -73,44 +80,63 @@ fun GestureHud(
     fraction: Float,
     modifier: Modifier = Modifier,
 ) {
-    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    // Hold the last side so the exit fade stays anchored to the same edge — deriving
+    // alignment from the live (nulling) kind made the HUD jump to centre mid-dismiss.
+    var lastKind by remember { mutableStateOf(GestureHudKind.BRIGHTNESS) }
+    if (kind != null) lastKind = kind
+    val alignment = when (lastKind) {
+        GestureHudKind.BRIGHTNESS -> Alignment.CenterStart
+        GestureHudKind.VOLUME -> Alignment.CenterEnd
+    }
+    Box(modifier = modifier.fillMaxSize(), contentAlignment = alignment) {
         AnimatedVisibility(visible = kind != null, enter = fadeIn(), exit = fadeOut()) {
-            val f = fraction.coerceIn(0f, 1f)
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(50))
-                    .background(ScrimStrong)
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                val icon = when (kind) {
-                    GestureHudKind.VOLUME -> if (f <= 0f) R.drawable.ic_mute else R.drawable.ic_volume
-                    GestureHudKind.BRIGHTNESS, null -> R.drawable.ic_brightness
-                }
-                Icon(
-                    painter = painterResource(icon),
-                    contentDescription = null,
-                    tint = OnScrim,
-                    modifier = Modifier.size(22.dp),
-                )
-                Spacer(Modifier.width(14.dp))
-                Box(
-                    modifier = Modifier
-                        .width(120.dp)
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(OnScrim.copy(alpha = 0.25f)),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(f)
-                            .fillMaxHeight()
-                            .clip(RoundedCornerShape(50))
-                            .background(DarkAccent),
-                    )
-                }
-            }
+            VerticalPillSlider(
+                kind = lastKind,
+                fraction = fraction.coerceIn(0f, 1f),
+                modifier = Modifier.padding(horizontal = 36.dp),
+            )
         }
+    }
+}
+
+@Composable
+private fun VerticalPillSlider(
+    kind: GestureHudKind,
+    fraction: Float,
+    modifier: Modifier = Modifier,
+) {
+    val icon = when (kind) {
+        GestureHudKind.VOLUME -> if (fraction <= 0f) R.drawable.ic_mute else R.drawable.ic_volume
+        GestureHudKind.BRIGHTNESS -> R.drawable.ic_brightness
+    }
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        // Capsule track with the white fill rising bottom-up to the current level.
+        Box(
+            modifier = Modifier
+                .width(54.dp)
+                .height(210.dp)
+                .clip(RoundedCornerShape(50))
+                .background(ScrimStrong),
+        ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .fillMaxHeight(fraction)
+                    .background(OnScrim),
+            )
+        }
+        // Fixed type glyph below the capsule — never moves with the fill.
+        Spacer(Modifier.height(16.dp))
+        Icon(
+            painter = painterResource(icon),
+            contentDescription = null,
+            tint = OnScrim,
+            modifier = Modifier.size(28.dp),
+        )
     }
 }
 

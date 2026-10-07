@@ -171,6 +171,12 @@ class MediaRepository @Inject constructor(
         return if (index in 0 until folder.lastIndex) folder[index + 1] else null
     }
 
+    /** Other videos in the same folder as [mediaStoreId] (excluding it). For "From this folder". */
+    suspend fun videosInFolderOf(mediaStoreId: Long): List<VideoFile> {
+        val bucketId = queryBucketId(mediaStoreId) ?: return emptyList()
+        return queryVideosInFolder(bucketId).filterNot { it.mediaStoreId == mediaStoreId }
+    }
+
     private suspend fun queryBucketId(mediaStoreId: Long): Long? = withContext(Dispatchers.IO) {
         context.contentResolver.query(
             MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
@@ -263,6 +269,83 @@ class MediaRepository @Inject constructor(
             }
         }
         videos
+    }
+
+    private val baseProjection = arrayOf(
+        MediaStore.Video.Media._ID,
+        MediaStore.Video.Media.DISPLAY_NAME,
+        MediaStore.Video.Media.DURATION,
+        MediaStore.Video.Media.DATA,
+        MediaStore.Video.Media.SIZE,
+    )
+
+    private fun android.database.Cursor.toVideoFile(): VideoFile {
+        val id = getLong(getColumnIndexOrThrow(MediaStore.Video.Media._ID))
+        return VideoFile(
+            mediaStoreId = id,
+            uri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id),
+            name = getString(getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)) ?: "Unknown",
+            durationMs = getLong(getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)),
+            path = getString(getColumnIndexOrThrow(MediaStore.Video.Media.DATA)) ?: "",
+            sizeBytes = getLong(getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)),
+        )
+    }
+
+    /** The [limit] most recently added videos (DATE_ADDED DESC). Powers the dashboard rail. */
+    suspend fun queryRecentlyAdded(limit: Int): List<VideoFile> = withContext(Dispatchers.IO) {
+        val videos = mutableListOf<VideoFile>()
+        context.contentResolver.query(
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI, baseProjection, null, null,
+            "${MediaStore.Video.Media.DATE_ADDED} DESC",
+        )?.use { cursor ->
+            while (cursor.moveToNext() && videos.size < limit) videos.add(cursor.toVideoFile())
+        }
+        videos
+    }
+
+    /** Videos by MediaStore id (used to resolve the favourites set against the live library). */
+    suspend fun queryVideosByIds(ids: List<Long>): List<VideoFile> = withContext(Dispatchers.IO) {
+        if (ids.isEmpty()) return@withContext emptyList()
+        val placeholders = ids.joinToString(",") { "?" }
+        val videos = mutableListOf<VideoFile>()
+        context.contentResolver.query(
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI, baseProjection,
+            "${MediaStore.Video.Media._ID} IN ($placeholders)",
+            ids.map { it.toString() }.toTypedArray(),
+            null,
+        )?.use { cursor ->
+            while (cursor.moveToNext()) videos.add(cursor.toVideoFile())
+        }
+        // Preserve the caller's id order (favourites are addedAt DESC).
+        val byId = videos.associateBy { it.mediaStoreId }
+        ids.mapNotNull { byId[it] }
+    }
+
+    /**
+     * Portrait ("Shorts") videos — height > width. Rotation metadata isn't factored in for v1,
+     * so a rotated-landscape clip can be misclassified; acceptable for a dashboard surface.
+     */
+    suspend fun queryShorts(limit: Int = Int.MAX_VALUE): List<VideoFile> = withContext(Dispatchers.IO) {
+        val videos = mutableListOf<VideoFile>()
+        context.contentResolver.query(
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI, baseProjection,
+            "${MediaStore.Video.Media.HEIGHT} > ${MediaStore.Video.Media.WIDTH} " +
+                "AND ${MediaStore.Video.Media.WIDTH} > 0",
+            null,
+            "${MediaStore.Video.Media.DATE_MODIFIED} DESC",
+        )?.use { cursor ->
+            while (cursor.moveToNext() && videos.size < limit) videos.add(cursor.toVideoFile())
+        }
+        videos
+    }
+
+    suspend fun countShorts(): Int = withContext(Dispatchers.IO) {
+        context.contentResolver.query(
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI, arrayOf(MediaStore.Video.Media._ID),
+            "${MediaStore.Video.Media.HEIGHT} > ${MediaStore.Video.Media.WIDTH} " +
+                "AND ${MediaStore.Video.Media.WIDTH} > 0",
+            null, null,
+        )?.use { it.count } ?: 0
     }
 
     /** Epoch millis of the most recently added video, or 0 if the library is empty. */

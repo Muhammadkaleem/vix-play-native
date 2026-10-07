@@ -648,7 +648,7 @@ private fun PartialAccessBanner(onManage: () -> Unit) {
 
 /** Video-tab home header: "Vix" bold, "Play" italic + light. */
 @Composable
-private fun VideoHeaderTitle() {
+internal fun VideoHeaderTitle() {
     Text(
         text = buildAnnotatedString {
             withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append("Vix") }

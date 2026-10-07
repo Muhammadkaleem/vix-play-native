@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -24,10 +26,33 @@ class PlayerViewModel @Inject constructor(
     private val playbackRepository: PlaybackRepository,
     private val mediaRepository: MediaRepository,
     private val settingsRepository: SettingsRepository,
+    private val favoritesRepository: com.devbytes.vixplayer.app.data.repository.FavoritesRepository,
     private val playerController: PlayerController,
 ) : ViewModel() {
 
     private var currentMediaStoreId: Long? = null
+
+    /** The current video's id, driving the favourite state. Null for non-MediaStore URIs. */
+    private val _favoriteId = kotlinx.coroutines.flow.MutableStateFlow<Long?>(null)
+
+    /** Whether the current video is favourited (false for external/non-MediaStore URIs). */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val isFavorite: StateFlow<Boolean> = _favoriteId
+        .flatMapLatest { id ->
+            if (id != null) favoritesRepository.observeIsFavorite(id)
+            else kotlinx.coroutines.flow.flowOf(false)
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    /** Favouriting needs a MediaStore id; external/network URIs can't be favourited. */
+    val canFavorite: StateFlow<Boolean> = _favoriteId
+        .map { it != null }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    fun toggleFavorite() {
+        val id = _favoriteId.value ?: return
+        viewModelScope.launch { favoritesRepository.toggle(id) }
+    }
 
     /** The app-scoped player. Owned by [PlayerController], never released by the screen. */
     val player = playerController.player
@@ -105,6 +130,7 @@ class PlayerViewModel @Inject constructor(
         } catch (_: Exception) {
             null
         }
+        _favoriteId.value = currentMediaStoreId
         return currentMediaStoreId?.let { playbackRepository.getPositionFast(it) } ?: 0L
     }
 

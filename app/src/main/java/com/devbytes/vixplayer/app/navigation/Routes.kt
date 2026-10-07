@@ -4,10 +4,23 @@ package com.devbytes.vixplayer.app.navigation
 const val SPLASH_ROUTE = "splash"
 
 // Tab graph routes (nested nav containers)
+const val TAB_HOME_ROUTE     = "tab_home"
 const val TAB_VIDEO_ROUTE    = "tab_video"
 const val TAB_AUDIO_ROUTE    = "tab_audio"
 const val TAB_NETWORK_ROUTE  = "tab_network"
 const val TAB_SETTINGS_ROUTE = "tab_settings"
+
+// Home tab destinations
+const val HOME_ROUTE       = "home"
+const val VIDEO_LIST_ROUTE = "video_list/{source}"
+fun videoListRoute(source: String) = "video_list/$source"
+
+// Videos of one folder (dashboard "Your folders" tap)
+const val FOLDER_VIDEOS_ROUTE = "folder_videos/{bucketId}/{title}"
+fun folderVideosRoute(bucketId: Long, encodedTitle: String) = "folder_videos/$bucketId/$encodedTitle"
+
+// TikTok-style vertical Shorts feed
+const val SHORTS_FEED_ROUTE = "shorts_feed"
 
 // Video tab destinations
 const val LIBRARY_ROUTE        = "library"
