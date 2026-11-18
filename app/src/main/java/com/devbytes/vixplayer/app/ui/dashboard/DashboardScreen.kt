@@ -39,6 +39,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -96,18 +97,19 @@ fun DashboardScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val isProActive by premiumViewModel.isProActive.collectAsStateWithLifecycle()
     val proUntil by premiumViewModel.proUntil.collectAsStateWithLifecycle()
+    val rewardedLoading by premiumViewModel.rewardedLoading.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     // null = no modal; "details" = Pro perks + watch-ad; "success" = Pro unlocked.
     var premiumModal by remember { mutableStateOf<String?>(null) }
 
     // Shared rewarded-ad launch — used by the card's gold button and the details modal.
-    val startWatchAd: () -> Unit = {
+    val startWatchAd: (String) -> Unit = { entryPoint ->
         val activity = context.findActivity()
         if (activity == null) {
             android.widget.Toast.makeText(context, "Can't show the ad right now", android.widget.Toast.LENGTH_SHORT).show()
         } else {
-            premiumViewModel.watchAdForPro(activity) { result ->
+            premiumViewModel.watchAdForPro(activity, entryPoint) { result ->
                 when (result) {
                     PremiumViewModel.Result.Granted -> premiumModal = "success"
                     PremiumViewModel.Result.Unavailable ->
@@ -162,10 +164,13 @@ fun DashboardScreen(
 
             // 3. Pro — rewarded-ad offer (or the active-entitlement card).
             item {
+                // Warm a rewarded ad only once the offer is actually on screen.
+                LaunchedEffect(Unit) { premiumViewModel.preloadRewarded() }
                 PremiumCard(
                     isProActive = isProActive,
                     proUntil = proUntil,
-                    onWatchAd = startWatchAd,
+                    loading = rewardedLoading,
+                    onWatchAd = { startWatchAd("home_card") },
                     onOpenDetails = { premiumModal = "details" },
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                 )
@@ -252,7 +257,8 @@ fun DashboardScreen(
         when (premiumModal) {
             "details" -> ProDetailsSheet(
                 onDismiss = { premiumModal = null },
-                onWatchAd = { premiumModal = null; startWatchAd() },
+                loading = rewardedLoading,
+                onWatchAd = { premiumModal = null; startWatchAd("home_modal") },
             )
             "success" -> ProSuccessSheet(onDismiss = { premiumModal = null })
         }

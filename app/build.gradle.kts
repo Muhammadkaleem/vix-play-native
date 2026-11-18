@@ -34,6 +34,19 @@ android {
         versionName = "3.0.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // AdMob test devices: team phones get test ads even on release builds, so nobody
+        // generates invalid traffic on the live units. Comma-separated hashed IDs (logcat prints
+        // the hash on first ad request) under `admob.testDeviceIds` in the untracked
+        // local.properties; empty when absent.
+        val localProps = Properties().apply {
+            rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+        }
+        buildConfigField(
+            "String",
+            "AD_TEST_DEVICE_IDS",
+            "\"${localProps.getProperty("admob.testDeviceIds", "")}\"",
+        )
     }
 
     signingConfigs {

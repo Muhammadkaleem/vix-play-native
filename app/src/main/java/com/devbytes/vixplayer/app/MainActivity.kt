@@ -121,6 +121,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        // Session counting for the interstitial frequency rules.
+        adsController.onAppForeground()
+    }
+
+    override fun onStop() {
+        adsController.onAppBackground()
+        super.onStop()
+    }
+
     override fun onResume() {
         super.onResume()
         // Resume an interrupted Immediate update; re-surface a finished Flexible download.

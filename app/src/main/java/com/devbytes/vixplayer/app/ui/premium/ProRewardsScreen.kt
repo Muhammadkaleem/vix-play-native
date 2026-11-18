@@ -76,7 +76,12 @@ fun ProRewardsScreen(
     val totalEarned by viewModel.totalEarned.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    LaunchedEffect(Unit) { viewModel.logScreenViewed() }
+    val rewardedLoading by viewModel.rewardedLoading.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) {
+        viewModel.logScreenViewed()
+        viewModel.preloadRewarded()
+    }
 
     Scaffold(
         topBar = {
@@ -111,12 +116,13 @@ fun ProRewardsScreen(
 
             EarnCard(
                 rewardLabel = viewModel.rewardLabel,
+                loading = rewardedLoading,
                 onWatch = {
                     val activity = context.findActivity()
                     if (activity == null) {
                         Toast.makeText(context, "Can't show the ad right now", Toast.LENGTH_SHORT).show()
                     } else {
-                        viewModel.watchAdForPro(activity) { result ->
+                        viewModel.watchAdForPro(activity, entryPoint = "rewards_screen") { result ->
                             val msg = when (result) {
                                 PremiumViewModel.Result.Granted -> "Pro extended by ${viewModel.rewardLabel}"
                                 PremiumViewModel.Result.Unavailable -> "No ad available — try again shortly"
@@ -238,7 +244,7 @@ private fun StatusCard(isProActive: Boolean, proUntil: Long, totalEarned: Int) {
 }
 
 @Composable
-private fun EarnCard(rewardLabel: String, onWatch: () -> Unit) {
+private fun EarnCard(rewardLabel: String, loading: Boolean, onWatch: () -> Unit) {
     CardSurface {
         Column(Modifier.padding(16.dp)) {
             Text(
@@ -262,7 +268,10 @@ private fun EarnCard(rewardLabel: String, onWatch: () -> Unit) {
             ) {
                 Icon(painterResource(R.drawable.ic_play), null, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(10.dp))
-                Text("Watch Ad · Earn $rewardLabel", fontWeight = FontWeight.SemiBold)
+                Text(
+                    if (loading) "Loading ad…" else "Watch Ad · Earn $rewardLabel",
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
         }
     }

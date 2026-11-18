@@ -14,6 +14,7 @@ object AdUnits {
     private const val TEST_BANNER = "ca-app-pub-3940256099942544/6300978111"
     private const val TEST_NATIVE = "ca-app-pub-3940256099942544/2247696110"
     private const val TEST_REWARDED = "ca-app-pub-3940256099942544/5224354917"
+    private const val TEST_INTERSTITIAL = "ca-app-pub-3940256099942544/1033173712"
 
     // Real units (release only), named by placement.
     private const val REAL_BANNER_MAIN = "ca-app-pub-2601730814150494/1560144896"
@@ -23,6 +24,10 @@ object AdUnits {
 
     // Rewarded unit backing the "Get 1 Day Pro" grant (AdMob app ca-app-pub-2601730814150494).
     private const val REAL_REWARDED = "ca-app-pub-2601730814150494/8927746094"
+
+    // Interstitial shown on leaving the player (created 2026-11-18). Blanking it switches the
+    // placement off in release builds — no request is made without a unit.
+    private const val REAL_INTERSTITIAL = "ca-app-pub-2601730814150494/4531328759"
 
     // Parked — not rendered yet.
     const val APP_OPEN = "ca-app-pub-2601730814150494/1958373756"
@@ -41,4 +46,8 @@ object AdUnits {
 
     /** Rewarded ad backing the "Get 1 Day Pro" grant. */
     val rewarded: String get() = if (BuildConfig.DEBUG) TEST_REWARDED else REAL_REWARDED
+
+    /** Player-exit interstitial; null when no real unit is configured (release + blank ID). */
+    val interstitial: String?
+        get() = if (BuildConfig.DEBUG) TEST_INTERSTITIAL else REAL_INTERSTITIAL.ifBlank { null }
 }

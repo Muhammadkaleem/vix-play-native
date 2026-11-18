@@ -24,7 +24,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -204,7 +206,10 @@ private fun popExitFor(motion: NavMotion, slidePx: Int): ExitTransition = when (
 /** Switches bottom-nav tabs the same way VixBottomNav does (save/restore per-tab state). */
 private fun switchTab(navController: androidx.navigation.NavController, tabRoute: String) {
     navController.navigate(tabRoute) {
-        popUpTo(TAB_HOME_ROUTE) { saveState = true }
+        // Pop to the Home *screen*, not the Home graph: popping up to the graph entry also pops
+        // its start screen, leaving an empty graph shell under the new tab — Back from any tab
+        // then exited the app (or fell through to a stale tab) instead of returning Home.
+        popUpTo(HOME_ROUTE) { saveState = true }
         launchSingleTop = true
         restoreState = true
     }
@@ -227,6 +232,7 @@ fun VixPlayNavGraph(
     val currentDestination = backStackEntry?.destination
     val currentRoute = currentDestination?.route
     val context = LocalContext.current
+    val adsViewModel: AdsViewModel = hiltViewModel()
 
     // Crash breadcrumb: which screen the user was on when a crash hit.
     LaunchedEffect(currentRoute) {
@@ -241,6 +247,8 @@ fun VixPlayNavGraph(
     val externalUri = pendingExternalMedia.firstOrNull()?.toString()
     LaunchedEffect(externalUri) {
         if (externalUri != null) {
+            // Leaving a player another app opened must never show an interstitial.
+            adsViewModel.markExternalPlayerVisit()
             navController.navigate(playerRoute(Uri.encode(externalUri))) {
                 popUpTo(SPLASH_ROUTE) { inclusive = true }
                 launchSingleTop = true
@@ -290,9 +298,22 @@ fun VixPlayNavGraph(
     // is suppressed there to avoid stacking two ads on one screen.
     val inFolderBrowser = currentRoute == FOLDER_BROWSER_ROUTE
 
-    val adsViewModel: AdsViewModel = hiltViewModel()
     val canRequestAds by adsViewModel.canRequestAds.collectAsState()
     val adsEnabled by adsViewModel.adsEnabled.collectAsState()
+
+    // The one interstitial placement: the video player was left for a library screen (HUD back,
+    // system back, Up Next back — all pop the route). Opening the equalizer from the player is
+    // not an exit. The frequency rules decide whether an ad actually shows.
+    var previousRoute by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(currentRoute) {
+        val prev = previousRoute
+        previousRoute = currentRoute
+        when {
+            currentRoute == PLAYER_ROUTE && prev != EQUALIZER_ROUTE -> adsViewModel.onPlayerEntered()
+            prev == PLAYER_ROUTE && currentRoute != null && currentRoute != EQUALIZER_ROUTE ->
+                (context as? Activity)?.let { adsViewModel.onPlayerExited(it) }
+        }
+    }
 
     // Flexible-update restart prompt: an indefinite Snackbar with a Restart action. If the
     // user dismisses it, AppUpdater auto-applies the update on the next launch.
@@ -311,15 +332,17 @@ fun VixPlayNavGraph(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
-            if (!isFullScreen) {
-                // Mini-player sits above the tabs and inside the same slot, so Scaffold
-                // padding accounts for both and content is never hidden behind it.
-                Column {
-                    // Anchored banner on top (furthest from the nav thumb), only where
-                    // ads are allowed and once consent + SDK are ready.
-                    if (adsEnabled && canRequestAds && !inSettingsTab && !inFolderBrowser) {
-                        AdBanner()
-                    }
+            // Mini-player sits above the tabs and inside the same slot, so Scaffold
+            // padding accounts for both and content is never hidden behind it.
+            Column {
+                // Anchored banner on top (furthest from the nav thumb), once consent + SDK are
+                // ready and the user isn't Pro. It stays composed everywhere and only collapses
+                // (paused) on routes without a banner, so the loaded ad survives a trip to the
+                // player or the Video tab instead of being re-requested on every return.
+                if (adsEnabled && canRequestAds) {
+                    AdBanner(visible = !isFullScreen && !inSettingsTab && !inFolderBrowser)
+                }
+                if (!isFullScreen) {
                     MiniPlayer(
                         onExpand = {
                             navController.navigate(audioPlayerRoute(NOW_PLAYING_ID)) {
@@ -329,13 +352,7 @@ fun VixPlayNavGraph(
                     )
                     VixBottomNav(
                         currentDestination = currentDestination,
-                        onNavigate = { tabRoute ->
-                            navController.navigate(tabRoute) {
-                                popUpTo(TAB_HOME_ROUTE) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
+                        onNavigate = { tabRoute -> switchTab(navController, tabRoute) },
                     )
                 }
             }

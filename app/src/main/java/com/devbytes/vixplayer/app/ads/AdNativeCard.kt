@@ -12,18 +12,11 @@ import android.widget.TextView
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
-import com.google.android.gms.ads.AdListener
-import com.google.android.gms.ads.AdLoader
-import com.google.android.gms.ads.AdRequest
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.android.gms.ads.nativead.MediaView
 import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdView
@@ -39,14 +32,18 @@ private class AdColors(
 
 /**
  * Inline native ad card, styled to the app so it reads as content with a clear "Ad" badge.
- * Loads its own [NativeAd]; renders nothing until one arrives (so a failed load leaves no
- * empty gap). Callers gate on consent + `adsEnabled`.
+ * The ad itself is owned by the screen's [NativeAdsViewModel] under [slotKey], so scrolling the
+ * card away and back reuses it rather than re-requesting. Renders nothing until an ad arrives
+ * (a failed load leaves no empty gap). Callers gate on consent + `adsEnabled`.
  */
 @Composable
-fun AdNativeCard(adUnitId: String, modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    var nativeAd by remember { mutableStateOf<NativeAd?>(null) }
-
+fun AdNativeCard(
+    adUnitId: String,
+    slotKey: String,
+    unitName: String,
+    modifier: Modifier = Modifier,
+    ads: NativeAdsViewModel = hiltViewModel(),
+) {
     val colors = AdColors(
         surface = MaterialTheme.colorScheme.surfaceVariant.toArgb(),
         onSurface = MaterialTheme.colorScheme.onSurface.toArgb(),
@@ -55,19 +52,9 @@ fun AdNativeCard(adUnitId: String, modifier: Modifier = Modifier) {
         onPrimary = MaterialTheme.colorScheme.onPrimary.toArgb(),
     )
 
-    DisposableEffect(adUnitId) {
-        val loader = AdLoader.Builder(context, adUnitId)
-            .forNativeAd { ad ->
-                nativeAd?.destroy()
-                nativeAd = ad
-            }
-            .withAdListener(object : AdListener() {})
-            .build()
-        loader.loadAd(AdRequest.Builder().build())
-        onDispose { nativeAd?.destroy() }
-    }
+    LaunchedEffect(slotKey) { ads.request(slotKey, adUnitId, unitName) }
 
-    nativeAd?.let { ad ->
+    ads.ad(slotKey)?.let { ad ->
         AndroidView(
             modifier = modifier.fillMaxWidth(),
             factory = { ctx -> buildNativeAdView(ctx, colors) },

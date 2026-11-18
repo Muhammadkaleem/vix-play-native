@@ -49,8 +49,16 @@ class PremiumViewModel @Inject constructor(
 
     init {
         viewModelScope.launch { pro.reconcile() } // refresh the anti-rollback clock anchor
-        rewardedAds.preload()
     }
+
+    /** True while "Watch ad" waits on an on-demand load — the button shows "Loading ad…". */
+    val rewardedLoading: StateFlow<Boolean> = rewardedAds.loading
+
+    /**
+     * Warms a rewarded ad. Called when a Pro offer is actually on screen (card visible, modal or
+     * rewards screen open) — not on every Home open, where most preloads expired unwatched.
+     */
+    fun preloadRewarded() = rewardedAds.preload()
 
     fun logScreenViewed() = log("pro_rewards_viewed")
 
@@ -59,7 +67,7 @@ class PremiumViewModel @Inject constructor(
      * (idempotent via a per-watch transaction id) and reports [Result.Granted]. A part-way dismiss
      * or a no-fill grants nothing and reports [Result.Unavailable].
      */
-    fun watchAdForPro(activity: Activity, onResult: (Result) -> Unit) {
+    fun watchAdForPro(activity: Activity, entryPoint: String = "unknown", onResult: (Result) -> Unit) {
         log("watch_ad_tapped")
         val txId = UUID.randomUUID().toString()
         rewardedAds.show(
@@ -80,6 +88,7 @@ class PremiumViewModel @Inject constructor(
                 log("rewarded_ad_unavailable")
                 onResult(Result.Unavailable)
             },
+            entryPoint = entryPoint,
         )
     }
 

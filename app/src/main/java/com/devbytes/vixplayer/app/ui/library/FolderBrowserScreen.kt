@@ -86,6 +86,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.delay
 import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.ads.AdBanner
+import com.devbytes.vixplayer.app.ads.AdConfig
 import com.devbytes.vixplayer.app.ads.AdNativeCard
 import com.devbytes.vixplayer.app.ads.AdUnits
 import com.devbytes.vixplayer.app.ads.AdsViewModel
@@ -488,6 +489,7 @@ fun FolderBrowserScreen(
                 resume = resume,
                 onToggleSelect = { viewModel.toggleSelection(it) },
                 showAds = showAds,
+                adConfig = adsViewModel.adConfig(),
                 gridState = videoGridState,
                 modifier = Modifier.padding(padding),
             )
@@ -789,6 +791,8 @@ private fun FolderList(
             item(key = "native_folder_ad") {
                 AdNativeCard(
                     adUnitId = AdUnits.nativeFolderList,
+                    slotKey = "folder_list",
+                    unitName = "VixPlay_Native_FolderList",
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )
             }
@@ -876,8 +880,6 @@ private fun shareFolderVideos(context: android.content.Context, videos: List<Vid
     context.startActivity(Intent.createChooser(intent, "Share"))
 }
 
-private const val VIDEO_LIST_AD_INTERVAL = 8
-
 @Composable
 private fun VideoGrid(
     videos: List<VideoFile>,
@@ -888,6 +890,7 @@ private fun VideoGrid(
     resume: Map<Long, Float>,
     onToggleSelect: (VideoFile) -> Unit,
     showAds: Boolean,
+    adConfig: AdConfig,
     gridState: LazyGridState = rememberLazyGridState(),
     modifier: Modifier = Modifier,
 ) {
@@ -916,6 +919,7 @@ private fun VideoGrid(
             item(span = fullSpan, key = "video_banner") {
                 AdBanner(
                     adUnitId = AdUnits.bannerVideoList,
+                    unitName = "VixPlay_Banner_VideoList",
                     modifier = Modifier.padding(vertical = 4.dp),
                 )
             }
@@ -944,11 +948,19 @@ private fun VideoGrid(
                     )
                 }
             }
-            // Native card inline every N videos.
-            if (showAds && (index + 1) % VIDEO_LIST_AD_INTERVAL == 0 && index != videos.lastIndex) {
+            // Native card after the first few videos, then every N (both remote-configurable).
+            // Needs at least one video after it, so a card never closes a list.
+            val pos = index + 1
+            val isAdSlot = pos >= adConfig.nativeVideoListFirst &&
+                (pos - adConfig.nativeVideoListFirst) % adConfig.nativeVideoListInterval == 0
+            if (showAds && isAdSlot && index != videos.lastIndex) {
                 item(span = fullSpan, key = "native_video_ad_$index") {
                     AdNativeCard(
                         adUnitId = AdUnits.nativeVideoList,
+                        // Per folder (first video's id) + position: a folder's cards are reused
+                        // when you come back to it, and a different folder gets fresh ads.
+                        slotKey = "video_${videos.first().mediaStoreId}_$index",
+                        unitName = "VixPlay_Native_VideoList",
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                     )
                 }

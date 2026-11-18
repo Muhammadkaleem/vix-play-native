@@ -62,13 +62,15 @@ import com.devbytes.vixplayer.app.ui.theme.Success
 /** A single Pro perk with its neon icon + one-line description. */
 private data class ProFeature(val icon: Int, val title: String, val subtitle: String)
 
+/**
+ * What Pro actually changes — only ads. Every player feature (background play, equalizer, speed,
+ * sleep timer, every format) is free for everyone, so it is listed as such rather than sold as a
+ * Pro perk.
+ */
 private val proFeatures = listOf(
-    ProFeature(R.drawable.ic_pro_noads, "Ad-Free Experience", "No banners, no interruptions"),
-    ProFeature(R.drawable.ic_pro_bg, "Background Play", "Keep audio playing in the background"),
-    ProFeature(R.drawable.ic_pro_formats, "All Formats & 4K", "Play everything in full quality"),
-    ProFeature(R.drawable.ic_pro_eq, "Equalizer", "Fine-tune your sound"),
-    ProFeature(R.drawable.ic_pro_speed, "Speed Control", "0.25×–4× playback"),
-    ProFeature(R.drawable.ic_pro_sleep, "Sleep Timer", "Auto-stop when you doze off"),
+    ProFeature(R.drawable.ic_pro_noads, "No banner or inline ads", "A clean Home, folders, search and history"),
+    ProFeature(R.drawable.ic_pro_noads, "No full-screen ads", "Nothing between you and the next video"),
+    ProFeature(R.drawable.ic_pro_formats, "Everything else stays free", "Background play, equalizer, speed, sleep timer and every format — Pro or not"),
 )
 
 private val GoldLabel = Color(0xFFE4B968)
@@ -81,11 +83,10 @@ private val CardDark = Color(0xFF141210)
 
 private data class BenefitChip(val icon: Int, val label: String)
 
+// Pro removes ads; nothing else is gated, so the chips only describe that.
 private val benefitChips = listOf(
-    BenefitChip(R.drawable.ic_no_ads, "No ads"),
-    BenefitChip(R.drawable.ic_pip, "PiP"),
-    BenefitChip(R.drawable.ic_headphones, "Background"),
-    BenefitChip(R.drawable.ic_subtitles, "Subtitles"),
+    BenefitChip(R.drawable.ic_no_ads, "No banners"),
+    BenefitChip(R.drawable.ic_no_ads, "No full-screen ads"),
 )
 
 /**
@@ -99,6 +100,7 @@ private val benefitChips = listOf(
 fun PremiumCard(
     isProActive: Boolean,
     proUntil: Long,
+    loading: Boolean,
     onWatchAd: () -> Unit,
     onOpenDetails: () -> Unit,
     modifier: Modifier = Modifier,
@@ -204,7 +206,11 @@ fun PremiumCard(
             }
             Spacer(Modifier.height(14.dp))
             GoldButton(
-                label = if (isProActive) "Extend ${RewardConfig.perAdShort}" else "Watch ad · Unlock Pro",
+                label = when {
+                    loading -> "Loading ad…"
+                    isProActive -> "Extend ${RewardConfig.perAdShort}"
+                    else -> "Watch ad · Go ad-free"
+                },
                 onClick = onWatchAd,
             )
         }
@@ -309,7 +315,7 @@ private fun formatHm(ms: Long): String {
 /** The Pro details modal — crown header, the full perk list, and the "watch ad" CTA. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProDetailsSheet(onDismiss: () -> Unit, onWatchAd: () -> Unit) {
+fun ProDetailsSheet(onDismiss: () -> Unit, loading: Boolean, onWatchAd: () -> Unit) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -340,7 +346,7 @@ fun ProDetailsSheet(onDismiss: () -> Unit, onWatchAd: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                "Watch a short ad — earn ${RewardConfig.label()} of Pro. Stack as many as you like.",
+                "Watch a short ad — earn ${RewardConfig.label()} ad-free. Stack up to ${RewardConfig.bankShort}.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -356,7 +362,10 @@ fun ProDetailsSheet(onDismiss: () -> Unit, onWatchAd: () -> Unit) {
             ) {
                 Icon(painterResource(R.drawable.ic_play), null, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(10.dp))
-                Text("Watch Ad · Earn ${RewardConfig.label()}", fontWeight = FontWeight.SemiBold)
+                Text(
+                    if (loading) "Loading ad…" else "Watch Ad · Earn ${RewardConfig.label()}",
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
             Spacer(Modifier.height(6.dp))
             Text(
@@ -439,7 +448,7 @@ fun ProSuccessSheet(onDismiss: () -> Unit) {
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                "You earned ${RewardConfig.label()} of Pro. Watch more anytime to stack more time.",
+                "You earned ${RewardConfig.label()} ad-free. Watch more anytime to stack up to ${RewardConfig.bankShort}.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
