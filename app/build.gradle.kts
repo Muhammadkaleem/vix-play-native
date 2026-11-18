@@ -30,8 +30,8 @@ android {
         applicationId = "com.devbytes.vixplayer.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 69
-        versionName = "3.0.9"
+        versionCode = 71
+        versionName = "3.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
