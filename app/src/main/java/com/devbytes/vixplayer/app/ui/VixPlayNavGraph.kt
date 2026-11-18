@@ -20,6 +20,8 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -320,6 +322,7 @@ fun VixPlayNavGraph(
     // Flexible-update restart prompt: an indefinite Snackbar with a Restart action. If the
     // user dismisses it, AppUpdater auto-applies the update on the next launch.
     val snackbarHostState = remember { SnackbarHostState() }
+    val snackbarScope = rememberCoroutineScope()
     LaunchedEffect(updateReady) {
         if (updateReady) {
             val result = snackbarHostState.showSnackbar(
@@ -349,6 +352,17 @@ fun VixPlayNavGraph(
                         onExpand = {
                             navController.navigate(audioPlayerRoute(NOW_PLAYING_ID)) {
                                 launchSingleTop = true
+                            }
+                        },
+                        // Swipe-down stops playback; a short Undo covers an accidental swipe.
+                        onDismissed = { undo ->
+                            snackbarScope.launch {
+                                val result = snackbarHostState.showSnackbar(
+                                    message = "Playback stopped",
+                                    actionLabel = "Undo",
+                                    duration = SnackbarDuration.Short,
+                                )
+                                if (result == SnackbarResult.ActionPerformed) undo()
                             }
                         },
                     )

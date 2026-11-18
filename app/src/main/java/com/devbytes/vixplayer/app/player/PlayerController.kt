@@ -313,4 +313,35 @@ class PlayerController @Inject constructor(
         player.clearMediaItems()
         updateKind(PlaybackKind.NONE)
     }
+
+    /** What [stop] discards — enough to put a dismissed audio queue back exactly as it was. */
+    class QueueSnapshot internal constructor(
+        internal val items: List<MediaItem>,
+        internal val index: Int,
+        internal val positionMs: Long,
+        internal val playWhenReady: Boolean,
+    )
+
+    /** Captures the current queue so an undoable [stop] can be reversed; null when empty. */
+    fun snapshotQueue(): QueueSnapshot? {
+        val count = player.mediaItemCount
+        if (count == 0) return null
+        return QueueSnapshot(
+            items = List(count) { player.getMediaItemAt(it) },
+            index = player.currentMediaItemIndex,
+            positionMs = player.currentPosition,
+            playWhenReady = player.playWhenReady,
+        )
+    }
+
+    /** Re-opens a [snapshotQueue] as audio, at the same track, position and play state. */
+    fun restoreQueue(snapshot: QueueSnapshot) {
+        ensureServiceRunning()
+        resetDecoderNames()
+        subtitleOffset.offsetUs = 0L
+        player.setMediaItems(snapshot.items, snapshot.index, snapshot.positionMs)
+        player.prepare()
+        player.playWhenReady = snapshot.playWhenReady
+        updateKind(PlaybackKind.AUDIO)
+    }
 }
