@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.ui.library.components.LibraryEmptyState
+import com.devbytes.vixplayer.app.ui.common.screenInsets
 
 /** Placeholder until Chromecast lands (Roadmap Step 6 — Reach). */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -22,6 +23,7 @@ fun CastScreen(
     onBack: () -> Unit = {},
 ) {
     Scaffold(
+        contentWindowInsets = screenInsets(),
         topBar = {
             TopAppBar(
                 title = { Text("Cast") },

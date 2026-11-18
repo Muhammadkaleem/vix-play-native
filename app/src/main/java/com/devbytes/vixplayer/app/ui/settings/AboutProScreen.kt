@@ -27,6 +27,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.devbytes.vixplayer.app.R
+import com.devbytes.vixplayer.app.ui.common.screenInsets
 
 private data class OssLicense(val name: String, val license: String)
 
@@ -59,6 +60,7 @@ fun AboutProScreen(
     }
 
     Scaffold(
+        contentWindowInsets = screenInsets(),
         topBar = {
             TopAppBar(
                 title = { Text("About") },

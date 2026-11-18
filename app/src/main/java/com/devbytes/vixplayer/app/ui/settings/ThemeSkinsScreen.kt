@@ -46,6 +46,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.ui.theme.AccentChoice
 import com.devbytes.vixplayer.app.ui.theme.ThemeMode
+import com.devbytes.vixplayer.app.ui.common.screenInsets
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -61,6 +62,7 @@ fun ThemeSkinsScreen(
     }
 
     Scaffold(
+        contentWindowInsets = screenInsets(),
         topBar = {
             TopAppBar(
                 title = { Text("Theme & Skins") },

@@ -31,6 +31,7 @@ import com.devbytes.vixplayer.app.R
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
+import com.devbytes.vixplayer.app.ui.common.screenInsets
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,6 +45,7 @@ fun BriefingSettingsScreen(
     var confirmOff by remember { mutableStateOf(false) }
 
     Scaffold(
+        contentWindowInsets = screenInsets(),
         topBar = {
             TopAppBar(
                 title = { Text("Daily Briefing") },

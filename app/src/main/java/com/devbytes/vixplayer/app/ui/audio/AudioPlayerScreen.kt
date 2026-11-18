@@ -39,6 +39,7 @@ import androidx.media3.common.Player
 import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.ui.player.components.PlayerSeekBar
 import kotlinx.coroutines.delay
+import com.devbytes.vixplayer.app.ui.common.screenInsets
 
 /**
  * Full-screen audio player over the shared app-scoped player.
@@ -106,6 +107,7 @@ fun AudioPlayerScreen(
     }
 
     Scaffold(
+        contentWindowInsets = screenInsets(),
         topBar = {
             TopAppBar(
                 title = { Text("Now playing") },

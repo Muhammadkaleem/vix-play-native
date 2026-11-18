@@ -62,6 +62,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -97,6 +98,8 @@ import com.devbytes.vixplayer.app.ui.library.components.LibraryEmptyState
 import com.devbytes.vixplayer.app.ui.library.components.LibrarySkeleton
 import com.devbytes.vixplayer.app.ui.library.components.VideoCard
 import com.devbytes.vixplayer.app.ui.library.components.VideoListRow
+import com.devbytes.vixplayer.app.ui.common.screenInsets
+import com.devbytes.vixplayer.app.ui.common.withoutBottom
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -248,6 +251,7 @@ fun FolderBrowserScreen(
     }
 
     Scaffold(
+        contentWindowInsets = screenInsets(),
         floatingActionButton = {
             AnimatedVisibility(
                 visible = showFab,
@@ -452,7 +456,7 @@ fun FolderBrowserScreen(
                     FolderListSkeleton(modifier = Modifier.padding(padding))
                 }
 
-            is FolderBrowserUiState.FolderList -> Column(modifier = Modifier.padding(padding)) {
+            is FolderBrowserUiState.FolderList -> Column(modifier = Modifier.padding(padding.withoutBottom())) {
                 if (!selectionMode) {
                     com.devbytes.vixplayer.app.briefing.ui.BriefingHomeCard(onOpen = onOpenBriefing)
                 }
@@ -476,6 +480,7 @@ fun FolderBrowserScreen(
                     },
                     showAds = showAds,
                     listState = folderListState,
+                    bottomPadding = padding.calculateBottomPadding(),
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -491,7 +496,8 @@ fun FolderBrowserScreen(
                 showAds = showAds,
                 adConfig = adsViewModel.adConfig(),
                 gridState = videoGridState,
-                modifier = Modifier.padding(padding),
+                bottomPadding = padding.calculateBottomPadding(),
+                modifier = Modifier.padding(padding.withoutBottom()),
             )
 
             is FolderBrowserUiState.Error -> LibraryEmptyState(
@@ -766,6 +772,8 @@ private fun FolderList(
     onFolderClick: (FolderEntry) -> Unit,
     showAds: Boolean,
     listState: LazyListState = rememberLazyListState(),
+    /** Space for the bottom chrome, reserved inside the list so rows scroll behind it. */
+    bottomPadding: Dp = 0.dp,
     modifier: Modifier = Modifier,
 ) {
     if (folders.isEmpty()) {
@@ -780,7 +788,11 @@ private fun FolderList(
     // One native card a few rows down (or at the end for short lists), so it's inline and
     // seen rather than buried at the bottom.
     val adAfter = if (folders.size > 3) 3 else folders.size
-    LazyColumn(state = listState, modifier = modifier.fillMaxSize()) {
+    LazyColumn(
+        state = listState,
+        contentPadding = PaddingValues(bottom = bottomPadding),
+        modifier = modifier.fillMaxSize(),
+    ) {
         folders.take(adAfter).forEach { folder ->
             item(key = folder.bucketId) {
                 FolderRow(folder = folder, onClick = { onFolderClick(folder) })
@@ -892,6 +904,8 @@ private fun VideoGrid(
     showAds: Boolean,
     adConfig: AdConfig,
     gridState: LazyGridState = rememberLazyGridState(),
+    /** Space for the bottom chrome, reserved inside the grid so items scroll behind it. */
+    bottomPadding: Dp = 0.dp,
     modifier: Modifier = Modifier,
 ) {
     if (videos.isEmpty()) {
@@ -909,7 +923,9 @@ private fun VideoGrid(
     LazyVerticalGrid(
         state = gridState,
         columns = GridCells.Fixed(if (isList) 1 else 3),
-        contentPadding = PaddingValues(if (isList) 0.dp else 12.dp),
+        contentPadding = (if (isList) 0.dp else 12.dp).let { edge ->
+            PaddingValues(start = edge, top = edge, end = edge, bottom = edge + bottomPadding)
+        },
         horizontalArrangement = Arrangement.spacedBy(if (isList) 0.dp else 8.dp),
         verticalArrangement = Arrangement.spacedBy(if (isList) 0.dp else 8.dp),
         modifier = modifier.fillMaxSize(),

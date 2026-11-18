@@ -21,6 +21,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -104,6 +105,7 @@ import com.devbytes.vixplayer.app.ui.audio.AudioPlayerScreen
 import com.devbytes.vixplayer.app.ui.audio.EqualizerScreen
 import com.devbytes.vixplayer.app.ui.audio.PlaylistDetailScreen
 import com.devbytes.vixplayer.app.ui.audio.PlaylistsScreen
+import com.devbytes.vixplayer.app.ui.common.LocalBottomBarInset
 import com.devbytes.vixplayer.app.ui.common.VixBottomNav
 import com.devbytes.vixplayer.app.ui.library.FolderBrowserScreen
 import com.devbytes.vixplayer.app.ui.library.HistoryScreen
@@ -363,332 +365,335 @@ fun VixPlayNavGraph(
         // 30dp shared-axis offset in px (needs density; computed once per recomposition).
         val slidePx = with(LocalDensity.current) { 30.dp.roundToPx() }
 
-        NavHost(
-            navController = navController,
-            startDestination = SPLASH_ROUTE,
-            modifier = if (isFullScreen) Modifier else Modifier.padding(padding),
-            enterTransition = { enterFor(classifyMotion(initialState, targetState), slidePx) },
-            exitTransition = { exitFor(classifyMotion(initialState, targetState), slidePx) },
-            popEnterTransition = { popEnterFor(classifyMotion(initialState, targetState), slidePx) },
-            popExitTransition = { popExitFor(classifyMotion(initialState, targetState), slidePx) },
-        ) {
+        // Screens draw behind the bottom chrome (translucent pill, clear margins) and reserve
+        // its height inside their own scrolling content — see LocalBottomBarInset.
+        CompositionLocalProvider(LocalBottomBarInset provides padding.calculateBottomPadding()) {
+            NavHost(
+                navController = navController,
+                startDestination = SPLASH_ROUTE,
+                    enterTransition = { enterFor(classifyMotion(initialState, targetState), slidePx) },
+                exitTransition = { exitFor(classifyMotion(initialState, targetState), slidePx) },
+                popEnterTransition = { popEnterFor(classifyMotion(initialState, targetState), slidePx) },
+                popExitTransition = { popExitFor(classifyMotion(initialState, targetState), slidePx) },
+            ) {
 
-            // ── Splash / Permission gate ─────────────────────────────────────
-            composable(SPLASH_ROUTE) {
-                SplashScreen(
-                    // Suppress the permission request + auto-navigate while an external open
-                    // or a resume-nudge deep-link is in flight — the graph is about to route
-                    // past splash to the player.
-                    autoRequest = externalUri == null && pulsePlayUri == null && !openBriefing,
-                    onNavigateToLibrary = {
-                        navController.navigate(TAB_HOME_ROUTE) {
-                            popUpTo(SPLASH_ROUTE) { inclusive = true }
-                        }
-                    },
-                )
-            }
-
-            // ── Top-level: Video Player ──────────────────────────────────────
-            composable(
-                route = PLAYER_ROUTE,
-                arguments = listOf(navArgument("uri") { type = NavType.StringType }),
-            ) { entry ->
-                val encodedUri = entry.arguments?.getString("uri") ?: return@composable
-                PlayerScreen(
-                    uri = Uri.decode(encodedUri),
-                    // Nothing left to pop ⇒ this was an external open and the player is the
-                    // root, so finish and return to the launching app.
-                    onBack = {
-                        if (!navController.popBackStack()) (context as? Activity)?.finish()
-                    },
-                    onOpenEqualizer = { navController.navigate(EQUALIZER_ROUTE) },
-                )
-            }
-
-            // ── Top-level: Shorts feed (TikTok-style vertical pager) ─────────
-            composable(SHORTS_FEED_ROUTE) {
-                ShortsFeedScreen(onBack = { navController.popBackStack() })
-            }
-
-            // ── Top-level: Audio Player ──────────────────────────────────────
-            composable(
-                route = AUDIO_PLAYER_ROUTE,
-                arguments = listOf(navArgument("mediaStoreId") { type = NavType.LongType }),
-            ) { entry ->
-                val id = entry.arguments?.getLong("mediaStoreId") ?: return@composable
-                AudioPlayerScreen(
-                    mediaStoreId = id,
-                    onBack = { navController.popBackStack() },
-                    onEqualizerClick = { navController.navigate(EQUALIZER_ROUTE) },
-                )
-            }
-
-            // ── Daily Briefing (full-screen; reached from Settings / notification / home card) ──
-            composable(BRIEFING_ROUTE) {
-                BriefingScreen(onBack = { navController.popBackStack() })
-            }
-            composable(BRIEFING_SETUP_ROUTE) {
-                SetupWizardScreen(
-                    onExit = { navController.popBackStack() },
-                    onFinished = { navController.popBackStack() },
-                )
-            }
-            composable(BRIEFING_SETTINGS_ROUTE) {
-                BriefingSettingsScreen(
-                    onBack = { navController.popBackStack() },
-                    onSetup = { navController.navigate(BRIEFING_SETUP_ROUTE) },
-                    onViewBrief = { navController.navigate(BRIEFING_ROUTE) },
-                )
-            }
-
-            // ── Tab: Home (dashboard) ────────────────────────────────────────
-            navigation(startDestination = HOME_ROUTE, route = TAB_HOME_ROUTE) {
-
-                composable(HOME_ROUTE) {
-                    DashboardScreen(
-                        onVideoClick = { video ->
-                            navController.navigate(playerRoute(Uri.encode(video.uri.toString())))
+                // ── Splash / Permission gate ─────────────────────────────────────
+                composable(SPLASH_ROUTE) {
+                    SplashScreen(
+                        // Suppress the permission request + auto-navigate while an external open
+                        // or a resume-nudge deep-link is in flight — the graph is about to route
+                        // past splash to the player.
+                        autoRequest = externalUri == null && pulsePlayUri == null && !openBriefing,
+                        onNavigateToLibrary = {
+                            navController.navigate(TAB_HOME_ROUTE) {
+                                popUpTo(SPLASH_ROUTE) { inclusive = true }
+                            }
                         },
-                        // Tap a folder tile → its video list; "Browse all" → the Videos tab.
-                        onFolderClick = { bucketId, name ->
-                            navController.navigate(folderVideosRoute(bucketId, Uri.encode(name)))
-                        },
-                        onBrowseFolders = { switchTab(navController, TAB_VIDEO_ROUTE) },
-                        onViewAll = { source -> navController.navigate(videoListRoute(source.name)) },
-                        onOpenShorts = { navController.navigate(SHORTS_FEED_ROUTE) },
-                        onSearch = { navController.navigate(searchRoute()) },
                     )
                 }
 
+                // ── Top-level: Video Player ──────────────────────────────────────
                 composable(
-                    route = VIDEO_LIST_ROUTE,
-                    arguments = listOf(navArgument("source") { type = NavType.StringType }),
+                    route = PLAYER_ROUTE,
+                    arguments = listOf(navArgument("uri") { type = NavType.StringType }),
                 ) { entry ->
-                    val source = entry.arguments?.getString("source")
-                        ?.let { runCatching { DashboardSource.valueOf(it) }.getOrNull() }
-                        ?: DashboardSource.RECENTLY_ADDED
-                    VideoListScreen(
-                        source = source,
-                        onVideoClick = { video ->
-                            navController.navigate(playerRoute(Uri.encode(video.uri.toString())))
+                    val encodedUri = entry.arguments?.getString("uri") ?: return@composable
+                    PlayerScreen(
+                        uri = Uri.decode(encodedUri),
+                        // Nothing left to pop ⇒ this was an external open and the player is the
+                        // root, so finish and return to the launching app.
+                        onBack = {
+                            if (!navController.popBackStack()) (context as? Activity)?.finish()
                         },
-                        onBack = { navController.popBackStack() },
+                        onOpenEqualizer = { navController.navigate(EQUALIZER_ROUTE) },
                     )
                 }
 
+                // ── Top-level: Shorts feed (TikTok-style vertical pager) ─────────
+                composable(SHORTS_FEED_ROUTE) {
+                    ShortsFeedScreen(onBack = { navController.popBackStack() })
+                }
+
+                // ── Top-level: Audio Player ──────────────────────────────────────
                 composable(
-                    route = FOLDER_VIDEOS_ROUTE,
-                    arguments = listOf(
-                        navArgument("bucketId") { type = NavType.LongType },
-                        navArgument("title") { type = NavType.StringType },
-                    ),
+                    route = AUDIO_PLAYER_ROUTE,
+                    arguments = listOf(navArgument("mediaStoreId") { type = NavType.LongType }),
                 ) { entry ->
-                    val bucketId = entry.arguments?.getLong("bucketId") ?: return@composable
-                    val title = entry.arguments?.getString("title")?.let { Uri.decode(it) }.orEmpty()
-                    VideoListScreen(
-                        folderBucketId = bucketId,
-                        folderTitle = title,
-                        onVideoClick = { video ->
-                            navController.navigate(playerRoute(Uri.encode(video.uri.toString())))
-                        },
+                    val id = entry.arguments?.getLong("mediaStoreId") ?: return@composable
+                    AudioPlayerScreen(
+                        mediaStoreId = id,
                         onBack = { navController.popBackStack() },
-                    )
-                }
-            }
-
-            // ── Tab: Video ───────────────────────────────────────────────────
-            // Folder listing is the Video-tab home; Search and History are reached from it.
-            navigation(startDestination = FOLDER_BROWSER_ROUTE, route = TAB_VIDEO_ROUTE) {
-
-                composable(
-                    route = FOLDER_BROWSER_ROUTE,
-                    arguments = listOf(
-                        navArgument("bucketId") {
-                            type = NavType.StringType
-                            nullable = true
-                            defaultValue = null
-                        },
-                    ),
-                ) {
-                    FolderBrowserScreen(
-                        onVideoClick = { uri ->
-                            navController.navigate(playerRoute(Uri.encode(uri.toString())))
-                        },
-                        onSearchClick = { navController.navigate(searchRoute()) },
-                        onHistoryClick = { navController.navigate(HISTORY_ROUTE) },
-                        onTrashClick = { navController.navigate(TRASH_ROUTE) },
-                        onOpenBriefing = { navController.navigate(BRIEFING_ROUTE) },
-                    )
-                }
-
-                composable(
-                    route = SEARCH_ROUTE,
-                    arguments = listOf(
-                        navArgument("query") {
-                            type = NavType.StringType
-                            nullable = true
-                            defaultValue = null
-                        },
-                    ),
-                ) { entry ->
-                    SearchScreen(
-                        initialQuery = entry.arguments?.getString("query")?.let { Uri.decode(it) },
-                        onVideoClick = { uri ->
-                            navController.navigate(playerRoute(Uri.encode(uri.toString())))
-                        },
-                        onAudioClick = { id -> navController.navigate(audioPlayerRoute(id)) },
-                        onFolderClick = { bucketId, name ->
-                            navController.navigate(folderVideosRoute(bucketId, Uri.encode(name)))
-                        },
-                        onBack = { navController.popBackStack() },
-                    )
-                }
-
-                composable(HISTORY_ROUTE) {
-                    HistoryScreen(
-                        onVideoClick = { uri ->
-                            navController.navigate(playerRoute(Uri.encode(uri.toString())))
-                        },
-                        onBack = { navController.popBackStack() },
-                    )
-                }
-
-                composable(TRASH_ROUTE) {
-                    TrashScreen(onBack = { navController.popBackStack() })
-                }
-            }
-
-            // ── Tab: Audio ───────────────────────────────────────────────────
-            navigation(startDestination = AUDIO_ROUTE, route = TAB_AUDIO_ROUTE) {
-
-                composable(AUDIO_ROUTE) {
-                    AudioLibraryScreen(
-                        onAudioPlayerClick = { id ->
-                            navController.navigate(audioPlayerRoute(id))
-                        },
-                        onPlaylistsClick = { navController.navigate(PLAYLISTS_ROUTE) },
-                        onOpenPlaylist = { navController.navigate(playlistDetailRoute(it)) },
                         onEqualizerClick = { navController.navigate(EQUALIZER_ROUTE) },
                     )
                 }
 
-                composable(PLAYLISTS_ROUTE) {
-                    PlaylistsScreen(
+                // ── Daily Briefing (full-screen; reached from Settings / notification / home card) ──
+                composable(BRIEFING_ROUTE) {
+                    BriefingScreen(onBack = { navController.popBackStack() })
+                }
+                composable(BRIEFING_SETUP_ROUTE) {
+                    SetupWizardScreen(
+                        onExit = { navController.popBackStack() },
+                        onFinished = { navController.popBackStack() },
+                    )
+                }
+                composable(BRIEFING_SETTINGS_ROUTE) {
+                    BriefingSettingsScreen(
                         onBack = { navController.popBackStack() },
-                        onOpenPlaylist = { navController.navigate(playlistDetailRoute(it)) },
+                        onSetup = { navController.navigate(BRIEFING_SETUP_ROUTE) },
+                        onViewBrief = { navController.navigate(BRIEFING_ROUTE) },
                     )
                 }
 
-                composable(
-                    route = PLAYLIST_DETAIL_ROUTE,
-                    arguments = listOf(navArgument("playlistId") { type = NavType.LongType }),
-                ) { entry ->
-                    val id = entry.arguments?.getLong("playlistId") ?: return@composable
-                    PlaylistDetailScreen(
-                        playlistId = id,
-                        onBack = { navController.popBackStack() },
-                        onOpenPlayer = { navController.navigate(audioPlayerRoute(NOW_PLAYING_ID)) },
-                    )
+                // ── Tab: Home (dashboard) ────────────────────────────────────────
+                navigation(startDestination = HOME_ROUTE, route = TAB_HOME_ROUTE) {
+
+                    composable(HOME_ROUTE) {
+                        DashboardScreen(
+                            onVideoClick = { video ->
+                                navController.navigate(playerRoute(Uri.encode(video.uri.toString())))
+                            },
+                            // Tap a folder tile → its video list; "Browse all" → the Videos tab.
+                            onFolderClick = { bucketId, name ->
+                                navController.navigate(folderVideosRoute(bucketId, Uri.encode(name)))
+                            },
+                            onBrowseFolders = { switchTab(navController, TAB_VIDEO_ROUTE) },
+                            onViewAll = { source -> navController.navigate(videoListRoute(source.name)) },
+                            onOpenShorts = { navController.navigate(SHORTS_FEED_ROUTE) },
+                            onSearch = { navController.navigate(searchRoute()) },
+                        )
+                    }
+
+                    composable(
+                        route = VIDEO_LIST_ROUTE,
+                        arguments = listOf(navArgument("source") { type = NavType.StringType }),
+                    ) { entry ->
+                        val source = entry.arguments?.getString("source")
+                            ?.let { runCatching { DashboardSource.valueOf(it) }.getOrNull() }
+                            ?: DashboardSource.RECENTLY_ADDED
+                        VideoListScreen(
+                            source = source,
+                            onVideoClick = { video ->
+                                navController.navigate(playerRoute(Uri.encode(video.uri.toString())))
+                            },
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+
+                    composable(
+                        route = FOLDER_VIDEOS_ROUTE,
+                        arguments = listOf(
+                            navArgument("bucketId") { type = NavType.LongType },
+                            navArgument("title") { type = NavType.StringType },
+                        ),
+                    ) { entry ->
+                        val bucketId = entry.arguments?.getLong("bucketId") ?: return@composable
+                        val title = entry.arguments?.getString("title")?.let { Uri.decode(it) }.orEmpty()
+                        VideoListScreen(
+                            folderBucketId = bucketId,
+                            folderTitle = title,
+                            onVideoClick = { video ->
+                                navController.navigate(playerRoute(Uri.encode(video.uri.toString())))
+                            },
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
                 }
 
-                composable(EQUALIZER_ROUTE) {
-                    EqualizerScreen(onBack = { navController.popBackStack() })
-                }
-            }
+                // ── Tab: Video ───────────────────────────────────────────────────
+                // Folder listing is the Video-tab home; Search and History are reached from it.
+                navigation(startDestination = FOLDER_BROWSER_ROUTE, route = TAB_VIDEO_ROUTE) {
 
-            // ── Tab: Network ─────────────────────────────────────────────────
-            navigation(startDestination = NETWORK_ROUTE, route = TAB_NETWORK_ROUTE) {
+                    composable(
+                        route = FOLDER_BROWSER_ROUTE,
+                        arguments = listOf(
+                            navArgument("bucketId") {
+                                type = NavType.StringType
+                                nullable = true
+                                defaultValue = null
+                            },
+                        ),
+                    ) {
+                        FolderBrowserScreen(
+                            onVideoClick = { uri ->
+                                navController.navigate(playerRoute(Uri.encode(uri.toString())))
+                            },
+                            onSearchClick = { navController.navigate(searchRoute()) },
+                            onHistoryClick = { navController.navigate(HISTORY_ROUTE) },
+                            onTrashClick = { navController.navigate(TRASH_ROUTE) },
+                            onOpenBriefing = { navController.navigate(BRIEFING_ROUTE) },
+                        )
+                    }
 
-                composable(NETWORK_ROUTE) {
-                    NetworkScreen(
-                        onStreamClick = { navController.navigate(NETWORK_STREAM_ROUTE) },
-                        onSmbClick = { navController.navigate(smbBrowserRoute()) },
-                        onCastClick = { navController.navigate(CAST_ROUTE) },
-                    )
-                }
+                    composable(
+                        route = SEARCH_ROUTE,
+                        arguments = listOf(
+                            navArgument("query") {
+                                type = NavType.StringType
+                                nullable = true
+                                defaultValue = null
+                            },
+                        ),
+                    ) { entry ->
+                        SearchScreen(
+                            initialQuery = entry.arguments?.getString("query")?.let { Uri.decode(it) },
+                            onVideoClick = { uri ->
+                                navController.navigate(playerRoute(Uri.encode(uri.toString())))
+                            },
+                            onAudioClick = { id -> navController.navigate(audioPlayerRoute(id)) },
+                            onFolderClick = { bucketId, name ->
+                                navController.navigate(folderVideosRoute(bucketId, Uri.encode(name)))
+                            },
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
 
-                composable(NETWORK_STREAM_ROUTE) {
-                    NetworkStreamScreen(
-                        onPlayUrl = { uri ->
-                            navController.navigate(playerRoute(Uri.encode(uri.toString())))
-                        },
-                        onBack = { navController.popBackStack() },
-                    )
-                }
+                    composable(HISTORY_ROUTE) {
+                        HistoryScreen(
+                            onVideoClick = { uri ->
+                                navController.navigate(playerRoute(Uri.encode(uri.toString())))
+                            },
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
 
-                composable(
-                    route = SMB_BROWSER_ROUTE,
-                    arguments = listOf(
-                        navArgument("path") {
-                            type = NavType.StringType
-                            nullable = true
-                            defaultValue = null
-                        },
-                    ),
-                ) { entry ->
-                    SmbBrowserScreen(
-                        initialPath = entry.arguments?.getString("path")?.let { Uri.decode(it) },
-                        onFileClick = { uri ->
-                            navController.navigate(playerRoute(Uri.encode(uri.toString())))
-                        },
-                        onBack = { navController.popBackStack() },
-                    )
-                }
-
-                composable(CAST_ROUTE) {
-                    CastScreen(onBack = { navController.popBackStack() })
-                }
-            }
-
-            // ── Tab: Settings ────────────────────────────────────────────────
-            navigation(startDestination = SETTINGS_ROUTE, route = TAB_SETTINGS_ROUTE) {
-
-                composable(SETTINGS_ROUTE) {
-                    SettingsScreen(onNavigate = { route -> navController.navigate(route) })
-                }
-
-                composable(GESTURE_REMAP_ROUTE) {
-                    GestureRemapScreen(onBack = { navController.popBackStack() })
-                }
-
-                composable(THEME_SKINS_ROUTE) {
-                    ThemeSkinsScreen(onBack = { navController.popBackStack() })
+                    composable(TRASH_ROUTE) {
+                        TrashScreen(onBack = { navController.popBackStack() })
+                    }
                 }
 
-                composable(SUBTITLE_DEFAULTS_ROUTE) {
-                    SubtitleDefaultsScreen(onBack = { navController.popBackStack() })
+                // ── Tab: Audio ───────────────────────────────────────────────────
+                navigation(startDestination = AUDIO_ROUTE, route = TAB_AUDIO_ROUTE) {
+
+                    composable(AUDIO_ROUTE) {
+                        AudioLibraryScreen(
+                            onAudioPlayerClick = { id ->
+                                navController.navigate(audioPlayerRoute(id))
+                            },
+                            onPlaylistsClick = { navController.navigate(PLAYLISTS_ROUTE) },
+                            onOpenPlaylist = { navController.navigate(playlistDetailRoute(it)) },
+                            onEqualizerClick = { navController.navigate(EQUALIZER_ROUTE) },
+                        )
+                    }
+
+                    composable(PLAYLISTS_ROUTE) {
+                        PlaylistsScreen(
+                            onBack = { navController.popBackStack() },
+                            onOpenPlaylist = { navController.navigate(playlistDetailRoute(it)) },
+                        )
+                    }
+
+                    composable(
+                        route = PLAYLIST_DETAIL_ROUTE,
+                        arguments = listOf(navArgument("playlistId") { type = NavType.LongType }),
+                    ) { entry ->
+                        val id = entry.arguments?.getLong("playlistId") ?: return@composable
+                        PlaylistDetailScreen(
+                            playlistId = id,
+                            onBack = { navController.popBackStack() },
+                            onOpenPlayer = { navController.navigate(audioPlayerRoute(NOW_PLAYING_ID)) },
+                        )
+                    }
+
+                    composable(EQUALIZER_ROUTE) {
+                        EqualizerScreen(onBack = { navController.popBackStack() })
+                    }
                 }
 
-                composable(PLAYBACK_DEFAULTS_ROUTE) {
-                    PlaybackDefaultsScreen(onBack = { navController.popBackStack() })
+                // ── Tab: Network ─────────────────────────────────────────────────
+                navigation(startDestination = NETWORK_ROUTE, route = TAB_NETWORK_ROUTE) {
+
+                    composable(NETWORK_ROUTE) {
+                        NetworkScreen(
+                            onStreamClick = { navController.navigate(NETWORK_STREAM_ROUTE) },
+                            onSmbClick = { navController.navigate(smbBrowserRoute()) },
+                            onCastClick = { navController.navigate(CAST_ROUTE) },
+                        )
+                    }
+
+                    composable(NETWORK_STREAM_ROUTE) {
+                        NetworkStreamScreen(
+                            onPlayUrl = { uri ->
+                                navController.navigate(playerRoute(Uri.encode(uri.toString())))
+                            },
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+
+                    composable(
+                        route = SMB_BROWSER_ROUTE,
+                        arguments = listOf(
+                            navArgument("path") {
+                                type = NavType.StringType
+                                nullable = true
+                                defaultValue = null
+                            },
+                        ),
+                    ) { entry ->
+                        SmbBrowserScreen(
+                            initialPath = entry.arguments?.getString("path")?.let { Uri.decode(it) },
+                            onFileClick = { uri ->
+                                navController.navigate(playerRoute(Uri.encode(uri.toString())))
+                            },
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+
+                    composable(CAST_ROUTE) {
+                        CastScreen(onBack = { navController.popBackStack() })
+                    }
                 }
 
-                composable(PRIVATE_FOLDER_ROUTE) {
-                    PrivateFolderScreen(
-                        onBack = { navController.popBackStack() },
-                        onPlay = { uri ->
-                            navController.navigate(playerRoute(Uri.encode(uri)))
-                        },
-                    )
-                }
+                // ── Tab: Settings ────────────────────────────────────────────────
+                navigation(startDestination = SETTINGS_ROUTE, route = TAB_SETTINGS_ROUTE) {
 
-                composable(NOTIFICATIONS_ROUTE) {
-                    NotificationsScreen(onBack = { navController.popBackStack() })
-                }
+                    composable(SETTINGS_ROUTE) {
+                        SettingsScreen(onNavigate = { route -> navController.navigate(route) })
+                    }
 
-                composable(ABOUT_PRO_ROUTE) {
-                    AboutProScreen(onBack = { navController.popBackStack() })
-                }
+                    composable(GESTURE_REMAP_ROUTE) {
+                        GestureRemapScreen(onBack = { navController.popBackStack() })
+                    }
 
-                composable(PRO_REWARDS_ROUTE) {
-                    ProRewardsScreen(
-                        onBack = { navController.popBackStack() },
-                        onOpenHistory = { navController.navigate(REWARD_HISTORY_ROUTE) },
-                    )
-                }
+                    composable(THEME_SKINS_ROUTE) {
+                        ThemeSkinsScreen(onBack = { navController.popBackStack() })
+                    }
 
-                composable(REWARD_HISTORY_ROUTE) {
-                    RewardHistoryScreen(onBack = { navController.popBackStack() })
+                    composable(SUBTITLE_DEFAULTS_ROUTE) {
+                        SubtitleDefaultsScreen(onBack = { navController.popBackStack() })
+                    }
+
+                    composable(PLAYBACK_DEFAULTS_ROUTE) {
+                        PlaybackDefaultsScreen(onBack = { navController.popBackStack() })
+                    }
+
+                    composable(PRIVATE_FOLDER_ROUTE) {
+                        PrivateFolderScreen(
+                            onBack = { navController.popBackStack() },
+                            onPlay = { uri ->
+                                navController.navigate(playerRoute(Uri.encode(uri)))
+                            },
+                        )
+                    }
+
+                    composable(NOTIFICATIONS_ROUTE) {
+                        NotificationsScreen(onBack = { navController.popBackStack() })
+                    }
+
+                    composable(ABOUT_PRO_ROUTE) {
+                        AboutProScreen(onBack = { navController.popBackStack() })
+                    }
+
+                    composable(PRO_REWARDS_ROUTE) {
+                        ProRewardsScreen(
+                            onBack = { navController.popBackStack() },
+                            onOpenHistory = { navController.navigate(REWARD_HISTORY_ROUTE) },
+                        )
+                    }
+
+                    composable(REWARD_HISTORY_ROUTE) {
+                        RewardHistoryScreen(onBack = { navController.popBackStack() })
+                    }
                 }
             }
         }

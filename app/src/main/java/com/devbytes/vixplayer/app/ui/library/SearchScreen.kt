@@ -73,6 +73,7 @@ import com.devbytes.vixplayer.app.ui.audio.formatTrackDuration
 import com.devbytes.vixplayer.app.ui.library.components.LibraryEmptyState
 import com.devbytes.vixplayer.app.ui.theme.OnScrim
 import com.devbytes.vixplayer.app.ui.theme.ScrimStrong
+import com.devbytes.vixplayer.app.ui.common.screenInsets
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -97,6 +98,7 @@ fun SearchScreen(
     }
 
     Scaffold(
+        contentWindowInsets = screenInsets(),
         topBar = {
             TopAppBar(
                 title = {

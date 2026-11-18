@@ -22,6 +22,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.devbytes.vixplayer.app.R
+import com.devbytes.vixplayer.app.ui.common.screenInsets
 
 /**
  * Playback defaults. Only settings with a real consuming feature appear here — an inert
@@ -38,6 +39,7 @@ fun PlaybackDefaultsScreen(
     val askBeforePlayingNext by viewModel.askBeforePlayingNext.collectAsState()
 
     Scaffold(
+        contentWindowInsets = screenInsets(),
         topBar = {
             TopAppBar(
                 title = { Text("Playback Defaults") },

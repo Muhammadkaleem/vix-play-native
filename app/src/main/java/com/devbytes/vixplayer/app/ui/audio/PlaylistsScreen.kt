@@ -40,6 +40,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.data.db.entity.Playlist
 import com.devbytes.vixplayer.app.ui.library.components.LibraryEmptyState
+import com.devbytes.vixplayer.app.ui.common.screenInsets
 
 /** Playlist list with create / rename / delete. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -55,6 +56,7 @@ fun PlaylistsScreen(
     var renaming by remember { mutableStateOf<Playlist?>(null) }
 
     Scaffold(
+        contentWindowInsets = screenInsets(),
         topBar = {
             TopAppBar(
                 title = { Text("Playlists") },

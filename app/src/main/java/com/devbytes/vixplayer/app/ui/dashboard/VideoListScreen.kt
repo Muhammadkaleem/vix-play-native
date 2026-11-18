@@ -28,6 +28,7 @@ import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.data.repository.VideoFile
 import com.devbytes.vixplayer.app.ui.library.components.LibraryEmptyState
 import com.devbytes.vixplayer.app.ui.library.components.VideoCard
+import com.devbytes.vixplayer.app.ui.common.screenInsets
 
 /**
  * Shared flat video list. Either backs a [source] (Recently added / Favorites) or, when
@@ -51,6 +52,7 @@ fun VideoListScreen(
     val title = folderTitle ?: source?.title.orEmpty()
 
     Scaffold(
+        contentWindowInsets = screenInsets(),
         topBar = {
             TopAppBar(
                 title = { Text(title) },

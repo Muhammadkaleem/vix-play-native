@@ -51,6 +51,7 @@ import com.devbytes.vixplayer.app.ui.library.components.LibraryEmptyState
 import com.devbytes.vixplayer.app.ui.library.components.LibrarySkeleton
 import com.devbytes.vixplayer.app.ui.library.components.VideoCard
 import com.devbytes.vixplayer.app.ui.library.components.VideoListRow
+import com.devbytes.vixplayer.app.ui.common.screenInsets
 
 private val SortOrder.label: String
     get() = when (this) {
@@ -130,6 +131,7 @@ fun VideoLibraryScreen(
     }
 
     Scaffold(
+        contentWindowInsets = screenInsets(),
         topBar = {
             if (selectionMode) {
                 TopAppBar(

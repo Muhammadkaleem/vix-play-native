@@ -38,6 +38,7 @@ import com.devbytes.vixplayer.app.navigation.PLAYBACK_DEFAULTS_ROUTE
 import com.devbytes.vixplayer.app.navigation.PRIVATE_FOLDER_ROUTE
 import com.devbytes.vixplayer.app.navigation.SUBTITLE_DEFAULTS_ROUTE
 import com.devbytes.vixplayer.app.navigation.THEME_SKINS_ROUTE
+import com.devbytes.vixplayer.app.ui.common.screenInsets
 
 /**
  * Opens the system "Open by default" screen for VixPlay (API 31+), where the user manages
@@ -86,6 +87,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     val privacyOptionsRequired by adsViewModel.privacyOptionsRequired.collectAsStateWithLifecycle()
     Scaffold(
+        contentWindowInsets = screenInsets(),
         topBar = {
             TopAppBar(
                 title = { Text("Settings") },

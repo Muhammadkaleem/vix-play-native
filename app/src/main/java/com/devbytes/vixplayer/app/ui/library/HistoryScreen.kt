@@ -29,6 +29,7 @@ import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.ui.library.components.FolderListSkeleton
 import com.devbytes.vixplayer.app.ui.library.components.HistoryRow
 import com.devbytes.vixplayer.app.ui.library.components.LibraryEmptyState
+import com.devbytes.vixplayer.app.ui.common.screenInsets
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,6 +42,7 @@ fun HistoryScreen(
     var confirmClear by remember { mutableStateOf(false) }
 
     Scaffold(
+        contentWindowInsets = screenInsets(),
         topBar = {
             TopAppBar(
                 title = { Text("History") },

@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.devbytes.vixplayer.app.R
+import com.devbytes.vixplayer.app.ui.common.screenInsets
 
 /**
  * Library Pulse controls: a master switch plus per-trigger toggles. All local, opt-out any
@@ -37,6 +38,7 @@ fun NotificationsScreen(
     val systemEnabled = viewModel.systemNotificationsEnabled()
 
     Scaffold(
+        contentWindowInsets = screenInsets(),
         topBar = {
             TopAppBar(
                 title = { Text("Notifications") },

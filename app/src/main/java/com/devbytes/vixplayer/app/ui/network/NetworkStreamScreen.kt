@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.data.db.entity.NetworkStream
+import com.devbytes.vixplayer.app.ui.common.screenInsets
 
 /** Schemes DefaultMediaSourceFactory can open once the HLS/DASH/RTSP modules are present. */
 private val SUPPORTED_SCHEMES = setOf("http", "https", "rtsp")
@@ -79,6 +80,7 @@ fun NetworkStreamScreen(
     }
 
     Scaffold(
+        contentWindowInsets = screenInsets(),
         topBar = {
             TopAppBar(
                 title = { Text("Stream by URL") },

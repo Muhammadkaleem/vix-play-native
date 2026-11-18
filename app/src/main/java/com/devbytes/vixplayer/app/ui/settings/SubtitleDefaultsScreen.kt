@@ -17,6 +17,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.ui.player.components.SubtitleStyleEditor
+import com.devbytes.vixplayer.app.ui.common.screenInsets
 
 /**
  * Subtitle appearance defaults. Hosts the same editor the player sheet uses, writing the
@@ -31,6 +32,7 @@ fun SubtitleDefaultsScreen(
     val style by viewModel.style.collectAsState()
 
     Scaffold(
+        contentWindowInsets = screenInsets(),
         topBar = {
             TopAppBar(
                 title = { Text("Subtitles") },

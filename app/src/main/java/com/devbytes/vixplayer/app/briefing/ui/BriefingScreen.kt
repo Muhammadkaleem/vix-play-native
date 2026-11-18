@@ -43,6 +43,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
+import com.devbytes.vixplayer.app.ui.common.screenInsets
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,6 +63,7 @@ fun BriefingScreen(
     val dateLine = remember { DateTimeFormatter.ofPattern("EEEE, MMM d", Locale.getDefault()).format(java.time.LocalDate.now()) }
 
     Scaffold(
+        contentWindowInsets = screenInsets(),
         topBar = {
             TopAppBar(
                 title = { Text(if (sample) "Sample brief" else "Today") },

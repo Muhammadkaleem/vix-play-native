@@ -35,6 +35,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.data.repository.RewardEntry
 import com.devbytes.vixplayer.app.ui.library.components.LibraryEmptyState
+import com.devbytes.vixplayer.app.ui.common.screenInsets
 
 /** Trustworthy, read-only view of the local reward ledger — one row per credited reward. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -46,6 +47,7 @@ fun RewardHistoryScreen(
     val ledger by viewModel.ledger.collectAsStateWithLifecycle()
 
     Scaffold(
+        contentWindowInsets = screenInsets(),
         topBar = {
             TopAppBar(
                 title = { Text("Reward history") },

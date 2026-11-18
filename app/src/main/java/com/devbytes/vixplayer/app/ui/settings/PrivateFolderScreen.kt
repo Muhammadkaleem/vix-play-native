@@ -55,6 +55,7 @@ import coil.request.ImageRequest
 import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.data.repository.PrivateItem
 import com.devbytes.vixplayer.app.ui.library.components.LibraryEmptyState
+import com.devbytes.vixplayer.app.ui.common.screenInsets
 
 /**
  * PIN-gated private folder. See [com.devbytes.vixplayer.app.data.repository.PrivateVault]
@@ -73,6 +74,7 @@ fun PrivateFolderScreen(
     BackHandler { viewModel.lock(); onBack() }
 
     Scaffold(
+        contentWindowInsets = screenInsets(),
         topBar = {
             TopAppBar(
                 title = { Text("Private Folder") },

@@ -38,6 +38,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.data.repository.PlaylistRow
 import com.devbytes.vixplayer.app.ui.library.components.LibraryEmptyState
+import com.devbytes.vixplayer.app.ui.common.screenInsets
 
 /**
  * Playlist contents: play all / shuffle, drag to reorder, remove.
@@ -66,6 +67,7 @@ fun PlaylistDetailScreen(
     )
 
     Scaffold(
+        contentWindowInsets = screenInsets(),
         topBar = {
             TopAppBar(
                 title = { Text(name.ifBlank { "Playlist" }) },

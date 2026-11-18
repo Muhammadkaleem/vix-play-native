@@ -51,6 +51,7 @@ import com.devbytes.vixplayer.app.data.db.entity.NetworkServer
 import com.devbytes.vixplayer.app.data.db.entity.ShareProtocol
 import com.devbytes.vixplayer.app.data.network.ShareEntry
 import com.devbytes.vixplayer.app.ui.library.components.LibraryEmptyState
+import com.devbytes.vixplayer.app.ui.common.screenInsets
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,6 +76,7 @@ fun SmbBrowserScreen(
     }
 
     Scaffold(
+        contentWindowInsets = screenInsets(),
         topBar = {
             TopAppBar(
                 title = { Text(title) },

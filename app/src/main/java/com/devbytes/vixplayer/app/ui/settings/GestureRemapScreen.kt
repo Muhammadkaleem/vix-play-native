@@ -29,6 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.player.gesture.DragAction
 import com.devbytes.vixplayer.app.player.gesture.TapAction
+import com.devbytes.vixplayer.app.ui.common.screenInsets
 
 /**
  * Editor for the four remappable gesture slots (left/right vertical drag, left/right
@@ -44,6 +45,7 @@ fun GestureRemapScreen(
     val bindings by viewModel.bindings.collectAsStateWithLifecycle()
 
     Scaffold(
+        contentWindowInsets = screenInsets(),
         topBar = {
             TopAppBar(
                 title = { Text("Gestures") },

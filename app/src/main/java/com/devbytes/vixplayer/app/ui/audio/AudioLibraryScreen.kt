@@ -9,6 +9,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -56,6 +57,9 @@ import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.data.repository.AudioTrack
 import com.devbytes.vixplayer.app.ui.library.components.LibraryEmptyState
 import com.devbytes.vixplayer.app.ui.library.components.LibrarySkeleton
+import com.devbytes.vixplayer.app.ui.common.screenInsets
+import com.devbytes.vixplayer.app.ui.common.withoutBottom
+import com.devbytes.vixplayer.app.ui.common.bottomOnly
 
 /**
  * Audio tab root — Tracks / Albums / Artists / Folders / Playlists.
@@ -113,6 +117,7 @@ fun AudioLibraryScreen(
     BackHandler(enabled = !selectionMode && openGroup != null) { viewModel.closeGroup() }
 
     Scaffold(
+        contentWindowInsets = screenInsets(),
         topBar = {
             if (selectionMode) {
                 // Contextual bar replaces the normal one while selecting.
@@ -207,7 +212,9 @@ fun AudioLibraryScreen(
             }
         },
     ) { padding ->
-        Column(modifier = Modifier.padding(padding)) {
+        // Lists reserve the bottom chrome inside their content so they scroll behind the nav bar.
+        val listBottom = padding.bottomOnly()
+        Column(modifier = Modifier.padding(padding.withoutBottom())) {
             // Tabs stay hidden while drilled in — the title and back arrow own that level.
             if (openGroup == null) {
                 ScrollableTabRow(
@@ -248,6 +255,7 @@ fun AudioLibraryScreen(
                             },
                             onToggle = { viewModel.toggleSelection(it) },
                             onAddToPlaylist = { pendingTrack = it },
+                            contentPadding = listBottom,
                         )
                         // Tracks tab: the whole library is the context.
                         tab == AudioTab.TRACKS -> TrackList(
@@ -260,6 +268,7 @@ fun AudioLibraryScreen(
                             },
                             onToggle = { viewModel.toggleSelection(it) },
                             onAddToPlaylist = { pendingTrack = it },
+                            contentPadding = listBottom,
                         )
 
                         tab == AudioTab.PLAYLISTS -> {
@@ -270,7 +279,7 @@ fun AudioLibraryScreen(
                                     body = "Use the menu on any track to start one.",
                                 )
                             } else {
-                                LazyColumn {
+                                LazyColumn(contentPadding = listBottom) {
                                     items(playlists, key = { it.id }) { playlist ->
                                         GroupRow(
                                             group = AudioGroup(
@@ -289,7 +298,7 @@ fun AudioLibraryScreen(
 
                         else -> {
                             val groups = viewModel.groupsFor(tab, s.tracks)
-                            LazyColumn {
+                            LazyColumn(contentPadding = listBottom) {
                                 items(groups, key = { it.name }) { group ->
                                     GroupRow(
                                         group = group,
@@ -424,8 +433,9 @@ private fun TrackList(
     onPlay: (AudioTrack) -> Unit,
     onToggle: (AudioTrack) -> Unit,
     onAddToPlaylist: (AudioTrack) -> Unit,
+    contentPadding: PaddingValues = PaddingValues(),
 ) {
-    LazyColumn {
+    LazyColumn(contentPadding = contentPadding) {
         items(tracks, key = { it.mediaStoreId }) { track ->
             TrackRow(
                 title = track.title,

@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import com.devbytes.vixplayer.app.R
+import com.devbytes.vixplayer.app.ui.common.screenInsets
 
 /**
  * Network tab hub. "Stream by URL" is live; SMB shares and Cast are shown as honest
@@ -31,6 +32,7 @@ fun NetworkScreen(
     onCastClick: () -> Unit = {},
 ) {
     Scaffold(
+        contentWindowInsets = screenInsets(),
         topBar = {
             TopAppBar(
                 title = { Text("Network") },

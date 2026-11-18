@@ -82,6 +82,9 @@ import com.devbytes.vixplayer.app.ui.theme.Success
 import com.devbytes.vixplayer.app.ui.theme.Warning
 import com.devbytes.vixplayer.app.ui.theme.ScrimStrong
 import com.devbytes.vixplayer.app.ui.theme.TrackInactive
+import com.devbytes.vixplayer.app.ui.common.screenInsets
+import com.devbytes.vixplayer.app.ui.common.withoutBottom
+import com.devbytes.vixplayer.app.ui.common.bottomOnly
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -136,6 +139,7 @@ fun DashboardScreen(
     }
 
     Scaffold(
+        contentWindowInsets = screenInsets(),
         topBar = {
             TopAppBar(
                 title = { VideoHeaderTitle() },
@@ -152,8 +156,9 @@ fun DashboardScreen(
         },
     ) { padding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp),
+            // Bottom reserved inside the list so the feed scrolls behind the translucent nav bar.
+            modifier = Modifier.fillMaxSize().padding(padding.withoutBottom()),
+            contentPadding = padding.bottomOnly(extra = 24.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             // 1. Continue watching — swipeable carousel of up to 5 in-progress videos.

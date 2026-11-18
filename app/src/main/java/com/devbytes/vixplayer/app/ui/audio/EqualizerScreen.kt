@@ -41,6 +41,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.data.db.entity.AudioOutput
 import com.devbytes.vixplayer.app.ui.library.components.LibraryEmptyState
+import com.devbytes.vixplayer.app.ui.common.screenInsets
 
 /**
  * Multiband EQ plus bass boost, virtualizer and preamp.
@@ -61,6 +62,7 @@ fun EqualizerScreen(
     var showSaveDialog by remember { mutableStateOf(false) }
 
     Scaffold(
+        contentWindowInsets = screenInsets(),
         topBar = {
             TopAppBar(
                 title = { Text("Equalizer") },

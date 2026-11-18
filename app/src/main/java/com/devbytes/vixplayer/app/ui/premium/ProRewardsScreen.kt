@@ -57,6 +57,7 @@ import com.devbytes.vixplayer.app.ui.theme.OnScrim
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.devbytes.vixplayer.app.ui.common.screenInsets
 
 private val GoldLightScreen = Color(0xFFFBE9A8)
 private val GoldDeepScreen = Color(0xFFE0A32E)
@@ -85,6 +86,7 @@ fun ProRewardsScreen(
     }
 
     Scaffold(
+        contentWindowInsets = screenInsets(),
         topBar = {
             TopAppBar(
                 title = { Text("Vix Pro Rewards") },
