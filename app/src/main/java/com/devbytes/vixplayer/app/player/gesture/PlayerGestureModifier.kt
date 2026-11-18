@@ -19,6 +19,10 @@ private enum class DragAxis { HORIZONTAL, VERTICAL }
  *  horizontal scrubs don't collide with the system back-gesture. */
 private val EDGE_EXCLUSION = 24.dp
 
+/** While zoomed, a vertical swipe starting within this fraction of the width from either
+ *  edge still adjusts brightness (left) / volume (right); drags elsewhere pan the viewport. */
+private const val EDGE_ZONE_FRACTION = 0.25f
+
 /**
  * Single owner of all player-surface pointer input.
  *
@@ -93,26 +97,53 @@ fun Modifier.playerGestures(
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
 
-                // Zoomed: one finger pans the viewport (free 2D, no axis lock). Decided at
-                // touch-down — a single-finger drag can't change the zoom state mid-gesture.
+                // Zoomed: carve out the brightness/volume edge zones so vertical edge swipes
+                // keep working; everything else pans the viewport (free 2D). The zones are in
+                // container (untransformed) space, so the zoom scale/pan offset never shifts
+                // them. Which branch a drag takes is decided once, at axis-lock, and held for
+                // the rest of the gesture.
                 if (zoomedState.value) {
+                    val zonePx = size.width * EDGE_ZONE_FRACTION
+                    val inLeftEdge = down.position.x < zonePx
+                    val inRightEdge = down.position.x > size.width - zonePx
+                    var panning: Boolean? = null // null until the drag declares its direction
                     var last = down.position
-                    var panned = false
+                    var acted = false
                     while (true) {
                         val event = awaitPointerEvent()
                         // A second finger means a pinch — let the pinch detector own it.
                         if (event.changes.count { it.pressed } >= 2) break
                         val change = event.changes.firstOrNull { it.id == down.id } ?: break
                         if (!change.pressed) break
-                        val delta = change.position - last
-                        last = change.position
-                        if (delta != Offset.Zero) {
-                            onEvent(GestureEvent.Pan(delta.x, delta.y))
-                            panned = true
-                            change.consume()
+                        if (panning == null) {
+                            val dx = change.position.x - down.position.x
+                            val dy = change.position.y - down.position.y
+                            if (abs(dx) > slop || abs(dy) > slop) {
+                                val vertical = abs(dy) > abs(dx)
+                                // Vertical + started in an edge zone → brightness/volume;
+                                // otherwise pan.
+                                panning = !(vertical && (inLeftEdge || inRightEdge))
+                                last = change.position
+                            }
+                        } else {
+                            val delta = change.position - last
+                            last = change.position
+                            if (panning == true) {
+                                if (delta != Offset.Zero) {
+                                    onEvent(GestureEvent.Pan(delta.x, delta.y))
+                                    acted = true
+                                    change.consume()
+                                }
+                            } else {
+                                val frac = -delta.y / size.height
+                                val side = if (inLeftEdge) SeekSide.LEFT else SeekSide.RIGHT
+                                onEvent(GestureEvent.VerticalDrag(side, frac))
+                                acted = true
+                                change.consume()
+                            }
                         }
                     }
-                    if (panned) onEvent(GestureEvent.DragEnd)
+                    if (acted) onEvent(GestureEvent.DragEnd)
                     return@awaitEachGesture
                 }
 
@@ -135,12 +166,13 @@ fun Modifier.playerGestures(
                         break
                     }
 
-                    // Speed-hold takes over the pointer once long-press engages —
-                    // vertical movement varies the multiplier, no axis lock.
+                    // Speed-hold takes over the pointer once long-press engages — the pill
+                    // is open and a horizontal slide moves across its dots (right = faster),
+                    // matching the dots' left-to-right layout. No axis lock.
                     if (speedActive.value) {
                         val delta = change.position - last
                         last = change.position
-                        speedTotal += -delta.y / size.height
+                        speedTotal += delta.x / size.width
                         onEvent(GestureEvent.SpeedHoldChange(speedTotal))
                         dragged = true
                         change.consume()

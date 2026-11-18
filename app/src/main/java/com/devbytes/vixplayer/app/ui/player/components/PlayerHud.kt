@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -22,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -57,6 +59,8 @@ fun PlayerHud(
     onCycleAspect: () -> Unit = {},
     onCycleOrientation: () -> Unit = {},
     onSpeedClick: () -> Unit = {},
+    /** Current speed shown in the HUD when it isn't 1× (null hides it, showing the icon). */
+    speedLabel: String? = null,
     onSubtitlesClick: () -> Unit = {},
     onAudioClick: () -> Unit = {},
     onEnterPip: () -> Unit = {},
@@ -64,19 +68,15 @@ fun PlayerHud(
     onScreenshotClick: () -> Unit = {},
     onFileInfoClick: () -> Unit = {},
     onLockClick: () -> Unit = {},
-    showFavorite: Boolean = false,
-    isFavorite: Boolean = false,
-    onFavoriteClick: () -> Unit = {},
     onMenuOpenChange: (Boolean) -> Unit = {},
+    /** Opens the slide-out options panel (replaces the old overflow dropdown). */
+    onMoreClick: () -> Unit = {},
     onScrubbingChange: (Boolean) -> Unit = {},
     /** Supplies scrub-preview frames; null disables the seek-bar thumbnail. */
     frameLoader: (suspend (Long) -> android.graphics.Bitmap?)? = null,
     modifier: Modifier = Modifier,
 ) {
     var isPlaying by remember { mutableStateOf(player.isPlaying) }
-    var menuExpanded by remember { mutableStateOf(false) }
-    // Report menu-open upward so the parent can freeze the controls auto-hide timer.
-    LaunchedEffect(menuExpanded) { onMenuOpenChange(menuExpanded) }
     var positionMs by remember { mutableLongStateOf(player.currentPosition) }
     var durationMs by remember { mutableLongStateOf(player.duration.coerceAtLeast(0L)) }
     var bufferedMs by remember { mutableLongStateOf(player.bufferedPosition) }
@@ -116,8 +116,11 @@ fun PlayerHud(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    // Clear the status bar + any display cutout (notch/punch-hole), so the
+                    // top controls never sit under a cutout in immersive mode or landscape.
                     .statusBarsPadding()
-                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                    .displayCutoutPadding()
+                    .padding(horizontal = 4.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = onBack) {
@@ -135,25 +138,8 @@ fun PlayerHud(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                // Favourite the current video (hidden for non-MediaStore URIs).
-                if (showFavorite) {
-                    IconButton(onClick = onFavoriteClick) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_favorite),
-                            contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
-                            tint = if (isFavorite) MaterialTheme.colorScheme.primary else OnScrim,
-                        )
-                    }
-                }
-                // Priority controls, promoted from the overflow to direct top-bar
-                // buttons (most-used first): Subtitles, Audio track, Speed, then Lock.
-                IconButton(onClick = onSubtitlesClick) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_subtitles),
-                        contentDescription = "Subtitles",
-                        tint = OnScrim,
-                    )
-                }
+                // Priority top-bar controls (most-used first): Audio track, Subtitles, Speed,
+                // then Lock. Audio track sits first — the clip's audio switcher lives here.
                 // Only shown when the media carries a real audio choice (>= 2 tracks).
                 if (showAudioTrack) {
                     IconButton(onClick = onAudioClick) {
@@ -164,12 +150,29 @@ fun PlayerHud(
                         )
                     }
                 }
-                IconButton(onClick = onSpeedClick) {
+                IconButton(onClick = onSubtitlesClick) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_speed),
-                        contentDescription = "Playback speed",
+                        painter = painterResource(R.drawable.ic_subtitles),
+                        contentDescription = "Subtitles",
                         tint = OnScrim,
                     )
+                }
+                IconButton(onClick = onSpeedClick) {
+                    if (speedLabel != null) {
+                        // Non-1× — surface the value loudly in the accent colour.
+                        Text(
+                            text = speedLabel,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    } else {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_speed),
+                            contentDescription = "Playback speed",
+                            tint = OnScrim,
+                        )
+                    }
                 }
                 IconButton(onClick = onLockClick) {
                     Icon(
@@ -178,100 +181,12 @@ fun PlayerHud(
                         tint = OnScrim,
                     )
                 }
-                Box {
-                    IconButton(onClick = { menuExpanded = true }) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_more_vert),
-                            contentDescription = "More",
-                            tint = OnScrim,
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false },
-                    ) {
-                        // Only surfaces on devices that support Picture-in-Picture.
-                        if (showPip) {
-                            DropdownMenuItem(
-                                text = { Text("Picture-in-picture") },
-                                leadingIcon = {
-                                    Icon(
-                                        painter = painterResource(R.drawable.ic_pip),
-                                        contentDescription = null,
-                                    )
-                                },
-                                onClick = {
-                                    menuExpanded = false
-                                    onEnterPip()
-                                },
-                            )
-                        }
-                        DropdownMenuItem(
-                            text = { Text("Screenshot") },
-                            leadingIcon = {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_screenshot),
-                                    contentDescription = null,
-                                )
-                            },
-                            onClick = {
-                                menuExpanded = false
-                                onScreenshotClick()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("File info") },
-                            leadingIcon = {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_info),
-                                    contentDescription = null,
-                                )
-                            },
-                            onClick = {
-                                menuExpanded = false
-                                onFileInfoClick()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(sleepTimerLabel) },
-                            leadingIcon = {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_timer),
-                                    contentDescription = null,
-                                )
-                            },
-                            onClick = {
-                                menuExpanded = false
-                                onSleepTimerClick()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Aspect: ${aspectMode.label}") },
-                            leadingIcon = {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_aspect),
-                                    contentDescription = null,
-                                )
-                            },
-                            onClick = {
-                                menuExpanded = false
-                                onCycleAspect()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Orientation: $orientationLabel") },
-                            leadingIcon = {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_rotate),
-                                    contentDescription = null,
-                                )
-                            },
-                            onClick = {
-                                menuExpanded = false
-                                onCycleOrientation()
-                            },
-                        )
-                    }
+                IconButton(onClick = onMoreClick) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_more_vert),
+                        contentDescription = "More options",
+                        tint = OnScrim,
+                    )
                 }
             }
 
@@ -280,7 +195,10 @@ fun PlayerHud(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
+                    // Clear the nav bar + any display cutout so the seek bar / transport
+                    // controls aren't clipped by a cutout (esp. in landscape).
                     .navigationBarsPadding()
+                    .displayCutoutPadding()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
                 PlayerSeekBar(

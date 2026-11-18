@@ -28,6 +28,7 @@ import com.devbytes.vixplayer.app.navigation.ABOUT_PRO_ROUTE
 import com.devbytes.vixplayer.app.navigation.BRIEFING_SETTINGS_ROUTE
 import com.devbytes.vixplayer.app.navigation.GESTURE_REMAP_ROUTE
 import com.devbytes.vixplayer.app.navigation.NOTIFICATIONS_ROUTE
+import com.devbytes.vixplayer.app.navigation.PRO_REWARDS_ROUTE
 import com.devbytes.vixplayer.app.navigation.PLAYBACK_DEFAULTS_ROUTE
 import com.devbytes.vixplayer.app.navigation.PRIVATE_FOLDER_ROUTE
 import com.devbytes.vixplayer.app.navigation.SUBTITLE_DEFAULTS_ROUTE
@@ -60,6 +61,7 @@ private data class SettingsItem(
 )
 
 private val SETTINGS_ITEMS = listOf(
+    SettingsItem("Vix Pro Rewards", "Watch ads to earn Pro time, status, and history", R.drawable.ic_crown, PRO_REWARDS_ROUTE),
     SettingsItem("Gestures", "Remap taps and swipes, sensitivity, and haptics", R.drawable.ic_settings, GESTURE_REMAP_ROUTE),
     SettingsItem("Theme & Skins", "Base theme, accent color, and player skins", R.drawable.ic_eye, THEME_SKINS_ROUTE),
     SettingsItem("Subtitles", "Default language, styling, and encoding", R.drawable.ic_subtitles, SUBTITLE_DEFAULTS_ROUTE),

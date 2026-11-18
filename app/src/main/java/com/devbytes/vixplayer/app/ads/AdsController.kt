@@ -3,6 +3,7 @@ package com.devbytes.vixplayer.app.ads
 import android.app.Activity
 import android.content.Context
 import com.google.android.gms.ads.MobileAds
+import com.google.android.gms.ads.RequestConfiguration
 import com.google.android.ump.ConsentRequestParameters
 import com.google.android.ump.UserMessagingPlatform
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -62,6 +63,21 @@ class AdsController @Inject constructor(
 
     private fun initializeSdk() {
         if (sdkInitialized.compareAndSet(false, true)) {
+            // Cap served ad content to General-audiences (G) so ads are always consistent with
+            // the app's content rating — Play rejected v62 for ad content exceeding the rating.
+            // Also tag the app as NOT child-directed / not under-age (it's a general media app,
+            // not a Families/kids title). Set before init so the first requests honor it.
+            MobileAds.setRequestConfiguration(
+                RequestConfiguration.Builder()
+                    .setMaxAdContentRating(RequestConfiguration.MAX_AD_CONTENT_RATING_G)
+                    .setTagForChildDirectedTreatment(
+                        RequestConfiguration.TAG_FOR_CHILD_DIRECTED_TREATMENT_FALSE,
+                    )
+                    .setTagForUnderAgeOfConsent(
+                        RequestConfiguration.TAG_FOR_UNDER_AGE_OF_CONSENT_FALSE,
+                    )
+                    .build()
+            )
             MobileAds.initialize(context) {}
         }
         _canRequestAds.value = true

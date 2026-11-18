@@ -32,6 +32,12 @@ data class FileInfo(
     val videoCodecMime: String?,
     val audioCodecMime: String?,
     val frameRate: Float?,
+    /** Decoder names from the player (e.g. "ffmpeg", "c2.android.aac.decoder"). */
+    val videoDecoder: String? = null,
+    val audioDecoder: String? = null,
+    /** Mime of an audio/video track no renderer on this device can decode (track stays unselected). */
+    val unsupportedVideoMime: String? = null,
+    val unsupportedAudioMime: String? = null,
 )
 
 @Composable
@@ -71,15 +77,23 @@ fun FileInfoSheet(
         info.durationMs?.let { InfoRow("Duration", formatTimeMs(it)) }
 
         val resolution = info.width?.let { w -> info.height?.let { h -> "${w}\u00D7${h}" } }
+        // An unsupported track has no selected format, so it's reported from the track list
+        // instead and flagged inline — the fact stays discoverable after the HUD pill is gone.
+        val videoCodec = info.videoCodecMime?.let(::prettyCodec)
+            ?: info.unsupportedVideoMime?.let { "${prettyCodec(it)} (unsupported)" }
+        val audioCodec = info.audioCodecMime?.let(::prettyCodec)
+            ?: info.unsupportedAudioMime?.let { "${prettyCodec(it)} (unsupported)" }
         val hasStream = resolution != null ||
-            info.videoCodecMime != null ||
-            info.audioCodecMime != null ||
+            videoCodec != null ||
+            audioCodec != null ||
             info.frameRate != null
         if (hasStream) {
             SectionLabel("Stream")
             resolution?.let { InfoRow("Resolution", it) }
-            info.videoCodecMime?.let { InfoRow("Video", prettyCodec(it)) }
-            info.audioCodecMime?.let { InfoRow("Audio", prettyCodec(it)) }
+            videoCodec?.let { InfoRow("Video", it) }
+            info.videoDecoder?.let { InfoRow("Video decoder", prettyDecoder(it)) }
+            audioCodec?.let { InfoRow("Audio", it) }
+            info.audioDecoder?.let { InfoRow("Audio decoder", prettyDecoder(it)) }
             info.frameRate?.let { InfoRow("Frame rate", "%.2f fps".format(it)) }
         }
     }
@@ -113,23 +127,43 @@ private fun InfoRow(label: String, value: String) {
     }
 }
 
-private fun prettyCodec(mime: String): String = when (mime.lowercase()) {
+/** Human codec name for a Media3 sample mime; shared with the unsupported-codec messaging. */
+internal fun prettyCodec(mime: String): String = when (mime.lowercase()) {
     "video/avc" -> "H.264"
     "video/hevc" -> "H.265 (HEVC)"
+    "video/dolby-vision" -> "Dolby Vision"
     "video/x-vnd.on2.vp8" -> "VP8"
     "video/x-vnd.on2.vp9" -> "VP9"
     "video/av01" -> "AV1"
     "video/mp4v-es" -> "MPEG-4"
+    "video/divx" -> "DivX"
+    "video/mpeg2" -> "MPEG-2"
+    "video/wvc1" -> "VC-1 (WMV)"
     "video/3gpp" -> "H.263"
     "audio/mp4a-latm" -> "AAC"
     "audio/mpeg" -> "MP3"
-    "audio/ac3" -> "AC-3"
-    "audio/eac3" -> "E-AC-3"
+    "audio/mpeg-l2" -> "MP2"
+    "audio/ac3" -> "Dolby AC-3"
+    "audio/eac3", "audio/eac3-joc" -> "Dolby E-AC-3"
+    "audio/true-hd" -> "Dolby TrueHD"
+    "audio/vnd.dts" -> "DTS"
+    "audio/vnd.dts.hd", "audio/vnd.dts.hd;profile=lbr" -> "DTS-HD"
+    "audio/vnd.dts.uhd;profile=p2" -> "DTS:X"
     "audio/vorbis" -> "Vorbis"
     "audio/opus" -> "Opus"
     "audio/flac" -> "FLAC"
+    "audio/alac" -> "ALAC"
+    "audio/x-ms-wma" -> "WMA"
     "audio/raw" -> "PCM"
     else -> mime.substringAfter('/').uppercase()
+}
+
+/** Which path decoded the stream — the one visible proof that the FFmpeg extension engaged. */
+private fun prettyDecoder(name: String): String = when {
+    // FfmpegAudioRenderer reports e.g. "ffmpegLavc60.3.100-mp3" (libavcodec version + codec).
+    name.startsWith("ffmpeg", ignoreCase = true) -> "FFmpeg (software)"
+    name.startsWith("c2.android.") || name.startsWith("OMX.google.") -> "Android (software) · $name"
+    else -> "Hardware · $name"
 }
 
 private fun formatBytes(bytes: Long): String {

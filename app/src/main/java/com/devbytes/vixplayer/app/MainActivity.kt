@@ -8,6 +8,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -23,6 +24,7 @@ import com.devbytes.vixplayer.app.notifications.PulseEvaluator
 import com.devbytes.vixplayer.app.notifications.PulseNotifier
 import com.devbytes.vixplayer.app.notifications.PulseScheduler
 import com.devbytes.vixplayer.app.player.PipController
+import com.devbytes.vixplayer.app.update.AppUpdater
 import com.devbytes.vixplayer.app.ui.VixPlayNavGraph
 import com.devbytes.vixplayer.app.ui.splash.SplashViewModel
 import com.devbytes.vixplayer.app.ui.theme.ThemeViewModel
@@ -63,6 +65,17 @@ class MainActivity : ComponentActivity() {
     /** A Daily Briefing notification tap asks to open today's brief with the library beneath. */
     val pendingOpenBriefing = mutableStateOf(false)
 
+    // ── In-app updates (Google Play) ──────────────────────────────────────────
+    /** Launcher for the Play update consent/progress UI (registered on the Activity). */
+    private val updateLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult(),
+    ) { /* No-op: onResume reconciles in-progress / downloaded state. */ }
+
+    /** Flipped true when a Flexible update has downloaded; drives the restart Snackbar. */
+    private val updateReady = mutableStateOf(false)
+
+    private lateinit var appUpdater: AppUpdater
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen().setKeepOnScreenCondition { !splashViewModel.checkDone.value }
         super.onCreate(savedInstanceState)
@@ -87,6 +100,10 @@ class MainActivity : ComponentActivity() {
         // Gather EEA consent (UMP) then initialize ads; the banner stays hidden until this
         // resolves, so no ad loads before consent.
         adsController.ensureConsentAndInit(this)
+        // Check for a Play update: Flexible in the background by default, escalating to the
+        // Immediate blocking flow for high-priority / very-stale releases. No-op off-Play.
+        appUpdater = AppUpdater(this, updateLauncher) { updateReady.value = true }
+        appUpdater.checkForUpdate()
         setContent {
             val themeState by themeViewModel.themeState.collectAsState()
             VixPlayTheme(mode = themeState.mode, accent = themeState.accent) {
@@ -97,9 +114,22 @@ class MainActivity : ComponentActivity() {
                     onPulsePlayConsumed = { pendingPulsePlayUri.value = null },
                     openBriefing = pendingOpenBriefing.value,
                     onBriefingConsumed = { pendingOpenBriefing.value = false },
+                    updateReady = updateReady.value,
+                    onInstallUpdate = { appUpdater.completeUpdate() },
                 )
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Resume an interrupted Immediate update; re-surface a finished Flexible download.
+        if (::appUpdater.isInitialized) appUpdater.onResume()
+    }
+
+    override fun onDestroy() {
+        if (::appUpdater.isInitialized) appUpdater.unregister()
+        super.onDestroy()
     }
 
     // A file opened (or a Pulse tap) while the app is already running arrives here.

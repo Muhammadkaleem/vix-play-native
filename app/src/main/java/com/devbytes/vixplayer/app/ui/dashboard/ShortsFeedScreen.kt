@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -148,7 +149,8 @@ fun ShortsFeedScreen(
                             )
                         }
 
-                        // Title along the bottom.
+                        // Title along the bottom. The gradient reaches the screen edge, but the
+                        // text is padded above the gesture nav bar so it isn't clipped.
                         Column(
                             Modifier
                                 .align(Alignment.BottomStart)
@@ -159,7 +161,8 @@ fun ShortsFeedScreen(
                                         1f to Color.Black.copy(alpha = 0.6f),
                                     )
                                 )
-                                .padding(16.dp),
+                                .navigationBarsPadding()
+                                .padding(horizontal = 16.dp, vertical = 16.dp),
                         ) {
                             Text(
                                 video.name,
@@ -175,10 +178,13 @@ fun ShortsFeedScreen(
             }
         }
 
-        // Back control, always on top.
+        // Back control, always on top — padded below the status bar with breathing room.
         IconButton(
             onClick = onBack,
-            modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(4.dp),
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .statusBarsPadding()
+                .padding(start = 4.dp, top = 8.dp),
         ) {
             Icon(painterResource(R.drawable.ic_back), contentDescription = "Back", tint = OnScrim)
         }

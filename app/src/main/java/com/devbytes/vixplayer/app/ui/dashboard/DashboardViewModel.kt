@@ -31,12 +31,30 @@ class DashboardViewModel @Inject constructor(
 
     data class PinnableFolder(val folder: FolderEntry, val isPinned: Boolean)
 
+    data class LibraryCategory(val name: String, val count: Int)
+
+    data class LibraryStats(
+        val videoCount: Int,
+        val totalBytes: Long,
+        val unwatchedMs: Long,
+        val categories: List<LibraryCategory>,
+    )
+
     data class DashboardState(
         val loading: Boolean = true,
+        val stats: LibraryStats? = null,
         val continueHero: VideoWithPosition? = null,
-        val fromThisFolder: List<VideoFile> = emptyList(),
+        // Up to 5 in-progress videos (newest playback first) for the Continue Watching carousel.
+        val continueWatching: List<VideoWithPosition> = emptyList(),
+        // Folder videos paired with resume position → "Xm left" + progress bar when in progress.
+        val fromThisFolder: List<VideoWithPosition> = emptyList(),
         val folders: List<PinnableFolder> = emptyList(),
         val recentlyAdded: List<VideoFile> = emptyList(),
+        // Videos added in the last 7 days (newest first) for the "New on this device" list.
+        val newOnDevice: List<VideoFile> = emptyList(),
+        val highRes: List<VideoFile> = emptyList(),
+        // Videos ≤ 8h (longest-fitting first); the "How much time do you have?" rail filters this.
+        val timeWindowPool: List<VideoFile> = emptyList(),
         val favorites: List<VideoFile> = emptyList(),
         val shortsCount: Int = 0,
         val shortsSamples: List<VideoFile> = emptyList(),
@@ -47,26 +65,65 @@ class DashboardViewModel @Inject constructor(
 
     fun refresh() {
         viewModelScope.launch {
+            // One pass over recent positions: drives Continue Watching + the "From this folder"
+            // resume labels (so a folder video shows "Xm left" if it's been partly watched).
+            val recentPositions = runCatching { playbackRepository.getRecentPositions(200) }.getOrDefault(emptyList())
+            val posByMediaId = recentPositions.associateBy { it.mediaStoreId }
+
             // Continue watching: most-recent in-progress video (2%..97%).
-            val inProgress = playbackRepository.getRecentPositions(20).mapNotNull { pos ->
+            val inProgress = recentPositions.take(20).mapNotNull { pos ->
                 val video = runCatching { mediaRepository.queryVideoById(pos.mediaStoreId) }.getOrNull()
                     ?: return@mapNotNull null
                 VideoWithPosition(video, pos.positionMs, pos.lastPlayedAt)
                     .takeIf { it.progressFraction in 0.02f..0.97f }
             }
             val hero = inProgress.firstOrNull()
+            val continueWatching = inProgress.take(5)
             val fromFolder = hero
                 ?.let { runCatching { mediaRepository.videosInFolderOf(it.video.mediaStoreId) }.getOrNull() }
                 ?.take(10).orEmpty()
+                .map { v ->
+                    val p = posByMediaId[v.mediaStoreId]
+                    VideoWithPosition(v, p?.positionMs ?: 0L, p?.lastPlayedAt ?: 0L)
+                }
 
             // Folders, pinned first (queryFolders order preserved within each group).
             val pinned = settingsRepository.pinnedFolders.first()
-            val folders = runCatching { mediaRepository.queryFolders() }.getOrDefault(emptyList())
+            val allFolders = runCatching { mediaRepository.queryFolders() }.getOrDefault(emptyList())
+            val folders = allFolders
                 .map { PinnableFolder(it, it.bucketId in pinned) }
                 .sortedByDescending { it.isPinned }
                 .take(4)
 
-            val recentlyAdded = runCatching { mediaRepository.queryRecentlyAdded(5) }.getOrDefault(emptyList())
+            // Library overview stats (count / size / unwatched hours / category breakdown).
+            val allVideos = runCatching { mediaRepository.queryAllVideos() }.getOrDefault(emptyList())
+            val watchedIds = runCatching { playbackRepository.getRecentPositions(10000) }
+                .getOrDefault(emptyList())
+                .filter { it.positionMs > 0 }.map { it.mediaStoreId }.toSet()
+            val byCount = allFolders.sortedByDescending { it.videoCount }
+            val categories = buildList {
+                byCount.take(3).forEach { add(LibraryCategory(it.name, it.videoCount)) }
+                val other = byCount.drop(3).sumOf { it.videoCount }
+                if (other > 0) add(LibraryCategory("Other", other))
+            }
+            val stats = LibraryStats(
+                videoCount = allVideos.size,
+                totalBytes = allVideos.sumOf { it.sizeBytes },
+                unwatchedMs = allVideos.filter { it.mediaStoreId !in watchedIds }.sumOf { it.durationMs },
+                categories = categories,
+            )
+
+            val recent = runCatching { mediaRepository.queryRecentlyAdded(30) }.getOrDefault(emptyList())
+            val recentlyAdded = recent.take(5)
+            val sevenDaysAgo = System.currentTimeMillis() - 7L * 24 * 3_600_000L
+            val newOnDevice = recent.filter { it.dateAddedMs >= sevenDaysAgo }
+
+            val highRes = runCatching { mediaRepository.queryHighResVideos(5) }.getOrDefault(emptyList())
+
+            // Pool for the "How much time do you have?" rail: everything up to ~8h (All night).
+            val timeWindowPool = runCatching {
+                mediaRepository.queryByMaxDuration(8L * 3_600_000L, 60)
+            }.getOrDefault(emptyList())
 
             val favIds = favoritesRepository.observeIds().first()
             val favorites = runCatching { mediaRepository.queryVideosByIds(favIds) }.getOrDefault(emptyList()).take(4)
@@ -78,10 +135,15 @@ class DashboardViewModel @Inject constructor(
 
             _state.value = DashboardState(
                 loading = false,
+                stats = stats,
                 continueHero = hero,
+                continueWatching = continueWatching,
                 fromThisFolder = fromFolder,
                 folders = folders,
                 recentlyAdded = recentlyAdded,
+                newOnDevice = newOnDevice,
+                highRes = highRes,
+                timeWindowPool = timeWindowPool,
                 favorites = favorites,
                 shortsCount = shortsCount,
                 shortsSamples = shortsSamples,

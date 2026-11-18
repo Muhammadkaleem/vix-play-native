@@ -73,6 +73,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import android.util.Log
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
@@ -102,8 +103,10 @@ import com.devbytes.vixplayer.app.ui.player.components.AspectHud
 import com.devbytes.vixplayer.app.ui.player.components.AspectMode
 import com.devbytes.vixplayer.app.ui.player.components.AudioTrackSheet
 import com.devbytes.vixplayer.app.ui.player.components.AudioTrackUi
+import com.devbytes.vixplayer.app.ui.player.components.PlayerOptionsPanel
+import com.devbytes.vixplayer.app.ui.player.components.PlayerOptionsValues
 import com.devbytes.vixplayer.app.ui.player.components.DoubleTapSeekOverlay
-import com.devbytes.vixplayer.app.ui.player.components.EndedOverlay
+import com.devbytes.vixplayer.app.ui.player.components.UpNextOverlay
 import com.devbytes.vixplayer.app.ui.player.components.ErrorOverlay
 import com.devbytes.vixplayer.app.ui.player.components.FileInfo
 import com.devbytes.vixplayer.app.ui.player.components.FileInfoSheet
@@ -116,10 +119,17 @@ import com.devbytes.vixplayer.app.ui.player.components.PlayerHud
 import com.devbytes.vixplayer.app.ui.player.components.ScreenshotHud
 import com.devbytes.vixplayer.app.ui.player.components.ScrubPreview
 import com.devbytes.vixplayer.app.ui.player.components.SleepTimerHud
+import com.devbytes.vixplayer.app.ui.player.components.UnsupportedCodecHud
+import com.devbytes.vixplayer.app.ui.player.components.prettyCodec
+import com.devbytes.vixplayer.app.player.UnsupportedCodecException
+import com.devbytes.vixplayer.app.player.unsupportedMime
 import com.devbytes.vixplayer.app.ui.player.components.SleepTimerMode
 import com.devbytes.vixplayer.app.ui.player.components.SleepTimerSheet
-import com.devbytes.vixplayer.app.ui.player.components.SpeedHud
-import com.devbytes.vixplayer.app.ui.player.components.SpeedSheet
+import com.devbytes.vixplayer.app.ui.player.components.SPEED_DRAG_STEPS_PER_WIDTH
+import com.devbytes.vixplayer.app.ui.player.components.SPEED_PRESETS
+import com.devbytes.vixplayer.app.ui.player.components.SpeedControlPill
+import com.devbytes.vixplayer.app.ui.player.components.formatSpeed
+import com.devbytes.vixplayer.app.ui.player.components.nearestSpeedPreset
 import com.devbytes.vixplayer.app.ui.player.components.ResumeChip
 import com.devbytes.vixplayer.app.ui.player.components.SubtitleSheet
 import com.devbytes.vixplayer.app.ui.player.components.SubtitleStyleEditor
@@ -141,6 +151,7 @@ fun PlayerScreen(
     uri: String,
     onBack: () -> Unit,
     skin: PlayerSkin = PlayerSkin.Classic,
+    onOpenEqualizer: () -> Unit = {},
     viewModel: PlayerViewModel = hiltViewModel(),
 ) {
     var currentSheet by remember { mutableStateOf<PlayerSheet?>(null) }
@@ -173,10 +184,11 @@ fun PlayerScreen(
     var scrubLastFraction by remember { mutableFloatStateOf(0f) }
     var scrubPrecision by remember { mutableStateOf(SeekPrecision.COARSE) }
 
-    // Long-press speed-hold (drag-to-vary), restored on release.
-    var speedHolding by remember { mutableStateOf(false) }
-    var savedSpeed by remember { mutableFloatStateOf(1f) }
-    var speedMultiplier by remember { mutableFloatStateOf(1f) }
+    // Long-press on the video opens the speed picker pill (see speedPillOpen below) and a
+    // horizontal slide drives its dot selection live; speedPreview holds that in-gesture value
+    // (null when not dragging), speedStartIndex is the dot the slide began on.
+    var speedPreview by remember { mutableStateOf<Float?>(null) }
+    var speedStartIndex by remember { mutableIntStateOf(0) }
     LaunchedEffect(hudDismissKey) {
         if (hudDismissKey > 0) {
             delay(600)
@@ -245,6 +257,10 @@ fun PlayerScreen(
     // snapshot of the player's tracks, refreshed by the listener's onTracksChanged.
     val externalSubs = remember { mutableStateListOf<MediaItem.SubtitleConfiguration>() }
     var tracks by remember { mutableStateOf(player.currentTracks) }
+    // Mime of a track with no decoder on this device (see UnsupportedCodec.kt); derived
+    // from `tracks` below, read by File Info and the unsupported-codec UI.
+    var unsupportedVideoMime by remember { mutableStateOf<String?>(null) }
+    var unsupportedAudioMime by remember { mutableStateOf<String?>(null) }
 
     // Rebuild the item with the current external subs, preserving position + play state.
     fun reloadWithSubtitles() {
@@ -338,6 +354,9 @@ fun PlayerScreen(
 
     // Authoritative playback state, driven by the player itself.
     var isPlaying by remember { mutableStateOf(player.isPlaying) }
+    // Stamp "last played = now" once when this item actually starts, so the floating resume
+    // button targets it immediately (reset per file in playNext).
+    var playedStamped by remember { mutableStateOf(false) }
     var isBuffering by remember { mutableStateOf(player.playbackState == Player.STATE_BUFFERING) }
     var playbackError by remember { mutableStateOf<PlaybackException?>(player.playerError) }
     // Video dimensions — drive screen orientation to the video's shape.
@@ -351,6 +370,23 @@ fun PlayerScreen(
     LaunchedEffect(ended) {
         nextVideo = if (ended) viewModel.nextInFolder() else null
     }
+    // Up-next thumbnails for the end-of-video "Up Next" screen.
+    var upcoming by remember { mutableStateOf<List<VideoFile>>(emptyList()) }
+    var playlistPosition by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(ended) {
+        upcoming = if (ended) viewModel.loadUpcoming(8) else emptyList()
+        playlistPosition = if (ended) viewModel.loadPlaylistPosition() else null
+    }
+
+    // Autoplay preferences (single source of truth, shared with Settings).
+    val autoplayNext by viewModel.autoplayNext.collectAsState()
+    val askBeforePlayingNext by viewModel.askBeforePlayingNext.collectAsState()
+    // Autoplay countdown: non-null while an auto-advance is pending at end-of-video. A
+    // "Not Now"/"Cancel" suppresses this transition's auto-advance (the effect is below,
+    // after playNext is declared). confirmMode = ask-but-don't-autoplay.
+    var autoCountdown by remember { mutableStateOf<Int?>(null) }
+    var autoplaySuppressed by remember { mutableStateOf(false) }
+    val confirmMode = !autoplayNext && askBeforePlayingNext && nextVideo != null
 
     // In-app review: watching a video to the end is a positive signal. Track whether a codec
     // error occurred this visit (never ask after a bad experience), ask at most once per
@@ -379,6 +415,11 @@ fun PlayerScreen(
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
+                // First time this file actually plays → record it as the most-recent play.
+                if (playing && !playedStamped) {
+                    playedStamped = true
+                    viewModel.markPlayed()
+                }
                 // Pausing flushes the resume point immediately (steady-state 5s tick
                 // is too coarse for a pause-then-exit).
                 if (!playing) flushPositionFast(player, viewModel)
@@ -525,10 +566,21 @@ fun PlayerScreen(
     //  - "held open" = an open sheet, the overflow menu, or an active seek-bar
     //    scrub — any user engagement that must not vanish mid-interaction.
     var controlsVisible by remember { mutableStateOf(true) }
-    var menuOpen by remember { mutableStateOf(false) }
+    var optionsPanelOpen by remember { mutableStateOf(false) }
+    var speedPillOpen by remember { mutableStateOf(false) }
     var seekBarDragging by remember { mutableStateOf(false) }
     val sheetOpen = currentSheet != null
-    val controlsHeldOpen = sheetOpen || menuOpen || seekBarDragging
+    val controlsHeldOpen = sheetOpen || optionsPanelOpen || speedPillOpen || seekBarDragging
+
+    // Centralized overlay coordination: the user only sees the control they're using. Any of
+    // these "exclusive" surfaces suppresses the standard HUD controls and the resume chip, so
+    // overlays never stack. Priority runs modal (panel/sheet) > speed pill > gesture slider
+    // (volume/brightness) > surface seek-scrub. (Player gestures are already disabled while the
+    // panel is open, so a slider can't fire over it; dragging the seek bar itself is NOT
+    // exclusive — its scrub preview is part of the HUD.)
+    val gestureSliderActive = hudKind != null
+    val exclusiveOverlayActive =
+        optionsPanelOpen || speedPillOpen || sheetOpen || gestureSliderActive || scrubbing
     LaunchedEffect(controlsVisible, isPlaying, controlsHeldOpen, locked) {
         if (controlsVisible && isPlaying && !controlsHeldOpen && !locked) {
             delay(3_000)
@@ -573,7 +625,9 @@ fun PlayerScreen(
         viewModel.prepareFor(newUri, subtitleOffsetMs)
         showResumeChip = false
         ended = false
+        playedStamped = false
         nextVideo = null
+        autoplaySuppressed = false
         // Fresh file → fresh error-tracking for the review signal (a prior file's error
         // shouldn't suppress a prompt after this one plays cleanly to the end).
         hadPlaybackError = false
@@ -581,6 +635,25 @@ fun PlayerScreen(
         // video (likely a different resolution) starts un-zoomed and centred.
         zoomScale = 1f
         zoomOffset = Offset.Zero
+    }
+
+    // Autoplay auto-advance: when the video ends with autoplay on and a next video exists,
+    // count down (giving a Cancel/Not Now window) then advance. Suppressed per-transition by
+    // Not Now/Cancel. Repeat-one never reaches here (the player loops instead of ending).
+    LaunchedEffect(ended, autoplayNext, nextVideo, autoplaySuppressed) {
+        if (ended && autoplayNext && nextVideo != null && !autoplaySuppressed) {
+            var n = 5
+            autoCountdown = n
+            while (n > 0) {
+                delay(1000)
+                n--
+                autoCountdown = n
+            }
+            autoCountdown = null
+            nextVideo?.let { playNext(it) }
+        } else {
+            autoCountdown = null
+        }
     }
 
     // File Info sheet data — loaded once on first open (file metadata via MediaStore,
@@ -601,7 +674,52 @@ fun PlayerScreen(
                 videoCodecMime = videoFormat?.sampleMimeType,
                 audioCodecMime = player.audioFormat?.sampleMimeType,
                 frameRate = videoFormat?.frameRate?.takeIf { it > 0f },
+                videoDecoder = viewModel.videoDecoder.value,
+                audioDecoder = viewModel.audioDecoder.value,
+                unsupportedVideoMime = unsupportedVideoMime,
+                unsupportedAudioMime = unsupportedAudioMime,
             )
+        }
+    }
+
+    // Unsupported codec = a track no renderer can decode. ExoPlayer raises no error for it
+    // (it just leaves the track unselected), so detect it from the track list: audio →
+    // one transient pill per file (the video still plays), video → terminal overlay (there
+    // is nothing to watch). Both record a non-fatal so Crashlytics counts how often the
+    // excluded AC-3/DTS decoders bite — the data the "revisit at 1.0" decision needs.
+    var showCodecHud by remember { mutableStateOf(false) }
+    var codecHudLabel by remember { mutableStateOf("") }
+    var codecHudKey by remember { mutableIntStateOf(0) }
+    LaunchedEffect(codecHudKey) {
+        if (codecHudKey > 0) {
+            showCodecHud = true
+            delay(4_000)
+            showCodecHud = false
+        }
+    }
+    var notifiedUnsupportedFor by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(tracks, currentUri) {
+        unsupportedVideoMime = tracks.unsupportedMime(C.TRACK_TYPE_VIDEO)
+        unsupportedAudioMime = tracks.unsupportedMime(C.TRACK_TYPE_AUDIO)
+        val audioMime = unsupportedAudioMime ?: return@LaunchedEffect
+        val key = "$currentUri|$audioMime"
+        if (notifiedUnsupportedFor == key) return@LaunchedEffect
+        notifiedUnsupportedFor = key
+        codecHudLabel = "No audio — this device can't play ${prettyCodec(audioMime)}"
+        codecHudKey++
+        Log.w("PlayerScreen", "Unsupported audio codec: $audioMime")
+        FirebaseCrashlytics.getInstance().apply {
+            setCustomKey("unsupported_codec", audioMime)
+            recordException(UnsupportedCodecException(audioMime, "audio"))
+        }
+    }
+    LaunchedEffect(unsupportedVideoMime, currentUri) {
+        val mime = unsupportedVideoMime ?: return@LaunchedEffect
+        // Without this the audio keeps playing under the overlay and runs into Up Next.
+        player.pause()
+        FirebaseCrashlytics.getInstance().apply {
+            setCustomKey("unsupported_codec", mime)
+            recordException(UnsupportedCodecException(mime, "video"))
         }
     }
 
@@ -814,6 +932,57 @@ fun PlayerScreen(
         SleepTimerMode.EndOfVideo -> "Sleep timer: end of video"
     }
 
+    // ── Options panel: repeat mode, share, and the tiles' live value labels ──
+    var repeatMode by remember { mutableIntStateOf(player.repeatMode) }
+    fun cycleRepeat() {
+        val next = when (repeatMode) {
+            Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ONE
+            Player.REPEAT_MODE_ONE -> Player.REPEAT_MODE_ALL
+            else -> Player.REPEAT_MODE_OFF
+        }
+        player.repeatMode = next
+        repeatMode = next
+    }
+    val repeatLabel = when (repeatMode) {
+        Player.REPEAT_MODE_ONE -> "One"
+        Player.REPEAT_MODE_ALL -> "All"
+        else -> "Off"
+    }
+
+    fun shareVideo() {
+        runCatching {
+            val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "video/*"
+                putExtra(android.content.Intent.EXTRA_STREAM, android.net.Uri.parse(currentUri))
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(android.content.Intent.createChooser(send, null))
+        }
+    }
+
+    val panelValues = PlayerOptionsValues(
+        speedLabel = run {
+            val s = playbackSpeed
+            (if (s == s.toLong().toFloat()) "%.1f".format(s) else s.toString()) + "×"
+        },
+        audioLabel = if (audioTracks.size >= 2)
+            audioTracks.firstOrNull { it.selected }?.label ?: "Audio" else null,
+        subtitlesLabel = if (tracks.groups.any { it.type == C.TRACK_TYPE_TEXT && it.isSelected }) "On" else "Off",
+        aspectLabel = aspectMode.label,
+        repeatLabel = repeatLabel,
+        sleepLabel = when (val m = sleepMode) {
+            SleepTimerMode.Off -> "Off"
+            is SleepTimerMode.Minutes -> formatSleepRemaining(sleepRemainingMs)
+            SleepTimerMode.EndOfVideo -> "End"
+        },
+        orientationLabel = orientationMode.label,
+        backgroundOn = backgroundPlayback,
+        isFavorite = isFavorite,
+        canFavorite = canFavorite,
+        hasNext = nextVideo != null,
+        supportsPip = supportsPip,
+    )
+
     // Screenshot — clean-frame PixelCopy off the video SurfaceView (no chrome/subs),
     // saved to Pictures/VixPlay via MediaStore. Confirmed by a transient pill.
     var showScreenshotHud by remember { mutableStateOf(false) }
@@ -889,8 +1058,15 @@ fun PlayerScreen(
             .background(AmoledBackground)
             // Surface size, so pan can be clamped to the zoomed content's bounds.
             .onSizeChanged { containerSize = it }
-            // Locked → LockOverlay owns all touches; the surface below is inert.
-            .playerGestures(enabled = !locked, zoomed = zoomScale > 1f) { event ->
+            // Locked → LockOverlay owns all touches; ended → the Up Next overlay owns them;
+            // optionsPanelOpen → the slide-out menu owns them (so its vertical scroll can't leak
+            // into volume/brightness/seek). The surface gesture layer is inert in all three.
+            // (The speed pill is intentionally NOT excluded: its slide-to-pick is driven by
+            // this very gesture layer.)
+            .playerGestures(
+                enabled = !locked && !ended && !optionsPanelOpen,
+                zoomed = zoomScale > 1f,
+            ) { event ->
                 when (event) {
                     GestureEvent.ToggleControls -> controlsVisible = !controlsVisible
                     is GestureEvent.DoubleTapSeek -> {
@@ -985,19 +1161,25 @@ fun PlayerScreen(
                         }
                     }
                     GestureEvent.SpeedHoldStart -> {
-                        savedSpeed = player.playbackParameters.speed
-                        speedMultiplier = 2f
-                        player.setPlaybackSpeed(2f)
-                        speedHolding = true
+                        // Long-press opens the speed picker (replaces the old temporary-boost
+                        // gesture); a slide then drives the dots, committing on release.
+                        speedPillOpen = true
+                        speedStartIndex = SPEED_PRESETS.indexOf(nearestSpeedPreset(playbackSpeed))
+                        speedPreview = playbackSpeed
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     }
                     is GestureEvent.SpeedHoldChange -> {
-                        speedMultiplier = (2f + event.totalFraction * 3f).coerceIn(1f, 4f)
-                        player.setPlaybackSpeed(speedMultiplier)
+                        // Map the horizontal slide to a dot; SPEED_DRAG_STEPS_PER_WIDTH sets
+                        // how sensitive that mapping is (short drags switch dots).
+                        val steps = (event.totalFraction * SPEED_DRAG_STEPS_PER_WIDTH).roundToInt()
+                        val idx = (speedStartIndex + steps).coerceIn(0, SPEED_PRESETS.lastIndex)
+                        val preset = SPEED_PRESETS[idx]
+                        speedPreview = preset
+                        player.setPlaybackSpeed(preset) // live preview, persisted on release
                     }
                     GestureEvent.SpeedHoldEnd -> {
-                        player.setPlaybackSpeed(savedSpeed)
-                        speedHolding = false
+                        // Commit the slid-to preset as the persisted default.
+                        speedPreview?.let { viewModel.setPlaybackSpeed(it) }
                     }
                     GestureEvent.DragEnd -> hudDismissKey++
                 }
@@ -1060,20 +1242,26 @@ fun PlayerScreen(
             )
         }
 
-        SpeedHud(
-            visible = speedHolding,
-            multiplier = speedMultiplier,
+        // Inline over-video speed picker (replaces the old bottom sheet). Gated like the
+        // other player surfaces; freezes the controls auto-hide via controlsHeldOpen.
+        SpeedControlPill(
+            visible = speedPillOpen && !locked && !pipMode && playbackError == null,
+            currentSpeed = speedPreview ?: playbackSpeed,
+            onSelect = { viewModel.setPlaybackSpeed(it) },
+            onDismiss = { speedPillOpen = false; speedPreview = null },
             modifier = Modifier.fillMaxSize(),
         )
 
+        // Cycled in-place from the panel, where the tile already shows the new value — so the
+        // confirmation toast is suppressed while the panel is open (it would overlap it).
         AspectHud(
-            visible = showAspectHud,
+            visible = showAspectHud && !optionsPanelOpen,
             mode = aspectMode,
             modifier = Modifier.fillMaxSize(),
         )
 
         OrientationHud(
-            visible = showOrientationHud,
+            visible = showOrientationHud && !optionsPanelOpen,
             mode = orientationMode,
             modifier = Modifier.fillMaxSize(),
         )
@@ -1117,14 +1305,20 @@ fun PlayerScreen(
 
         PlayerHud(
             player = player,
-            visible = controlsVisible && !locked && playbackError == null && !pipMode,
+            // Hidden once the video ends (Up Next owns the surface) and whenever any exclusive
+            // overlay is active (panel/sheet/speed pill/gesture slider/scrub) — only the
+            // actively-used control shows.
+            visible = controlsVisible && !locked && playbackError == null && !pipMode &&
+                !ended && !exclusiveOverlayActive,
             title = title,
             skin = skin,
             onBack = onBack,
             aspectMode = aspectMode,
             orientationLabel = orientationMode.label,
             sleepTimerLabel = sleepTimerLabel,
-            showAudioTrack = audioTracks.size >= 2,
+            // Shown whenever the clip carries audio — the top-right audio-track control. The
+            // picker lists the track(s) with language/label; switching needs 2+ tracks.
+            showAudioTrack = audioTracks.isNotEmpty(),
             showPip = supportsPip,
             onCycleAspect = {
                 aspectMode = aspectMode.next()
@@ -1134,7 +1328,9 @@ fun PlayerScreen(
                 orientationMode = orientationMode.next()
                 orientationHudKey++
             },
-            onSpeedClick = { currentSheet = PlayerSheet.Speed },
+            onSpeedClick = { speedPillOpen = true },
+            // Non-1× speed shown loud in the HUD so a stray boost is never silently stuck.
+            speedLabel = playbackSpeed.takeIf { it != 1f }?.let { formatSpeed(it) },
             onSubtitlesClick = { currentSheet = PlayerSheet.Subtitles },
             onAudioClick = { currentSheet = PlayerSheet.Audio },
             onEnterPip = { enterPip() },
@@ -1142,10 +1338,7 @@ fun PlayerScreen(
             onScreenshotClick = { takeScreenshot() },
             onFileInfoClick = { currentSheet = PlayerSheet.FileInfo },
             onLockClick = { locked = true; controlsVisible = false },
-            showFavorite = canFavorite,
-            isFavorite = isFavorite,
-            onFavoriteClick = { viewModel.toggleFavorite() },
-            onMenuOpenChange = { menuOpen = it },
+            onMoreClick = { optionsPanelOpen = true },
             onScrubbingChange = { seekBarDragging = it },
             frameLoader = { thumbnails.frameAt(it) },
             modifier = Modifier.fillMaxSize(),
@@ -1161,7 +1354,7 @@ fun PlayerScreen(
 
         // Transient resume affordance — sits above the HUD controls, taps fall through.
         AnimatedVisibility(
-            visible = showResumeChip && playbackError == null && !pipMode,
+            visible = showResumeChip && playbackError == null && !pipMode && !locked && !exclusiveOverlayActive,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier
@@ -1178,17 +1371,48 @@ fun PlayerScreen(
             )
         }
 
-        // Terminal finished state — Replay always, Play next only when a folder-next
-        // exists; no silent auto-advance.
-        if (ended && playbackError == null && !pipMode && !sleepPausedByTimer) {
-            EndedOverlay(
-                hasNext = nextVideo != null,
+        // Terminal finished state — Up Next with autoplay/confirm per the preference matrix.
+        // Not after an undecodable video: the "can't play" overlay owns that end state.
+        if (ended && playbackError == null && unsupportedVideoMime == null && !pipMode && !sleepPausedByTimer) {
+            UpNextOverlay(
+                currentUri = currentUri,
+                upcoming = upcoming,
+                positionLabel = playlistPosition,
+                autoplayEnabled = autoplayNext,
+                confirmMode = confirmMode && !autoplaySuppressed,
+                countdownSec = autoCountdown,
+                onToggleAutoplay = { viewModel.setAutoplayNext(it) },
                 onReplay = {
                     player.seekTo(0L)
                     player.playWhenReady = true
                     ended = false
+                    autoplaySuppressed = false
                 },
-                onPlayNext = { nextVideo?.let { playNext(it) } },
+                onPlay = { video, dontAsk ->
+                    // Don't-ask + Play Next → remember autoplay ON for next time.
+                    if (dontAsk) viewModel.setAutoplayNext(true)
+                    playNext(video)
+                },
+                onNotNow = { dontAsk ->
+                    // Don't-ask + Not Now → autoplay OFF and stop prompting.
+                    if (dontAsk) {
+                        viewModel.setAutoplayNext(false)
+                        viewModel.setAskBeforePlayingNext(false)
+                    }
+                    autoplaySuppressed = true
+                    autoCountdown = null
+                },
+                onClose = onBack,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        // A video track with no decoder is terminal too, but arrives via the track list
+        // rather than onPlayerError (ExoPlayer would otherwise play audio over a black frame).
+        if (playbackError == null) unsupportedVideoMime?.let { mime ->
+            ErrorOverlay(
+                message = "This device can't decode ${prettyCodec(mime)} video.",
+                title = "Can't play this video",
                 onBack = onBack,
                 modifier = Modifier.fillMaxSize(),
             )
@@ -1209,6 +1433,38 @@ fun PlayerScreen(
                 modifier = Modifier.fillMaxSize(),
             )
         }
+
+        // Above the Up Next / error overlays on purpose: a short clip with undecodable audio
+        // can reach its end before the 4 s pill is done, and the message must still be seen.
+        UnsupportedCodecHud(
+            visible = showCodecHud && !pipMode && !optionsPanelOpen,
+            label = codecHudLabel,
+            modifier = Modifier.fillMaxSize(),
+        )
+
+        // Slide-out options panel (opened by the top-bar ⋮) — the new overflow surface.
+        PlayerOptionsPanel(
+            visible = optionsPanelOpen,
+            values = panelValues,
+            onDismiss = { optionsPanelOpen = false },
+            onSpeed = { optionsPanelOpen = false; speedPillOpen = true },
+            onAudio = { currentSheet = PlayerSheet.Audio },
+            onSubtitles = { currentSheet = PlayerSheet.Subtitles },
+            onAspect = { aspectMode = aspectMode.next(); aspectHudKey++ },
+            onRepeat = { cycleRepeat() },
+            onSleepTimer = { currentSheet = PlayerSheet.SleepTimer },
+            onLock = { locked = true; controlsVisible = false },
+            onBackgroundPlay = { viewModel.setBackgroundPlayback(!backgroundPlayback) },
+            onOrientation = { orientationMode = orientationMode.next(); orientationHudKey++ },
+            onScreenshot = { takeScreenshot() },
+            onVideoInfo = { currentSheet = PlayerSheet.FileInfo },
+            onEqualizer = onOpenEqualizer,
+            onPip = { enterPip() },
+            onFavorite = { viewModel.toggleFavorite() },
+            onPlayNext = { nextVideo?.let { playNext(it) } },
+            onShare = { shareVideo() },
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 
     currentSheet?.let { sheet ->
@@ -1239,10 +1495,6 @@ fun PlayerScreen(
                 is PlayerSheet.Audio     -> AudioTrackSheet(
                     tracks = audioTracks,
                     onSelect = { selectAudioTrack(it) },
-                )
-                is PlayerSheet.Speed     -> SpeedSheet(
-                    currentSpeed = playbackSpeed,
-                    onSelect = { viewModel.setPlaybackSpeed(it) },
                 )
                 is PlayerSheet.SleepTimer -> SleepTimerSheet(
                     activeMode = sleepMode,

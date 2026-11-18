@@ -39,3 +39,22 @@ val Error   = Color(0xFFFF6369)
 val ScrimStrong   = Color(0xB8000000) // black 72% — duration badge / label backing
 val OnScrim       = Color(0xFFFFFFFF) // text/icons on a scrim
 val TrackInactive = Color(0x40FFFFFF) // inactive resume/progress track
+
+// Speed-scale — a diverging data-viz palette for the over-video speed picker dots.
+// Cool (slow) → neutral white at 1× → warm (fast), so you read "slow vs fast" by colour
+// temperature. Like the scrim tokens above, it's theme-independent by design: the dots
+// always render on the dark player scrim, so the hues are fixed, not light/dark variants.
+object SpeedScale {
+    private val stops: List<Pair<Float, Color>> = listOf(
+        0.25f to Color(0xFF4F9DFF), // deep blue   — slowest
+        0.5f  to Color(0xFF52C4FF), // sky blue
+        1.0f  to OnScrim,           // neutral white — normal speed
+        1.5f  to Color(0xFFB24BFF), // violet (brand end)
+        2.0f  to Color(0xFFFF5BA3), // pink / magenta
+        4.0f  to Color(0xFFFF5B5B), // red         — fastest
+    )
+
+    /** The scale colour for [speed], matched to the nearest known stop. */
+    fun colorFor(speed: Float): Color =
+        stops.minByOrNull { kotlin.math.abs(it.first - speed) }!!.second
+}

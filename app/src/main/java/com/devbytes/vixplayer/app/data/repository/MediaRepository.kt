@@ -21,6 +21,11 @@ data class VideoFile(
     val durationMs: Long,
     val path: String,
     val sizeBytes: Long,
+    /** Pixel dimensions from MediaStore (0 when unknown). Used for the quality badge. */
+    val width: Int = 0,
+    val height: Int = 0,
+    /** Epoch millis the file was added to MediaStore (0 when unknown). */
+    val dateAddedMs: Long = 0,
 )
 
 data class FolderEntry(
@@ -177,6 +182,25 @@ class MediaRepository @Inject constructor(
         return queryVideosInFolder(bucketId).filterNot { it.mediaStoreId == mediaStoreId }
     }
 
+    /** The "up next" set for the end-of-video screen: folder videos after the current one
+     *  first, then wrapping to the start (current excluded). Empty for non-MediaStore URIs. */
+    suspend fun upcomingInFolder(mediaStoreId: Long, limit: Int): List<VideoFile> {
+        val bucketId = queryBucketId(mediaStoreId) ?: return emptyList()
+        val folder = queryVideosInFolder(bucketId)
+        val index = folder.indexOfFirst { it.mediaStoreId == mediaStoreId }
+        if (index < 0) return folder.take(limit)
+        return (folder.drop(index + 1) + folder.take(index)).take(limit)
+    }
+
+    /** The current video's 1-based position and the folder's total count, or null if unknown. */
+    suspend fun folderPosition(mediaStoreId: Long): Pair<Int, Int>? {
+        val bucketId = queryBucketId(mediaStoreId) ?: return null
+        val folder = queryVideosInFolder(bucketId)
+        val index = folder.indexOfFirst { it.mediaStoreId == mediaStoreId }
+        if (index < 0) return null
+        return (index + 1) to folder.size
+    }
+
     private suspend fun queryBucketId(mediaStoreId: Long): Long? = withContext(Dispatchers.IO) {
         context.contentResolver.query(
             MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
@@ -189,38 +213,14 @@ class MediaRepository @Inject constructor(
 
     suspend fun queryVideosInFolder(bucketId: Long): List<VideoFile> = withContext(Dispatchers.IO) {
         val videos = mutableListOf<VideoFile>()
-        val projection = arrayOf(
-            MediaStore.Video.Media._ID,
-            MediaStore.Video.Media.DISPLAY_NAME,
-            MediaStore.Video.Media.DURATION,
-            MediaStore.Video.Media.DATA,
-            MediaStore.Video.Media.SIZE,
-        )
         context.contentResolver.query(
             MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-            projection,
+            baseProjection,
             "${MediaStore.Video.Media.BUCKET_ID} = ?",
             arrayOf(bucketId.toString()),
             "${MediaStore.Video.Media.DATE_MODIFIED} DESC",
         )?.use { cursor ->
-            val idCol   = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
-            val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
-            val durCol  = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
-            val pathCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATA)
-            val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
-            while (cursor.moveToNext()) {
-                val id = cursor.getLong(idCol)
-                videos.add(
-                    VideoFile(
-                        mediaStoreId = id,
-                        uri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id),
-                        name = cursor.getString(nameCol) ?: "Unknown",
-                        durationMs = cursor.getLong(durCol),
-                        path = cursor.getString(pathCol) ?: "",
-                        sizeBytes = cursor.getLong(sizeCol),
-                    )
-                )
-            }
+            while (cursor.moveToNext()) videos.add(cursor.toVideoFile())
         }
         videos
     }
@@ -277,6 +277,9 @@ class MediaRepository @Inject constructor(
         MediaStore.Video.Media.DURATION,
         MediaStore.Video.Media.DATA,
         MediaStore.Video.Media.SIZE,
+        MediaStore.Video.Media.WIDTH,
+        MediaStore.Video.Media.HEIGHT,
+        MediaStore.Video.Media.DATE_ADDED,
     )
 
     private fun android.database.Cursor.toVideoFile(): VideoFile {
@@ -288,6 +291,10 @@ class MediaRepository @Inject constructor(
             durationMs = getLong(getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)),
             path = getString(getColumnIndexOrThrow(MediaStore.Video.Media.DATA)) ?: "",
             sizeBytes = getLong(getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)),
+            width = getInt(getColumnIndexOrThrow(MediaStore.Video.Media.WIDTH)),
+            height = getInt(getColumnIndexOrThrow(MediaStore.Video.Media.HEIGHT)),
+            // DATE_ADDED is seconds since epoch → millis.
+            dateAddedMs = getLong(getColumnIndexOrThrow(MediaStore.Video.Media.DATE_ADDED)) * 1000L,
         )
     }
 
@@ -338,6 +345,45 @@ class MediaRepository @Inject constructor(
         }
         videos
     }
+
+    /**
+     * High-resolution videos — longest side ≥ 1920 (Full HD 1080p and up, incl. 2K/4K),
+     * highest resolution first. Powers the dashboard "HD & 4K" rail. WIDTH/HEIGHT can be
+     * absent for some files; those simply fall out of the filter.
+     */
+    suspend fun queryHighResVideos(limit: Int = Int.MAX_VALUE): List<VideoFile> = withContext(Dispatchers.IO) {
+        val w = MediaStore.Video.Media.WIDTH
+        val h = MediaStore.Video.Media.HEIGHT
+        val videos = mutableListOf<VideoFile>()
+        context.contentResolver.query(
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI, baseProjection,
+            "$w >= 1920 OR $h >= 1920",
+            null,
+            "$w * $h DESC",
+        )?.use { cursor ->
+            while (cursor.moveToNext() && videos.size < limit) videos.add(cursor.toVideoFile())
+        }
+        videos
+    }
+
+    /**
+     * Videos whose runtime fits within [maxDurationMs] (longest-fitting first), for the
+     * "How much time do you have?" rail. Powers all four windows from one query; the UI
+     * filters the pool client-side so switching window needs no re-query.
+     */
+    suspend fun queryByMaxDuration(maxDurationMs: Long, limit: Int = Int.MAX_VALUE): List<VideoFile> =
+        withContext(Dispatchers.IO) {
+            val videos = mutableListOf<VideoFile>()
+            context.contentResolver.query(
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI, baseProjection,
+                "${MediaStore.Video.Media.DURATION} > 0 AND ${MediaStore.Video.Media.DURATION} <= ?",
+                arrayOf(maxDurationMs.toString()),
+                "${MediaStore.Video.Media.DURATION} DESC",
+            )?.use { cursor ->
+                while (cursor.moveToNext() && videos.size < limit) videos.add(cursor.toVideoFile())
+            }
+            videos
+        }
 
     suspend fun countShorts(): Int = withContext(Dispatchers.IO) {
         context.contentResolver.query(

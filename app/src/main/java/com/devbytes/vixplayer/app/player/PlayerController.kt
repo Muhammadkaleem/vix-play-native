@@ -7,13 +7,16 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.devbytes.vixplayer.app.player.datasource.NetworkDataSource
 import com.devbytes.vixplayer.app.player.subtitle.OffsetSubtitleParserFactory
 import com.devbytes.vixplayer.app.player.subtitle.SubtitleOffsetHolder
 import android.net.Uri
+import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -83,7 +86,26 @@ class PlayerController @Inject constructor(
         FirebaseCrashlytics.getInstance().setCustomKey("playback_kind", kind.name)
     }
 
-    val player: ExoPlayer = ExoPlayer.Builder(context)
+    private val _audioDecoder = MutableStateFlow<String?>(null)
+    private val _videoDecoder = MutableStateFlow<String?>(null)
+
+    /** Name of the decoder currently handling audio ("ffmpeg", "c2.android.aac.decoder", …).
+     *  Null until a decoder initialises for the current item. Shown in File Info. */
+    val audioDecoder: StateFlow<String?> = _audioDecoder.asStateFlow()
+    val videoDecoder: StateFlow<String?> = _videoDecoder.asStateFlow()
+
+    val player: ExoPlayer = ExoPlayer.Builder(
+        context,
+        // EXTENSION_RENDERER_MODE_ON appends the FFmpeg audio renderer *after* the
+        // MediaCodec one, so the platform decoder is used whenever it reports support and
+        // FFmpeg only engages for codecs the device has no decoder for (MP2, WMA, ALAC, …).
+        // Not PREFER: that would route every file's audio through software for no gain.
+        // Decoder fallback lets MediaCodec try the next matching decoder when one fails
+        // to initialise, instead of surfacing a "works on one phone, not another" error.
+        DefaultRenderersFactory(context)
+            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+            .setEnableDecoderFallback(true),
+    )
         .setMediaSourceFactory(
             // NetworkDataSource adds smb:// and ftp:// on top of the default schemes
             // (file/content/http/https/…) so network shares play on the same path.
@@ -102,7 +124,42 @@ class PlayerController @Inject constructor(
         // Pause when headphones are unplugged rather than blasting the speaker.
         .setHandleAudioBecomingNoisy(true)
         .build()
-        .apply { setAudioSessionId(this@PlayerController.audioSessionId) }
+        .apply {
+            setAudioSessionId(this@PlayerController.audioSessionId)
+            // Decoder names are the only way to see which path (platform vs FFmpeg) a
+            // file actually took — surfaced in File Info and used to verify the extension.
+            addAnalyticsListener(object : AnalyticsListener {
+                override fun onAudioDecoderInitialized(
+                    eventTime: AnalyticsListener.EventTime,
+                    decoderName: String,
+                    initializedTimestampMs: Long,
+                    initializationDurationMs: Long,
+                ) {
+                    _audioDecoder.value = decoderName
+                    Log.i(TAG, "Audio decoder: $decoderName")
+                }
+
+                override fun onVideoDecoderInitialized(
+                    eventTime: AnalyticsListener.EventTime,
+                    decoderName: String,
+                    initializedTimestampMs: Long,
+                    initializationDurationMs: Long,
+                ) {
+                    _videoDecoder.value = decoderName
+                    Log.i(TAG, "Video decoder: $decoderName")
+                }
+            })
+        }
+
+    private companion object {
+        const val TAG = "PlayerController"
+    }
+
+    /** A new item may have no audio/video at all, so a stale decoder name must not linger. */
+    private fun resetDecoderNames() {
+        _audioDecoder.value = null
+        _videoDecoder.value = null
+    }
 
     init {
         // Safe on unsupported hardware: attach() swallows the failure and reports
@@ -119,6 +176,7 @@ class PlayerController @Inject constructor(
      */
     fun prepareFor(uri: String, subtitleOffsetMs: Long, title: String? = null) {
         ensureServiceRunning()
+        resetDecoderNames()
         subtitleOffset.offsetUs = subtitleOffsetMs * 1_000L
         // Metadata matters beyond the UI: the notification and lock screen read it, and
         // a bare MediaItem leaves them blank.
@@ -164,6 +222,7 @@ class PlayerController @Inject constructor(
     fun prepareQueue(items: List<QueueItem>, startIndex: Int) {
         if (items.isEmpty()) return
         ensureServiceRunning()
+        resetDecoderNames()
         subtitleOffset.offsetUs = 0L
         player.setMediaItems(
             items.map { it.toMediaItem() },

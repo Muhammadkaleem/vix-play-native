@@ -52,6 +52,8 @@ const val PLAYBACK_DEFAULTS_ROUTE = "playback_defaults"
 const val PRIVATE_FOLDER_ROUTE    = "private_folder"
 const val NOTIFICATIONS_ROUTE     = "notifications"
 const val ABOUT_PRO_ROUTE         = "about_pro"
+const val PRO_REWARDS_ROUTE       = "pro_rewards"
+const val REWARD_HISTORY_ROUTE    = "reward_history"
 
 // Daily Briefing destinations (full-screen; reached from Settings, notification, home card)
 const val BRIEFING_ROUTE          = "briefing"

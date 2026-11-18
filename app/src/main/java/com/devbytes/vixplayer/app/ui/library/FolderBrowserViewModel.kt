@@ -40,6 +40,9 @@ sealed interface FolderBrowserUiState {
     data class Error(val message: String) : FolderBrowserUiState
 }
 
+/** The floating resume button's current target (null ⇒ no button). */
+data class ResumeTarget(val mediaStoreId: Long, val uri: String, val name: String)
+
 @HiltViewModel
 class FolderBrowserViewModel @Inject constructor(
     private val mediaRepository: MediaRepository,
@@ -64,6 +67,20 @@ class FolderBrowserViewModel @Inject constructor(
     /** Resume fraction per video in the open folder, keyed by mediaStoreId. */
     private val _resume = MutableStateFlow<Map<Long, Float>>(emptyMap())
     val resume: StateFlow<Map<Long, Float>> = _resume.asStateFlow()
+
+    // ── Floating resume button ────────────────────────────────────────────────
+    /** The most-recent eligible video for the current scope (global on the folder list,
+     *  this-folder-only inside a folder). Null hides the button. */
+    private val _resumeTarget = MutableStateFlow<ResumeTarget?>(null)
+    val resumeTarget: StateFlow<ResumeTarget?> = _resumeTarget.asStateFlow()
+
+    /** One-shot: a validated URI to open in the player (consumed by the screen). */
+    private val _openPlayerUri = MutableStateFlow<String?>(null)
+    val openPlayerUri: StateFlow<String?> = _openPlayerUri.asStateFlow()
+
+    /** Ids found unavailable at tap-time — suppressed as candidates (not deleted from
+     *  history), cleared on an explicit media/permission refresh. */
+    private val suppressedIds = mutableSetOf<Long>()
 
     /** Unsorted folder list, re-sorted in memory when [folderSort] changes. */
     private var rawFolders: List<FolderEntry> = emptyList()
@@ -418,6 +435,7 @@ class FolderBrowserViewModel @Inject constructor(
             .onSuccess {
                 _state.value = FolderBrowserUiState.VideoList(current.folderName, it)
                 refreshResume(it)
+                computeResumeTarget()
             }
     }
 
@@ -432,6 +450,7 @@ class FolderBrowserViewModel @Inject constructor(
                 .onSuccess { videos ->
                     _state.value = FolderBrowserUiState.VideoList(folderName, videos)
                     refreshResume(videos)
+                    computeResumeTarget()
                 }
                 .onFailure { e ->
                     _state.value = FolderBrowserUiState.Error(e.message ?: "Unknown error")
@@ -445,8 +464,12 @@ class FolderBrowserViewModel @Inject constructor(
         loadFolders()
     }
 
-    /** Re-scan folders — used after a media-permission grant widens what MediaStore returns. */
-    fun refreshFolders() = loadFolders()
+    /** Re-scan folders — used after a media-permission grant widens what MediaStore returns.
+     *  Also clears tap-time suppression so recovered files can resurface. */
+    fun refreshFolders() {
+        suppressedIds.clear()
+        loadFolders()
+    }
 
     private fun loadFolders() {
         viewModelScope.launch {
@@ -455,10 +478,72 @@ class FolderBrowserViewModel @Inject constructor(
                 .onSuccess { folders ->
                     rawFolders = folders
                     _state.value = FolderBrowserUiState.FolderList(sortFolders(folders))
+                    computeResumeTarget()
                 }
                 .onFailure { e ->
                     _state.value = FolderBrowserUiState.Error(e.message ?: "Unknown error")
                 }
         }
     }
+
+    // ── Floating resume button logic ──────────────────────────────────────────
+
+    /** Recompute the resume target for the current scope from cached history (global on the
+     *  folder list; this-folder-only inside a folder). Skips deleted / suppressed candidates. */
+    private suspend fun computeResumeTarget() {
+        val recents = runCatching { playbackRepository.getRecentPositions(200) }
+            .getOrDefault(emptyList())
+            .filter { it.mediaStoreId !in suppressedIds }
+        _resumeTarget.value = when (val s = _state.value) {
+            // Global: newest-played video that still resolves anywhere. A plain loop (not a
+            // sequence) so the suspend queryVideoById is legal.
+            is FolderBrowserUiState.FolderList -> {
+                var found: ResumeTarget? = null
+                for (pos in recents) {
+                    val video = runCatching { mediaRepository.queryVideoById(pos.mediaStoreId) }.getOrNull()
+                    if (video != null) { found = video.toResumeTarget(); break }
+                }
+                found
+            }
+            // Folder-scoped: newest-played among exactly this folder's videos (never falls
+            // back to another folder). Membership = the loaded list, so no query needed.
+            is FolderBrowserUiState.VideoList -> {
+                val byId = s.videos.associateBy { it.mediaStoreId }
+                recents.firstNotNullOfOrNull { byId[it.mediaStoreId] }?.toResumeTarget()
+            }
+            else -> null
+        }
+    }
+
+    private fun VideoFile.toResumeTarget() = ResumeTarget(mediaStoreId, uri.toString(), name)
+
+    /** Called when the browser returns to the foreground (e.g. back from the player) — a new
+     *  last-played may have appeared. */
+    fun onScreenResumed() {
+        viewModelScope.launch { computeResumeTarget() }
+    }
+
+    /** FAB tap: re-validate the target at tap time, then open it — or, if it vanished, report
+     *  it, suppress it and retarget (never silently play a different video). */
+    fun onResumeClicked() {
+        if (_openPlayerUri.value != null) return // a launch is already pending
+        val target = _resumeTarget.value ?: return
+        viewModelScope.launch {
+            val video = runCatching { mediaRepository.queryVideoById(target.mediaStoreId) }.getOrNull()
+            val inScope = when (val s = _state.value) {
+                is FolderBrowserUiState.VideoList -> s.videos.any { it.mediaStoreId == target.mediaStoreId }
+                is FolderBrowserUiState.FolderList -> video != null
+                else -> false
+            }
+            if (video != null && inScope) {
+                _openPlayerUri.value = video.uri.toString()
+            } else {
+                suppressedIds += target.mediaStoreId
+                _message.value = "This video is no longer available"
+                computeResumeTarget()
+            }
+        }
+    }
+
+    fun consumeOpenPlayer() { _openPlayerUri.value = null }
 }

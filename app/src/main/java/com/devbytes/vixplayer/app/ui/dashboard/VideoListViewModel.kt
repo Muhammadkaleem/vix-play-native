@@ -29,6 +29,11 @@ class VideoListViewModel @Inject constructor(
                 when (source) {
                     DashboardSource.RECENTLY_ADDED -> media.queryRecentlyAdded(500)
                     DashboardSource.FAVORITES -> media.queryVideosByIds(favorites.observeIds().first())
+                    DashboardSource.HIGH_RES -> media.queryHighResVideos(500)
+                    DashboardSource.NEW_ON_DEVICE -> {
+                        val sevenDaysAgo = System.currentTimeMillis() - 7L * 24 * 3_600_000L
+                        media.queryRecentlyAdded(500).filter { it.dateAddedMs >= sevenDaysAgo }
+                    }
                 }
             }.getOrDefault(emptyList())
         }

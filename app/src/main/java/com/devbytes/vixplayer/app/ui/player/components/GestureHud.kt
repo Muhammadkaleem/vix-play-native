@@ -69,10 +69,10 @@ enum class OrientationMode(val label: String) {
 
 /**
  * Transient vertical pill slider shown while a vertical drag adjusts brightness/volume
- * (One UI quick-panel style: dark capsule track, white fill rising from the bottom, with
- * the type glyph fixed just below the capsule). Side-anchored to the matching gesture zone —
- * brightness on the left, volume on the right. Orthogonal to the persistent control chrome:
- * it fades on its own dismiss timer and never touches [controlsVisible]. [fraction] is 0f..1f.
+ * (One UI quick-panel style: dark capsule track, white fill rising from the bottom, with the
+ * type glyph seated inside the track at the bottom). Side-anchored to the matching gesture
+ * zone — brightness on the left, volume on the right. Orthogonal to the persistent control
+ * chrome: it fades on its own dismiss timer and never touches [controlsVisible]. 0f..1f.
  */
 @Composable
 fun GestureHud(
@@ -109,33 +109,28 @@ private fun VerticalPillSlider(
         GestureHudKind.VOLUME -> if (fraction <= 0f) R.drawable.ic_mute else R.drawable.ic_volume
         GestureHudKind.BRIGHTNESS -> R.drawable.ic_brightness
     }
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
+    // Compact capsule track with the white fill rising bottom-up, and the glyph seated
+    // inside at the bottom. The icon's tint flips to stay legible over whichever it sits on —
+    // dark over the white fill (the usual case), light over the bare dark track near zero.
+    Box(
+        modifier = modifier
+            .width(46.dp)
+            .height(168.dp)
+            .clip(RoundedCornerShape(50))
+            .background(ScrimStrong),
+        contentAlignment = Alignment.BottomCenter,
     ) {
-        // Capsule track with the white fill rising bottom-up to the current level.
         Box(
             modifier = Modifier
-                .width(54.dp)
-                .height(210.dp)
-                .clip(RoundedCornerShape(50))
-                .background(ScrimStrong),
-        ) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .fillMaxHeight(fraction)
-                    .background(OnScrim),
-            )
-        }
-        // Fixed type glyph below the capsule — never moves with the fill.
-        Spacer(Modifier.height(16.dp))
+                .fillMaxWidth()
+                .fillMaxHeight(fraction)
+                .background(OnScrim),
+        )
         Icon(
             painter = painterResource(icon),
             contentDescription = null,
-            tint = OnScrim,
-            modifier = Modifier.size(28.dp),
+            tint = if (fraction > 0.12f) ScrimStrong else OnScrim,
+            modifier = Modifier.padding(bottom = 12.dp).size(22.dp),
         )
     }
 }
@@ -210,6 +205,43 @@ fun OrientationHud(
  * Centered transient pill confirming a sleep-timer change (armed / off) or the
  * pause it triggers. Text is composed by the caller; dismisses on its own timer.
  */
+/**
+ * "No audio — this device can't play DTS": the only signal the user gets when a track has
+ * no decoder, because ExoPlayer plays on silently rather than erroring. Same transient
+ * pill family as the sleep/orientation HUDs; informational, no action.
+ */
+@Composable
+fun UnsupportedCodecHud(
+    visible: Boolean,
+    label: String,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        AnimatedVisibility(visible = visible, enter = fadeIn(), exit = fadeOut()) {
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(ScrimStrong)
+                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_mute),
+                    contentDescription = null,
+                    tint = DarkAccent,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = OnScrim,
+                )
+            }
+        }
+    }
+}
+
 @Composable
 fun SleepTimerHud(
     visible: Boolean,
@@ -288,43 +320,6 @@ fun ScreenshotHud(
                             .padding(horizontal = 8.dp, vertical = 2.dp),
                     )
                 }
-            }
-        }
-    }
-}
-
-/**
- * Centered transient pill shown while a long-press speed-hold is active.
- * Reports the live multiplier; dismisses on release.
- */
-@Composable
-fun SpeedHud(
-    visible: Boolean,
-    multiplier: Float,
-    modifier: Modifier = Modifier,
-) {
-    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        AnimatedVisibility(visible = visible, enter = fadeIn(), exit = fadeOut()) {
-            Row(
-                modifier = Modifier
-                    .padding(top = 72.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(ScrimStrong)
-                    .padding(horizontal = 20.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_speed),
-                    contentDescription = null,
-                    tint = DarkAccent,
-                    modifier = Modifier.size(20.dp),
-                )
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    text = "%.1f×".format(multiplier),
-                    style = TimecodeStyle,
-                    color = OnScrim,
-                )
             }
         }
     }

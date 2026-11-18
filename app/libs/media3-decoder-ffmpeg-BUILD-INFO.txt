@@ -1,0 +1,11 @@
+media3-decoder-ffmpeg 1.6.1 — built 2026-11-03T08:34Z by scripts/build-ffmpeg-aar.sh
+Media3 tag:       1.6.1
+FFmpeg branch:    release/6.0 (573f2b8)
+NDK:              27.1.12297006, min API 21
+ABIs:             arm64-v8a armeabi-v7a
+License:          FFmpeg LGPL-2.1+ (configure reports "LGPL version 2.1 or later"; no GPL flags).
+                  NOTE: media3's build_ffmpeg.sh uses --enable-static, so libavcodec/libavutil/
+                  libswresample are linked STATICALLY into libffmpegJNI.so. LGPL 2.1 §6 then
+                  requires offering the JNI object code for relinking (or switching to shared).
+Enabled decoders: vorbis opus flac alac pcm_mulaw pcm_alaw mp3 aac mp2 wmav1 wmav2 wmapro wmalossless ape wavpack
+Excluded:         ac3 eac3 dca truehd mlp (patent-encumbered — see CLAUDE.md)

@@ -13,12 +13,16 @@ object AdUnits {
     // Google's public test units.
     private const val TEST_BANNER = "ca-app-pub-3940256099942544/6300978111"
     private const val TEST_NATIVE = "ca-app-pub-3940256099942544/2247696110"
+    private const val TEST_REWARDED = "ca-app-pub-3940256099942544/5224354917"
 
     // Real units (release only), named by placement.
     private const val REAL_BANNER_MAIN = "ca-app-pub-2601730814150494/1560144896"
     private const val REAL_BANNER_VIDEO_LIST = "ca-app-pub-2601730814150494/8506000658"
     private const val REAL_NATIVE_FOLDER_LIST = "ca-app-pub-2601730814150494/9403375271"
     private const val REAL_NATIVE_VIDEO_LIST = "ca-app-pub-2601730814150494/3884229362"
+
+    // Rewarded unit backing the "Get 1 Day Pro" grant (AdMob app ca-app-pub-2601730814150494).
+    private const val REAL_REWARDED = "ca-app-pub-2601730814150494/8927746094"
 
     // Parked — not rendered yet.
     const val APP_OPEN = "ca-app-pub-2601730814150494/1958373756"
@@ -34,4 +38,7 @@ object AdUnits {
 
     /** Inline native card in the video list. */
     val nativeVideoList: String get() = if (BuildConfig.DEBUG) TEST_NATIVE else REAL_NATIVE_VIDEO_LIST
+
+    /** Rewarded ad backing the "Get 1 Day Pro" grant. */
+    val rewarded: String get() = if (BuildConfig.DEBUG) TEST_REWARDED else REAL_REWARDED
 }

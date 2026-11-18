@@ -16,10 +16,15 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -38,6 +43,10 @@ import androidx.navigation.navArgument
 import com.devbytes.vixplayer.app.ads.AdBanner
 import com.devbytes.vixplayer.app.ads.AdsViewModel
 import com.devbytes.vixplayer.app.navigation.ABOUT_PRO_ROUTE
+import com.devbytes.vixplayer.app.navigation.PRO_REWARDS_ROUTE
+import com.devbytes.vixplayer.app.navigation.REWARD_HISTORY_ROUTE
+import com.devbytes.vixplayer.app.ui.premium.ProRewardsScreen
+import com.devbytes.vixplayer.app.ui.premium.RewardHistoryScreen
 import com.devbytes.vixplayer.app.navigation.BRIEFING_ROUTE
 import com.devbytes.vixplayer.app.navigation.BRIEFING_SETTINGS_ROUTE
 import com.devbytes.vixplayer.app.navigation.BRIEFING_SETUP_ROUTE
@@ -209,6 +218,9 @@ fun VixPlayNavGraph(
     onPulsePlayConsumed: () -> Unit = {},
     openBriefing: Boolean = false,
     onBriefingConsumed: () -> Unit = {},
+    /** True once a Flexible Play update has downloaded — shows the restart Snackbar. */
+    updateReady: Boolean = false,
+    onInstallUpdate: () -> Unit = {},
 ) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -280,8 +292,24 @@ fun VixPlayNavGraph(
 
     val adsViewModel: AdsViewModel = hiltViewModel()
     val canRequestAds by adsViewModel.canRequestAds.collectAsState()
+    val adsEnabled by adsViewModel.adsEnabled.collectAsState()
+
+    // Flexible-update restart prompt: an indefinite Snackbar with a Restart action. If the
+    // user dismisses it, AppUpdater auto-applies the update on the next launch.
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(updateReady) {
+        if (updateReady) {
+            val result = snackbarHostState.showSnackbar(
+                message = "Update ready",
+                actionLabel = "Restart",
+                duration = SnackbarDuration.Indefinite,
+            )
+            if (result == SnackbarResult.ActionPerformed) onInstallUpdate()
+        }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             if (!isFullScreen) {
                 // Mini-player sits above the tabs and inside the same slot, so Scaffold
@@ -289,7 +317,7 @@ fun VixPlayNavGraph(
                 Column {
                     // Anchored banner on top (furthest from the nav thumb), only where
                     // ads are allowed and once consent + SDK are ready.
-                    if (adsViewModel.adsEnabled && canRequestAds && !inSettingsTab && !inFolderBrowser) {
+                    if (adsEnabled && canRequestAds && !inSettingsTab && !inFolderBrowser) {
                         AdBanner()
                     }
                     MiniPlayer(
@@ -356,6 +384,7 @@ fun VixPlayNavGraph(
                     onBack = {
                         if (!navController.popBackStack()) (context as? Activity)?.finish()
                     },
+                    onOpenEqualizer = { navController.navigate(EQUALIZER_ROUTE) },
                 )
             }
 
@@ -489,6 +518,10 @@ fun VixPlayNavGraph(
                         initialQuery = entry.arguments?.getString("query")?.let { Uri.decode(it) },
                         onVideoClick = { uri ->
                             navController.navigate(playerRoute(Uri.encode(uri.toString())))
+                        },
+                        onAudioClick = { id -> navController.navigate(audioPlayerRoute(id)) },
+                        onFolderClick = { bucketId, name ->
+                            navController.navigate(folderVideosRoute(bucketId, Uri.encode(name)))
                         },
                         onBack = { navController.popBackStack() },
                     )
@@ -628,6 +661,17 @@ fun VixPlayNavGraph(
 
                 composable(ABOUT_PRO_ROUTE) {
                     AboutProScreen(onBack = { navController.popBackStack() })
+                }
+
+                composable(PRO_REWARDS_ROUTE) {
+                    ProRewardsScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenHistory = { navController.navigate(REWARD_HISTORY_ROUTE) },
+                    )
+                }
+
+                composable(REWARD_HISTORY_ROUTE) {
+                    RewardHistoryScreen(onBack = { navController.popBackStack() })
                 }
             }
         }

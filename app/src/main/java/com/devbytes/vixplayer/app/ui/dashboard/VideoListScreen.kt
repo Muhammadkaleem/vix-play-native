@@ -78,6 +78,8 @@ fun VideoListScreen(
                     body = when (source) {
                         DashboardSource.FAVORITES -> "Tap the heart on a video to add it to favorites."
                         DashboardSource.RECENTLY_ADDED -> "New videos you add will appear here."
+                        DashboardSource.HIGH_RES -> "No 1080p or higher videos found in your storage."
+                        DashboardSource.NEW_ON_DEVICE -> "Nothing added in the last 7 days."
                         null -> "This folder has no videos."
                     },
                     modifier = Modifier.padding(padding),

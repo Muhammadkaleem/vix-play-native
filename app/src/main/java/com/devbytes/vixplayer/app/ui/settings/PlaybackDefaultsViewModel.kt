@@ -18,7 +18,25 @@ class PlaybackDefaultsViewModel @Inject constructor(
     val backgroundPlayback: StateFlow<Boolean> = settingsRepository.backgroundPlayback
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    val autoplayNext: StateFlow<Boolean> = settingsRepository.autoplayNext
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    val askBeforePlayingNext: StateFlow<Boolean> = settingsRepository.askBeforePlayingNext
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
     fun setBackgroundPlayback(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setBackgroundPlayback(enabled) }
+    }
+
+    fun setAutoplayNext(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setAutoplayNext(enabled) }
+    }
+
+    fun setAskBeforePlayingNext(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setAskBeforePlayingNext(enabled) }
+    }
+
+    fun resetPlaybackPrompts() {
+        viewModelScope.launch { settingsRepository.resetPlaybackPrompts() }
     }
 }

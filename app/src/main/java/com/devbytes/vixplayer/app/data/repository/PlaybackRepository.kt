@@ -35,6 +35,18 @@ class PlaybackRepository @Inject constructor(
         dao.upsert(PlaybackPosition(mediaStoreId, positionMs, System.currentTimeMillis()))
     }
 
+    /**
+     * Stamps "last played = now" at playback start/resume **without** disturbing the saved
+     * position — so the floating resume button's "most recent" is correct the instant a video
+     * begins (not only when it's exited). Preserves the existing position (Room, else MMKV,
+     * else 0 for a brand-new play).
+     */
+    suspend fun markPlayed(mediaStoreId: Long) {
+        val position = dao.getPosition(mediaStoreId)?.positionMs
+            ?: mmkv.decodeLong("pos_$mediaStoreId", 0L)
+        dao.upsert(PlaybackPosition(mediaStoreId, position, System.currentTimeMillis()))
+    }
+
     suspend fun getPosition(mediaStoreId: Long): Long =
         dao.getPosition(mediaStoreId)?.positionMs
             ?: mmkv.decodeLong("pos_$mediaStoreId", 0L)

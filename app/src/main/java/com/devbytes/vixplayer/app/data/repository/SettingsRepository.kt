@@ -39,8 +39,12 @@ class SettingsRepository @Inject constructor(
         val PLAYBACK_SPEED          = floatPreferencesKey("playback_speed")
         val THEME_MODE              = stringPreferencesKey("theme_mode")
         val ACCENT                  = stringPreferencesKey("accent")
+        val RECENT_SEARCHES         = stringPreferencesKey("recent_searches")
         val SHOW_SUBTITLES_DEFAULT  = booleanPreferencesKey("show_subtitles_by_default")
         val BACKGROUND_PLAYBACK     = booleanPreferencesKey("background_playback")
+        // Up Next / autoplay preferences (single source of truth, shared with Settings).
+        val AUTOPLAY_NEXT           = booleanPreferencesKey("autoplay_next")
+        val ASK_BEFORE_NEXT         = booleanPreferencesKey("ask_before_next")
         val VIEW_MODE               = stringPreferencesKey("library_view_mode")
         val FOLDER_SORT             = stringPreferencesKey("folder_sort")
         val GESTURE_LEFT_DRAG       = stringPreferencesKey("gesture_left_drag")
@@ -94,6 +98,47 @@ class SettingsRepository @Inject constructor(
      */
     val backgroundPlayback: Flow<Boolean> = context.dataStore.data
         .map { it[Keys.BACKGROUND_PLAYBACK] ?: false }
+
+    /** Autoplay the next video when the current one ends. Default off. */
+    val autoplayNext: Flow<Boolean> = context.dataStore.data
+        .map { it[Keys.AUTOPLAY_NEXT] ?: false }
+
+    /** When autoplay is off, show the "Play next?" confirmation at video end. Default on. */
+    val askBeforePlayingNext: Flow<Boolean> = context.dataStore.data
+        .map { it[Keys.ASK_BEFORE_NEXT] ?: true }
+
+    suspend fun setAutoplayNext(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.AUTOPLAY_NEXT] = enabled }
+    }
+
+    suspend fun setAskBeforePlayingNext(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.ASK_BEFORE_NEXT] = enabled }
+    }
+
+    /** Recent search queries, newest first (max 8). Newline-delimited to preserve order. */
+    val recentSearches: Flow<List<String>> = context.dataStore.data.map { p ->
+        p[Keys.RECENT_SEARCHES]?.split('\n')?.filter { it.isNotBlank() } ?: emptyList()
+    }
+
+    /** Records a successful search query (de-duplicated, moved to front, capped at 8). */
+    suspend fun addRecentSearch(query: String) {
+        val q = query.trim()
+        if (q.isBlank()) return
+        context.dataStore.edit { p ->
+            val current = p[Keys.RECENT_SEARCHES]?.split('\n')?.filter { it.isNotBlank() } ?: emptyList()
+            val updated = (listOf(q) + current.filterNot { it.equals(q, ignoreCase = true) }).take(8)
+            p[Keys.RECENT_SEARCHES] = updated.joinToString("\n")
+        }
+    }
+
+    suspend fun clearRecentSearches() {
+        context.dataStore.edit { it.remove(Keys.RECENT_SEARCHES) }
+    }
+
+    /** Restores the default end-of-video prompt behaviour (clears "Don't ask again"). */
+    suspend fun resetPlaybackPrompts() {
+        context.dataStore.edit { it[Keys.ASK_BEFORE_NEXT] = true }
+    }
 
     suspend fun setPlaybackSpeed(speed: Float) {
         context.dataStore.edit { it[Keys.PLAYBACK_SPEED] = speed }

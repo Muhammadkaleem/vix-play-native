@@ -30,8 +30,8 @@ android {
         applicationId = "com.devbytes.vixplayer.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 64
-        versionName = "3.0.4"
+        versionCode = 68
+        versionName = "3.0.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -99,6 +99,15 @@ dependencies {
     implementation(libs.androidx.media3.exoplayer.rtsp)
     implementation(libs.androidx.media3.ui)
     implementation(libs.androidx.media3.session)
+    // FFmpeg audio-decoder extension, built by scripts/build-ffmpeg-aar.sh (LGPL, audio
+    // only, AC3/DTS excluded — see app/libs/media3-decoder-ffmpeg-BUILD-INFO.txt). Must be
+    // rebuilt whenever the media3 version changes.
+    implementation(files("libs/media3-decoder-ffmpeg-1.6.1.aar"))
+    implementation(libs.androidx.media3.decoder)
+    // Chromecast (Default Media Receiver) + the on-phone HTTP server that feeds it local files.
+    implementation(libs.androidx.media3.cast)
+    implementation(libs.androidx.mediarouter)
+    implementation(libs.nanohttpd)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     // Hilt
@@ -136,6 +145,9 @@ dependencies {
     // Play In-App Review (post-positive-signal review prompt)
     implementation(libs.play.review)
     implementation(libs.play.review.ktx)
+    // Play In-App Updates (flexible / immediate update flows)
+    implementation(libs.play.app.update)
+    implementation(libs.play.app.update.ktx)
 
     // Firebase Crashlytics — crash, ANR, and native-crash reporting
     implementation(platform(libs.firebase.bom))

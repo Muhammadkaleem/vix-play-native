@@ -66,6 +66,24 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.tween
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalDensity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.delay
 import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.ads.AdBanner
 import com.devbytes.vixplayer.app.ads.AdNativeCard
@@ -120,8 +138,9 @@ fun FolderBrowserScreen(
 
     val adsViewModel: AdsViewModel = hiltViewModel()
     val canRequestAds by adsViewModel.canRequestAds.collectAsStateWithLifecycle()
+    val adsEnabled by adsViewModel.adsEnabled.collectAsStateWithLifecycle()
     // Selection mode hides ads (a contextual action bar is up); otherwise gate on consent.
-    val showAds = adsViewModel.adsEnabled && canRequestAds && !selectionMode
+    val showAds = adsEnabled && canRequestAds && !selectionMode
 
     val visibleVideos = (state as? FolderBrowserUiState.VideoList)?.videos.orEmpty()
 
@@ -166,6 +185,60 @@ fun FolderBrowserScreen(
         }
     }
 
+    // ── Floating resume button ────────────────────────────────────────────────
+    val resumeTarget by viewModel.resumeTarget.collectAsStateWithLifecycle()
+    val openPlayerUri by viewModel.openPlayerUri.collectAsStateWithLifecycle()
+    // Hoisted so the FAB can watch scrolling; one per list shape.
+    val folderListState = rememberLazyListState()
+    val videoGridState = rememberLazyGridState()
+    val scrolling = if (isInFolder) videoGridState.isScrollInProgress else folderListState.isScrollInProgress
+
+    // Reduced-motion: drop translate/scale when the OS animator scale is 0.
+    val reducedMotion = remember {
+        android.provider.Settings.Global.getFloat(
+            context.contentResolver,
+            android.provider.Settings.Global.ANIMATOR_DURATION_SCALE,
+            1f,
+        ) == 0f
+    }
+
+    // Scroll-driven visibility: hide immediately while scrolling (drag + momentum, since
+    // isScrollInProgress stays true through a fling); return 180 ms after it fully stops. A
+    // restart re-keys this effect and cancels the pending return — no flicker.
+    var fabIdle by remember { mutableStateOf(true) }
+    LaunchedEffect(scrolling) {
+        if (scrolling) {
+            fabIdle = false
+        } else {
+            delay(180)
+            fabIdle = true
+        }
+    }
+
+    // One-shot: open the validated resume target in the player.
+    LaunchedEffect(openPlayerUri) {
+        openPlayerUri?.let { uri ->
+            onVideoClick(Uri.parse(uri))
+            viewModel.consumeOpenPlayer()
+        }
+    }
+
+    // Returning to the foreground (e.g. back from the player) may change the last-played.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.onScreenResumed()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // Hide the FAB during multi-select and blocking overlays (transfer/dialogs/pickers).
+    val fabBlocked = selectionMode || transfer != null || confirmDelete || renaming ||
+        choosingDestination != null || newFolderMove != null
+    val showFab = resumeTarget != null && fabIdle && !fabBlocked
+    val slidePx = with(LocalDensity.current) { 12.dp.roundToPx() }
+
     val title = if (state is FolderBrowserUiState.VideoList) {
         (state as FolderBrowserUiState.VideoList).folderName
     } else {
@@ -174,6 +247,28 @@ fun FolderBrowserScreen(
     }
 
     Scaffold(
+        floatingActionButton = {
+            AnimatedVisibility(
+                visible = showFab,
+                enter = if (reducedMotion) fadeIn(tween(200)) else
+                    fadeIn(tween(200)) + scaleIn(initialScale = 0.92f, animationSpec = tween(200)) +
+                        slideInVertically(tween(200)) { slidePx },
+                exit = if (reducedMotion) fadeOut(tween(160)) else
+                    fadeOut(tween(160)) + slideOutVertically(tween(160)) { slidePx },
+            ) {
+                val label = resumeTarget?.name?.let { "Resume $it" } ?: "Resume"
+                FloatingActionButton(
+                    onClick = { viewModel.onResumeClicked() },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_play),
+                        contentDescription = label,
+                    )
+                }
+            }
+        },
         topBar = {
             if (selectionMode) {
                 TopAppBar(
@@ -379,6 +474,7 @@ fun FolderBrowserScreen(
                         viewModel.enterFolder(folder.bucketId, folder.name)
                     },
                     showAds = showAds,
+                    listState = folderListState,
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -392,6 +488,7 @@ fun FolderBrowserScreen(
                 resume = resume,
                 onToggleSelect = { viewModel.toggleSelection(it) },
                 showAds = showAds,
+                gridState = videoGridState,
                 modifier = Modifier.padding(padding),
             )
 
@@ -666,6 +763,7 @@ private fun FolderList(
     folders: List<FolderEntry>,
     onFolderClick: (FolderEntry) -> Unit,
     showAds: Boolean,
+    listState: LazyListState = rememberLazyListState(),
     modifier: Modifier = Modifier,
 ) {
     if (folders.isEmpty()) {
@@ -680,7 +778,7 @@ private fun FolderList(
     // One native card a few rows down (or at the end for short lists), so it's inline and
     // seen rather than buried at the bottom.
     val adAfter = if (folders.size > 3) 3 else folders.size
-    LazyColumn(modifier = modifier.fillMaxSize()) {
+    LazyColumn(state = listState, modifier = modifier.fillMaxSize()) {
         folders.take(adAfter).forEach { folder ->
             item(key = folder.bucketId) {
                 FolderRow(folder = folder, onClick = { onFolderClick(folder) })
@@ -790,6 +888,7 @@ private fun VideoGrid(
     resume: Map<Long, Float>,
     onToggleSelect: (VideoFile) -> Unit,
     showAds: Boolean,
+    gridState: LazyGridState = rememberLazyGridState(),
     modifier: Modifier = Modifier,
 ) {
     if (videos.isEmpty()) {
@@ -805,6 +904,7 @@ private fun VideoGrid(
     val fullSpan: androidx.compose.foundation.lazy.grid.LazyGridItemSpanScope.() -> GridItemSpan =
         { GridItemSpan(maxLineSpan) }
     LazyVerticalGrid(
+        state = gridState,
         columns = GridCells.Fixed(if (isList) 1 else 3),
         contentPadding = PaddingValues(if (isList) 0.dp else 12.dp),
         horizontalArrangement = Arrangement.spacedBy(if (isList) 0.dp else 8.dp),

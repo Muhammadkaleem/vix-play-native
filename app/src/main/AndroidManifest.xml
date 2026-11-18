@@ -56,6 +56,11 @@
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-2601730814150494~5767568970" />
 
+        <!-- Cast SDK: receiver app id + session options (Default Media Receiver, no registration). -->
+        <meta-data
+            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
+            android:value="com.devbytes.vixplayer.app.cast.CastOptionsProvider" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

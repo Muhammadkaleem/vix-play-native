@@ -31,9 +31,11 @@ import com.devbytes.vixplayer.app.R
 private data class OssLicense(val name: String, val license: String)
 
 // Third-party libraries actually declared in the build (see gradle/libs.versions.toml).
-// FFmpeg is intentionally absent — the decoder extension is not yet in the build.
+// FFmpeg: the Media3 audio-decoder extension in app/libs, built LGPL-only
+// (scripts/build-ffmpeg-aar.sh records the exact configuration, source and linking).
 private val OSS_LICENSES = listOf(
     OssLicense("Jetpack Compose", "Apache License 2.0"),
+    OssLicense("FFmpeg (audio decoders)", "LGPL 2.1 or later — source at ffmpeg.org"),
     OssLicense("AndroidX Media3 (ExoPlayer)", "Apache License 2.0"),
     OssLicense("AndroidX Navigation Compose", "Apache License 2.0"),
     OssLicense("AndroidX Room", "Apache License 2.0"),

@@ -57,6 +57,10 @@ class PlayerViewModel @Inject constructor(
     /** The app-scoped player. Owned by [PlayerController], never released by the screen. */
     val player = playerController.player
 
+    /** Active decoder names (platform vs FFmpeg) — shown in File Info. */
+    val audioDecoder = playerController.audioDecoder
+    val videoDecoder = playerController.videoDecoder
+
     /** Mutable subtitle-offset carrier read by the parser during extraction. */
     val subtitleOffset = playerController.subtitleOffset
 
@@ -110,6 +114,26 @@ class PlayerViewModel @Inject constructor(
     val backgroundPlayback: StateFlow<Boolean> = settingsRepository.backgroundPlayback
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    fun setBackgroundPlayback(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setBackgroundPlayback(enabled) }
+    }
+
+    /** Autoplay the next video at end-of-video (single source of truth, shared with Settings). */
+    val autoplayNext: StateFlow<Boolean> = settingsRepository.autoplayNext
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    /** When autoplay is off, whether to show the end-of-video "Play next?" confirmation. */
+    val askBeforePlayingNext: StateFlow<Boolean> = settingsRepository.askBeforePlayingNext
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    fun setAutoplayNext(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setAutoplayNext(enabled) }
+    }
+
+    fun setAskBeforePlayingNext(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setAskBeforePlayingNext(enabled) }
+    }
+
     /** Persisted global playback speed — applied to every video, updated from the player. */
     val playbackSpeed: StateFlow<Float> = settingsRepository.playbackSpeed
         .stateIn(viewModelScope, SharingStarted.Eagerly, 1.0f)
@@ -156,6 +180,13 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    /** Records "played now" at playback start/resume (stamps history without moving the
+     *  saved position) so the floating resume button targets this video immediately. */
+    fun markPlayed() {
+        val id = currentMediaStoreId ?: return
+        viewModelScope.launch { playbackRepository.markPlayed(id) }
+    }
+
     /** File metadata (name/path/size/duration) for the File Info sheet, or null if not a MediaStore item. */
     suspend fun loadFileInfo(): VideoFile? =
         currentMediaStoreId?.let { mediaRepository.queryVideoById(it) }
@@ -163,6 +194,19 @@ class PlayerViewModel @Inject constructor(
     /** The next video in the current item's folder, or null if there's no next (last file / non-MediaStore). */
     suspend fun nextInFolder(): VideoFile? =
         currentMediaStoreId?.let { mediaRepository.nextInFolder(it) }
+
+    /** Up-next videos from the current folder for the end-of-video screen. */
+    suspend fun loadUpcoming(limit: Int): List<VideoFile> =
+        currentMediaStoreId?.let {
+            runCatching { mediaRepository.upcomingInFolder(it, limit) }.getOrDefault(emptyList())
+        } ?: emptyList()
+
+    /** "3 of 12" playlist position for the current video, or null if not resolvable. */
+    suspend fun loadPlaylistPosition(): String? =
+        currentMediaStoreId?.let { id ->
+            runCatching { mediaRepository.folderPosition(id) }.getOrNull()
+                ?.let { (pos, total) -> "$pos of $total" }
+        }
 
     /**
      * Records a watched-to-completion and reports whether the Play review prompt should be
