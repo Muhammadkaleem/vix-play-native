@@ -83,7 +83,7 @@ class SettingsRepository @Inject constructor(
      */
     val themeState: Flow<ThemeState> = context.dataStore.data.map { p ->
         ThemeState(
-            mode = p[Keys.THEME_MODE]?.let { enumOrNull<ThemeMode>(it) } ?: ThemeMode.DARK,
+            mode = p[Keys.THEME_MODE]?.let { enumOrNull<ThemeMode>(it) } ?: ThemeMode.LIGHT,
             accent = p[Keys.ACCENT]?.let { enumOrNull<AccentChoice>(it) } ?: AccentChoice.DEFAULT,
         )
     }

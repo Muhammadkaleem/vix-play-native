@@ -86,7 +86,7 @@ private fun ThemeMode.isDark(): Boolean = when (this) {
 
 @Composable
 fun VixPlayTheme(
-    mode: ThemeMode = ThemeMode.DARK,
+    mode: ThemeMode = ThemeMode.LIGHT,
     accent: AccentChoice = AccentChoice.DEFAULT,
     content: @Composable () -> Unit,
 ) {

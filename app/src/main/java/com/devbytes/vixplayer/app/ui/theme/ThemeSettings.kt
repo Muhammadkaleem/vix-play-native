@@ -33,6 +33,6 @@ enum class AccentChoice(val label: String, val color: Color?) {
 
 /** The two persisted theming choices, read together so the theme resolves in one place. */
 data class ThemeState(
-    val mode: ThemeMode = ThemeMode.DARK,
+    val mode: ThemeMode = ThemeMode.LIGHT,
     val accent: AccentChoice = AccentChoice.DEFAULT,
 )

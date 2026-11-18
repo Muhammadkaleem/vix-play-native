@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -76,8 +77,12 @@ private val BarHeight = 68.dp
 private val BarSideMargin = 12.dp
 private val BarInnerPadding = 5.dp
 private val CapsuleInset = 2.dp
-/** Pill opacity: low enough for content to show through, high enough for labels to read. */
-private const val BAR_ALPHA = 0.78f
+/**
+ * Pill opacity: low enough for content to show through, high enough for labels to read. Light
+ * surfaces need more: dark text behind a light pill competes with the tab labels.
+ */
+private const val BAR_ALPHA_DARK = 0.78f
+private const val BAR_ALPHA_LIGHT = 0.95f
 
 // ── Motion ───────────────────────────────────────────────────────────────────
 // The capsule rides a spring, so a one-slot and a four-slot move take about the same time
@@ -124,6 +129,7 @@ fun VixBottomNav(
     }
 
     val colors = MaterialTheme.colorScheme
+    val barAlpha = if (colors.background.luminance() < 0.5f) BAR_ALPHA_DARK else BAR_ALPHA_LIGHT
     Box(
         Modifier
             .fillMaxWidth()
@@ -137,7 +143,7 @@ fun VixBottomNav(
                 .shadow(elevation = 14.dp, shape = CircleShape)
                 .clip(CircleShape)
                 // Translucent glass: content scrolling behind stays faintly visible.
-                .background(colors.surfaceVariant.copy(alpha = BAR_ALPHA))
+                .background(colors.surfaceVariant.copy(alpha = barAlpha))
                 .border(1.dp, colors.onSurface.copy(alpha = 0.10f), CircleShape)
                 .padding(BarInnerPadding),
         ) {
