@@ -20,10 +20,15 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.devbytes.vixplayer.app.R
+import com.devbytes.vixplayer.app.ads.AdsViewModel
+import com.devbytes.vixplayer.app.ui.premium.findActivity
 import com.devbytes.vixplayer.app.navigation.ABOUT_PRO_ROUTE
 import com.devbytes.vixplayer.app.navigation.BRIEFING_SETTINGS_ROUTE
 import com.devbytes.vixplayer.app.navigation.GESTURE_REMAP_ROUTE
@@ -76,8 +81,10 @@ private val SETTINGS_ITEMS = listOf(
 @Composable
 fun SettingsScreen(
     onNavigate: (String) -> Unit = {},
+    adsViewModel: AdsViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
+    val privacyOptionsRequired by adsViewModel.privacyOptionsRequired.collectAsStateWithLifecycle()
     Scaffold(
         topBar = {
             TopAppBar(
@@ -127,6 +134,46 @@ fun SettingsScreen(
                 HorizontalDivider(
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                 )
+            }
+
+            // Consent regions only: re-open the ad-consent form (Google's privacy-options entry
+            // point). Elsewhere there is no consent to change, so the row isn't shown.
+            if (privacyOptionsRequired) {
+                item {
+                    ListItem(
+                        leadingContent = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_lock),
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        },
+                        headlineContent = { Text("Privacy & ad choices") },
+                        supportingContent = {
+                            Text(
+                                text = "Change your consent for personalised ads",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        },
+                        trailingContent = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_chevron_right),
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        },
+                        colors = ListItemDefaults.colors(
+                            containerColor = MaterialTheme.colorScheme.background,
+                        ),
+                        modifier = Modifier.clickable {
+                            context.findActivity()?.let { adsViewModel.showPrivacyOptions(it) }
+                        },
+                    )
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    )
+                }
             }
 
             items(SETTINGS_ITEMS) { item ->

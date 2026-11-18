@@ -69,7 +69,10 @@ class MainActivity : ComponentActivity() {
     /** Launcher for the Play update consent/progress UI (registered on the Activity). */
     private val updateLauncher = registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult(),
-    ) { /* No-op: onResume reconciles in-progress / downloaded state. */ }
+    ) { result ->
+        // Analytics only — onResume reconciles in-progress / downloaded state.
+        if (::appUpdater.isInitialized) appUpdater.onPromptResult(result.resultCode)
+    }
 
     /** Flipped true when a Flexible update has downloaded; drives the restart Snackbar. */
     private val updateReady = mutableStateOf(false)

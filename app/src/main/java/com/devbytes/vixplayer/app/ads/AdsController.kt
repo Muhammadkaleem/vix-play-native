@@ -6,6 +6,7 @@ import com.devbytes.vixplayer.app.BuildConfig
 import com.devbytes.vixplayer.app.data.repository.ProRepository
 import com.google.android.gms.ads.MobileAds
 import com.google.android.gms.ads.RequestConfiguration
+import com.google.android.ump.ConsentInformation
 import com.google.android.ump.ConsentRequestParameters
 import com.google.android.ump.UserMessagingPlatform
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -58,6 +59,13 @@ class AdsController @Inject constructor(
     val adsAllowed: StateFlow<Boolean> = combine(adsEnabled, canRequestAds) { e, c -> e && c }
         .stateIn(scope, SharingStarted.Eagerly, false)
 
+    private val _privacyOptionsRequired = MutableStateFlow(false)
+    /**
+     * True where the consent SDK requires a way to revisit consent (EEA/UK/CH with a published
+     * GDPR message). Settings shows its "Privacy & ad choices" row only then.
+     */
+    val privacyOptionsRequired: StateFlow<Boolean> = _privacyOptionsRequired.asStateFlow()
+
     private val sdkInitialized = AtomicBoolean(false)
     private val firstForeground = AtomicBoolean(true)
 
@@ -88,8 +96,10 @@ class AdsController @Inject constructor(
             {
                 // Show the form only if required (EEA/UK, first run); no-op otherwise.
                 UserMessagingPlatform.loadAndShowConsentFormIfRequired(activity) {
+                    updatePrivacyOptions(consentInfo)
                     if (consentInfo.canRequestAds()) initializeSdk()
                 }
+                updatePrivacyOptions(consentInfo)
                 // Returning users and users outside the EEA can already request ads.
                 if (consentInfo.canRequestAds()) initializeSdk()
             },
@@ -98,6 +108,21 @@ class AdsController @Inject constructor(
                 if (consentInfo.canRequestAds()) initializeSdk()
             },
         )
+    }
+
+    private fun updatePrivacyOptions(info: ConsentInformation) {
+        _privacyOptionsRequired.value = info.privacyOptionsRequirementStatus ==
+            ConsentInformation.PrivacyOptionsRequirementStatus.REQUIRED
+    }
+
+    /**
+     * Re-opens the consent form so the user can change their choice (Google requires this entry
+     * point wherever a GDPR message is shown). The new choice takes effect on the next ad request.
+     */
+    fun showPrivacyOptions(activity: Activity) {
+        UserMessagingPlatform.showPrivacyOptionsForm(activity) {
+            updatePrivacyOptions(UserMessagingPlatform.getConsentInformation(activity))
+        }
     }
 
     private fun initializeSdk() {

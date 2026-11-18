@@ -9,7 +9,7 @@ import javax.inject.Inject
 /** Exposes ad readiness and the interstitial hooks to the Compose tree. */
 @HiltViewModel
 class AdsViewModel @Inject constructor(
-    controller: AdsController,
+    private val controller: AdsController,
     private val interstitials: InterstitialAdManager,
     private val config: AdConfigProvider,
 ) : ViewModel() {
@@ -23,6 +23,11 @@ class AdsViewModel @Inject constructor(
     val canRequestAds: StateFlow<Boolean> = controller.canRequestAds
 
     fun adConfig(): AdConfig = config.current()
+
+    /** Whether Settings must offer "Privacy & ad choices" (EEA/UK/CH consent regions). */
+    val privacyOptionsRequired: StateFlow<Boolean> = controller.privacyOptionsRequired
+
+    fun showPrivacyOptions(activity: Activity) = controller.showPrivacyOptions(activity)
 
     /** The video player route was entered. */
     fun onPlayerEntered() = interstitials.onPlayerEntered()

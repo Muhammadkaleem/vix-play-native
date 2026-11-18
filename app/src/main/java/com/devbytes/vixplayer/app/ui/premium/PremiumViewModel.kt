@@ -68,7 +68,7 @@ class PremiumViewModel @Inject constructor(
      * or a no-fill grants nothing and reports [Result.Unavailable].
      */
     fun watchAdForPro(activity: Activity, entryPoint: String = "unknown", onResult: (Result) -> Unit) {
-        log("watch_ad_tapped")
+        log("watch_ad_tapped", entryPoint = entryPoint)
         val txId = UUID.randomUUID().toString()
         rewardedAds.show(
             activity,
@@ -92,11 +92,14 @@ class PremiumViewModel @Inject constructor(
         )
     }
 
-    private fun log(event: String, earnedMs: Long = -1L) {
+    private fun log(event: String, earnedMs: Long = -1L, entryPoint: String? = null) {
         runCatching {
             analytics.logEvent(
                 event,
-                Bundle().apply { if (earnedMs >= 0) putLong("earned_ms", earnedMs) },
+                Bundle().apply {
+                    if (earnedMs >= 0) putLong("earned_ms", earnedMs)
+                    if (entryPoint != null) putString("entry_point", entryPoint)
+                },
             )
         }
     }

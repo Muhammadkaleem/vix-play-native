@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.widget.Toast
+import com.devbytes.vixplayer.app.analytics.Analytics
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -123,6 +124,9 @@ fun ProRewardsScreen(
                         Toast.makeText(context, "Can't show the ad right now", Toast.LENGTH_SHORT).show()
                     } else {
                         viewModel.watchAdForPro(activity, entryPoint = "rewards_screen") { result ->
+                            if (result == PremiumViewModel.Result.Granted) {
+                                Analytics.log(context, Analytics.PRO_SUCCESS_SHOWN, "entry_point" to "rewards_screen")
+                            }
                             val msg = when (result) {
                                 PremiumViewModel.Result.Granted -> "Pro extended by ${viewModel.rewardLabel}"
                                 PremiumViewModel.Result.Unavailable -> "No ad available — try again shortly"

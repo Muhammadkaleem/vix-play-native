@@ -59,6 +59,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import com.devbytes.vixplayer.app.analytics.Analytics
 import com.google.android.play.core.ktx.launchReview
 import com.google.android.play.core.ktx.requestReview
 import com.google.android.play.core.review.ReviewManagerFactory
@@ -401,7 +402,17 @@ fun PlayerScreen(
         ) {
             reviewRequested = true
             activity?.let { act ->
-                runCatching { reviewManager.launchReview(act, reviewManager.requestReview()) }
+                // Play decides whether the dialog actually appears and never says, so these
+                // record that we asked and whether the flow ran — not that a review was left.
+                Analytics.log(context, Analytics.REVIEW_PROMPT_REQUESTED)
+                val outcome = runCatching {
+                    reviewManager.launchReview(act, reviewManager.requestReview())
+                }
+                Analytics.log(
+                    context,
+                    Analytics.REVIEW_FLOW_FINISHED,
+                    "outcome" to if (outcome.isSuccess) "completed" else "failed",
+                )
             }
         }
     }

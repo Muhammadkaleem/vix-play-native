@@ -40,6 +40,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
+import com.devbytes.vixplayer.app.analytics.Analytics
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -111,7 +112,10 @@ fun DashboardScreen(
         } else {
             premiumViewModel.watchAdForPro(activity, entryPoint) { result ->
                 when (result) {
-                    PremiumViewModel.Result.Granted -> premiumModal = "success"
+                    PremiumViewModel.Result.Granted -> {
+                        Analytics.log(context, Analytics.PRO_SUCCESS_SHOWN, "entry_point" to entryPoint)
+                        premiumModal = "success"
+                    }
                     PremiumViewModel.Result.Unavailable ->
                         android.widget.Toast.makeText(context, "No ad available — try again shortly", android.widget.Toast.LENGTH_SHORT).show()
                 }
@@ -165,13 +169,24 @@ fun DashboardScreen(
             // 3. Pro — rewarded-ad offer (or the active-entitlement card).
             item {
                 // Warm a rewarded ad only once the offer is actually on screen.
+                // Once per offer state per visit: counts how many Home visits actually see the card.
+                LaunchedEffect(isProActive) {
+                    Analytics.log(
+                        context,
+                        Analytics.PRO_CARD_VIEWED,
+                        "state" to if (isProActive) "active" else "offer",
+                    )
+                }
                 LaunchedEffect(Unit) { premiumViewModel.preloadRewarded() }
                 PremiumCard(
                     isProActive = isProActive,
                     proUntil = proUntil,
                     loading = rewardedLoading,
                     onWatchAd = { startWatchAd("home_card") },
-                    onOpenDetails = { premiumModal = "details" },
+                    onOpenDetails = {
+                        Analytics.log(context, Analytics.PRO_DETAILS_OPENED)
+                        premiumModal = "details"
+                    },
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                 )
             }
