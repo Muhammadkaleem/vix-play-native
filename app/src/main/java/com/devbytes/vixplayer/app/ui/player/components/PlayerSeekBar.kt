@@ -28,6 +28,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.Canvas
 import com.devbytes.vixplayer.app.ui.theme.OnScrim
+import androidx.compose.ui.graphics.Color
 import com.devbytes.vixplayer.app.ui.theme.ScrimStrong
 import com.devbytes.vixplayer.app.ui.theme.TimecodeStyle
 
@@ -39,6 +40,8 @@ fun PlayerSeekBar(
     onSeek: (Long) -> Unit,
     onScrubbingChange: (Boolean) -> Unit = {},
     frameLoader: (suspend (Long) -> Bitmap?)? = null,
+    // Over video by default; a surface host (the audio player) passes its own content color.
+    timecodeColor: Color = OnScrim.copy(alpha = 0.8f),
     modifier: Modifier = Modifier,
 ) {
     if (durationMs <= 0L) return
@@ -143,13 +146,13 @@ fun PlayerSeekBar(
             Text(
                 text = formatTimeMs(if (isDragging) (dragFraction * durationMs).toLong() else positionMs),
                 style = TimecodeStyle,
-                color = OnScrim.copy(alpha = 0.8f),
+                color = timecodeColor,
             )
             Spacer(Modifier.weight(1f))
             Text(
                 text = formatTimeMs(durationMs),
                 style = TimecodeStyle,
-                color = OnScrim.copy(alpha = 0.8f),
+                color = timecodeColor,
             )
         }
     }

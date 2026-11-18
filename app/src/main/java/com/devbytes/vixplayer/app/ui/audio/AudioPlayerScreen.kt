@@ -173,6 +173,7 @@ fun AudioPlayerScreen(
                 bufferedMs = player.bufferedPosition,
                 durationMs = durationMs,
                 onSeek = { player.seekTo(it) },
+                timecodeColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(),
             )
 
