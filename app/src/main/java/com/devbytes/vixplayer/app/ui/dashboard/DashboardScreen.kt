@@ -210,7 +210,8 @@ fun DashboardScreen(
                     ) {
                         items(state.shows.size) { i ->
                             val entry = state.shows[i]
-                            ShowPosterCard(entry, Modifier.width(168.dp)) { onOpenShow(entry.show.key) }
+                            // 80 % of the row: one show fills the shelf and the next one peeks in.
+                            ShowPosterCard(entry, Modifier.fillParentMaxWidth(0.8f)) { onOpenShow(entry.show.key) }
                         }
                     }
                 }

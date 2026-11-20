@@ -12,6 +12,7 @@ import com.devbytes.vixplayer.app.data.repository.SubtitleStyle
 import com.devbytes.vixplayer.app.data.repository.UpNext
 import com.devbytes.vixplayer.app.data.repository.VideoFile
 import com.devbytes.vixplayer.app.player.PlayerController
+import com.devbytes.vixplayer.app.player.PlayerOwner
 import com.devbytes.vixplayer.app.player.RememberedTracks
 import com.devbytes.vixplayer.app.player.SubtitleChoice
 import com.devbytes.vixplayer.app.player.gesture.GestureBindings
@@ -79,7 +80,7 @@ class PlayerViewModel @Inject constructor(
     val displayTitle: StateFlow<String> = _displayTitle.asStateFlow()
 
     /** Opens a video, resetting per-file state. See [PlayerController.prepareFor]. */
-    fun prepareFor(uri: String, subtitleOffsetMs: Long, resolvedName: String? = null) {
+    fun prepareFor(uri: String, subtitleOffsetMs: Long, resolvedName: String? = null, owner: PlayerOwner? = null) {
         // Prefer a name the caller already resolved (external content:// URIs, via
         // OpenableColumns); otherwise fall back to the URI's own tail, skipping the numeric
         // id that a MediaStore URI exposes there.
@@ -89,7 +90,7 @@ class PlayerViewModel @Inject constructor(
                 ?.takeIf { it.toLongOrNull() == null }
                 .orEmpty()
         _displayTitle.value = fallback
-        playerController.prepareFor(uri, subtitleOffsetMs, fallback.ifBlank { null })
+        playerController.prepareFor(uri, subtitleOffsetMs, fallback.ifBlank { null }, owner)
 
         viewModelScope.launch {
             val name = currentMediaStoreId
@@ -202,6 +203,15 @@ class PlayerViewModel @Inject constructor(
 
     fun saveSubtitleOffsetMs(offsetMs: Long) {
         currentMediaStoreId?.let { playbackRepository.saveSubtitleOffsetFast(it, offsetMs) }
+    }
+
+    fun releaseOwner(owner: PlayerOwner) = playerController.releaseOwner(owner)
+
+    /** Saves both stores and returns once Room has the row — for a screen about to leave. */
+    suspend fun persistPositionNow(positionMs: Long) {
+        val id = currentMediaStoreId ?: return
+        playbackRepository.savePositionFast(id, positionMs)
+        playbackRepository.persistPosition(id, positionMs)
     }
 
     fun persistPosition(positionMs: Long) {

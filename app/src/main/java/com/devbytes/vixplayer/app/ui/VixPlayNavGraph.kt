@@ -312,10 +312,12 @@ fun VixPlayNavGraph(
     // system back, Up Next back — all pop the route). Opening the equalizer from the player is
     // not an exit. The frequency rules decide whether an ad actually shows.
     var previousRoute by remember { mutableStateOf<String?>(null) }
+    var skipPlayerExit by remember { mutableStateOf(false) }
     LaunchedEffect(currentRoute) {
         val prev = previousRoute
         previousRoute = currentRoute
         when {
+            prev == PLAYER_ROUTE && skipPlayerExit -> skipPlayerExit = false
             currentRoute == PLAYER_ROUTE && prev != EQUALIZER_ROUTE -> adsViewModel.onPlayerEntered()
             prev == PLAYER_ROUTE && currentRoute != null && currentRoute != EQUALIZER_ROUTE ->
                 (context as? Activity)?.let { adsViewModel.onPlayerExited(it) }
@@ -420,6 +422,12 @@ fun VixPlayNavGraph(
                         // Nothing left to pop ⇒ this was an external open and the player is the
                         // root, so finish and return to the launching app.
                         onBack = {
+                            if (!navController.popBackStack()) (context as? Activity)?.finish()
+                        },
+                        // Another player screen took over the shared player while this one sat
+                        // in the background. Not a "player exit" for the interstitial.
+                        onTakenOver = {
+                            skipPlayerExit = true
                             if (!navController.popBackStack()) (context as? Activity)?.finish()
                         },
                         onOpenEqualizer = { navController.navigate(EQUALIZER_ROUTE) },

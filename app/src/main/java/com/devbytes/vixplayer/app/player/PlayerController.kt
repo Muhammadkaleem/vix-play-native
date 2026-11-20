@@ -41,6 +41,17 @@ data class QueueItem(
 )
 
 /**
+ * A video screen showing the file the player has loaded, in the task [taskId]. An "open
+ * with" from another app starts a second player screen; when it (or any audio) replaces
+ * the file, [onTakenOver] tells the first one while the player still holds its position —
+ * with the new screen's task, or null for audio — so it can save its place and get out of
+ * the way (close its PiP window, leave the player screen).
+ */
+class PlayerOwner(val taskId: Int) {
+    var onTakenOver: (byTaskId: Int?) -> Unit = {}
+}
+
+/**
  * Owns the one [ExoPlayer] instance for the whole app.
  *
  * Background playback requires the player to outlive the Activity, so it can no longer be
@@ -174,7 +185,8 @@ class PlayerController @Inject constructor(
      * `remember` went out of scope; with an app-scoped player it must be explicit, or a
      * previous video's subtitle offset silently applies to the next one.
      */
-    fun prepareFor(uri: String, subtitleOffsetMs: Long, title: String? = null) {
+    fun prepareFor(uri: String, subtitleOffsetMs: Long, title: String? = null, owner: PlayerOwner? = null) {
+        handOver(owner)
         ensureServiceRunning()
         resetDecoderNames()
         subtitleOffset.offsetUs = subtitleOffsetMs * 1_000L
@@ -221,6 +233,7 @@ class PlayerController @Inject constructor(
      */
     fun prepareQueue(items: List<QueueItem>, startIndex: Int) {
         if (items.isEmpty()) return
+        handOver(null)
         ensureServiceRunning()
         resetDecoderNames()
         subtitleOffset.offsetUs = 0L
@@ -308,6 +321,20 @@ class PlayerController @Inject constructor(
      * nothing is playing — the player must stay usable for when the user comes back, since
      * a released one would leave this singleton holding a dead object.
      */
+    private var owner: PlayerOwner? = null
+
+    /** Runs before a new file is set, so the previous owner can still read its position. */
+    private fun handOver(next: PlayerOwner?) {
+        val previous = owner
+        owner = next
+        if (previous != null && previous !== next) previous.onTakenOver(next?.taskId)
+    }
+
+    /** A player screen that leaves stops being told about takeovers. */
+    fun releaseOwner(owner: PlayerOwner) {
+        if (this.owner === owner) this.owner = null
+    }
+
     fun stop() {
         player.stop()
         player.clearMediaItems()
@@ -336,6 +363,7 @@ class PlayerController @Inject constructor(
 
     /** Re-opens a [snapshotQueue] as audio, at the same track, position and play state. */
     fun restoreQueue(snapshot: QueueSnapshot) {
+        handOver(null)
         ensureServiceRunning()
         resetDecoderNames()
         subtitleOffset.offsetUs = 0L

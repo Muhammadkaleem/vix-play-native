@@ -69,6 +69,7 @@ import com.devbytes.vixplayer.app.ui.library.components.FolderListSkeleton
 import com.devbytes.vixplayer.app.ui.library.components.LibraryEmptyState
 import com.devbytes.vixplayer.app.ui.theme.OnScrim
 import com.devbytes.vixplayer.app.ui.theme.ScrimStrong
+import com.devbytes.vixplayer.app.ui.theme.TimecodeStyle
 
 /**
  * One show: a hero with the main action (resume / next / start / watch again), season chips,
@@ -161,22 +162,64 @@ private fun ShowContent(data: ShowWithVideos, padding: PaddingValues, onPlay: (S
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(show.seasons) { number ->
+                        val seasonEpisodes = show.episodes.filter { it.info.season == number }
                         FilterChip(
                             selected = number == season,
                             onClick = { season = number },
-                            label = { Text(seasonLabel(number)) },
+                            label = { Text("${seasonLabel(number)} · ${seasonEpisodes.size}") },
+                            leadingIcon = if (seasonEpisodes.all { it.watched }) {
+                                { Icon(painterResource(R.drawable.ic_check), contentDescription = "Watched", modifier = Modifier.size(16.dp)) }
+                            } else null,
                         )
                     }
                 }
             }
         }
-        items(show.episodes.filter { it.info.season == season }, key = { it.file.id }) { episode ->
+        val seasonEpisodes = show.episodes.filter { it.info.season == season }
+        item(key = "season-$season") { SeasonOverview(season, seasonEpisodes) }
+        items(seasonEpisodes, key = { it.file.id }) { episode ->
             EpisodeRow(
                 episode = episode,
                 video = data.videoOf(episode),
                 upNext = episode == show.continueEpisode,
                 onClick = { onPlay(episode, "episode") },
             )
+        }
+    }
+}
+
+/** The open season: its size and running time, how much is watched, and what's left. */
+@Composable
+private fun SeasonOverview(season: Int, episodes: List<ShowEpisode>) {
+    val watched = episodes.count { it.watched }
+    Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp)) {
+        Text(
+            seasonLabel(season),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            seasonSummary(episodes),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (watched > 0) {
+            Spacer(Modifier.height(8.dp))
+            Box(
+                Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+            ) {
+                Box(
+                    Modifier.fillMaxWidth(watched.toFloat() / episodes.size).height(4.dp)
+                        .background(MaterialTheme.colorScheme.primary),
+                )
+            }
+            seasonRemaining(episodes)?.let {
+                Spacer(Modifier.height(4.dp))
+                Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }
@@ -262,6 +305,19 @@ private fun EpisodeRow(episode: ShowEpisode, video: VideoFile?, upNext: Boolean,
             } else if (episode.inProgress) {
                 ProgressLine(episode.progress, Modifier.align(Alignment.BottomStart).fillMaxWidth())
             }
+            if (!episode.watched && episode.file.durationMs > 0) {
+                Text(
+                    runtime(episode),
+                    style = TimecodeStyle,
+                    color = OnScrim,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(4.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(ScrimStrong)
+                        .padding(horizontal = 4.dp, vertical = 1.dp),
+                )
+            }
         }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
@@ -273,8 +329,13 @@ private fun EpisodeRow(episode: ShowEpisode, video: VideoFile?, upNext: Boolean,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.height(4.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // An unstarted episode's running time is already on its thumbnail.
+            val status = when {
+                episode.watched -> "Watched"
+                episode.inProgress -> "${timeLeft(episode)} left · ${(episode.progress * 100).toInt()}%"
+                else -> null
+            }
+            if (upNext || status != null) Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (upNext) {
                     Text(
                         "Up next",
@@ -288,14 +349,19 @@ private fun EpisodeRow(episode: ShowEpisode, video: VideoFile?, upNext: Boolean,
                     )
                     Spacer(Modifier.width(8.dp))
                 }
+                if (status != null) {
+                    Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            val details = listOfNotNull(fileDetails(video).ifBlank { null }, lastPlayedLabel(episode)).joinToString(" · ")
+            if (details.isNotEmpty()) {
+                Spacer(Modifier.height(4.dp))
                 Text(
-                    when {
-                        episode.watched -> "Watched"
-                        episode.inProgress -> "${timeLeft(episode)} left"
-                        else -> runtime(episode)
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    details,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }

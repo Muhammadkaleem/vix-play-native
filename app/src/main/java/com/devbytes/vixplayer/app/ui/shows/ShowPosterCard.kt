@@ -37,7 +37,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.decode.VideoFrameDecoder
 import coil.request.ImageRequest
@@ -60,6 +59,7 @@ private val canBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 fun ShowPosterCard(entry: ShowWithVideos, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val show = entry.show
     // Further in than the 10% other cards use: openings are often dark titles or recaps.
+    // 4:3 rather than a tall poster: at 80% of the screen a 3:4 card filled half of it.
     val poster = ImageRequest.Builder(LocalContext.current)
         .data(entry.videoOf(show.continueEpisode)?.uri)
         .decoderFactory(VideoFrameDecoder.Factory())
@@ -73,8 +73,8 @@ fun ShowPosterCard(entry: ShowWithVideos, modifier: Modifier = Modifier, onClick
         Box(
             Modifier
                 .fillMaxWidth()
-                .aspectRatio(3f / 4f)
-                .clip(RoundedCornerShape(14.dp))
+                .aspectRatio(4f / 3f)
+                .clip(RoundedCornerShape(18.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .clickable(onClickLabel = "Open show", onClick = onClick),
         ) {
@@ -96,7 +96,7 @@ fun ShowPosterCard(entry: ShowWithVideos, modifier: Modifier = Modifier, onClick
                         .drawWithContent {
                             drawContent()
                             drawRect(
-                                Brush.verticalGradient(0.42f to Color.Transparent, 0.66f to Color.Black),
+                                Brush.verticalGradient(0.30f to Color.Transparent, 0.56f to Color.Black),
                                 blendMode = BlendMode.DstIn,
                             )
                         }
@@ -107,7 +107,7 @@ fun ShowPosterCard(entry: ShowWithVideos, modifier: Modifier = Modifier, onClick
             Box(
                 Modifier.fillMaxSize().background(
                     Brush.verticalGradient(
-                        0.38f to Color.Transparent,
+                        0.25f to Color.Transparent,
                         1f to Color.Black.copy(alpha = if (canBlur) 0.72f else 0.9f),
                     ),
                 ),
@@ -119,41 +119,41 @@ fun ShowPosterCard(entry: ShowWithVideos, modifier: Modifier = Modifier, onClick
 
 @Composable
 private fun ShowInfo(show: Show, modifier: Modifier) {
-    Column(modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp)) {
+    Column(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
         Text(
             show.title,
-            style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp, lineHeight = 19.sp),
+            style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             color = OnScrim,
-            maxLines = 2,
+            maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.height(2.dp))
         Text(
             sizeLabel(show),
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.bodySmall,
             color = OnScrim.copy(alpha = 0.72f),
             maxLines = 1,
         )
         Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
-                Modifier.size(22.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
+                Modifier.size(28.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(painterResource(R.drawable.ic_play), contentDescription = null, tint = OnScrim, modifier = Modifier.size(11.dp))
+                Icon(painterResource(R.drawable.ic_play), contentDescription = null, tint = OnScrim, modifier = Modifier.size(14.dp))
             }
-            Spacer(Modifier.width(7.dp))
+            Spacer(Modifier.width(9.dp))
             Text(
                 continueLabel(show),
-                style = MaterialTheme.typography.labelMedium,
+                style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = OnScrim,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Spacer(Modifier.height(9.dp))
+        Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f).height(3.dp).clip(RoundedCornerShape(2.dp)).background(OnScrim.copy(alpha = 0.25f))) {
                 Box(
@@ -163,10 +163,10 @@ private fun ShowInfo(show: Show, modifier: Modifier) {
                         .background(MaterialTheme.colorScheme.primary),
                 )
             }
-            Spacer(Modifier.width(7.dp))
+            Spacer(Modifier.width(9.dp))
             Text(
                 "${show.watchedCount}/${show.episodes.size}",
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                style = MaterialTheme.typography.labelSmall,
                 color = OnScrim.copy(alpha = 0.72f),
             )
         }
@@ -179,8 +179,8 @@ private fun StackEdge(widthFraction: Float, alpha: Float) {
     Box(
         Modifier
             .fillMaxWidth(widthFraction)
-            .height(5.dp)
-            .clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp))
+            .height(6.dp)
+            .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
             .background(MaterialTheme.colorScheme.onSurface.copy(alpha = alpha)),
     )
 }

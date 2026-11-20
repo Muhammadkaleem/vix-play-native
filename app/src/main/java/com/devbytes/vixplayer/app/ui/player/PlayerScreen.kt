@@ -1,6 +1,7 @@
 package com.devbytes.vixplayer.app.ui.player
 
 import android.app.Activity
+import android.app.ActivityManager
 import android.app.PendingIntent
 import android.app.PictureInPictureParams
 import android.app.RemoteAction
@@ -53,6 +54,8 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -91,6 +94,7 @@ import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.data.repository.UpNext
 import com.devbytes.vixplayer.app.data.repository.VideoFile
 import com.devbytes.vixplayer.app.player.PlaybackService
+import com.devbytes.vixplayer.app.player.PlayerOwner
 import com.devbytes.vixplayer.app.player.candidates
 import com.devbytes.vixplayer.app.player.languageOf
 import com.devbytes.vixplayer.app.player.planTracks
@@ -156,6 +160,8 @@ fun PlayerScreen(
     uri: String,
     onBack: () -> Unit,
     skin: PlayerSkin = PlayerSkin.Classic,
+    /** Another screen loaded a different file into the shared player — leave quietly. */
+    onTakenOver: () -> Unit = onBack,
     onOpenEqualizer: () -> Unit = {},
     viewModel: PlayerViewModel = hiltViewModel(),
 ) {
@@ -234,6 +240,7 @@ fun PlayerScreen(
     // pause it or stop it — otherwise a screen left behind writes another file's position under
     // its own episode, or pauses the video that just opened.
     fun ownsPlayer() = player.currentMediaItem?.localConfiguration?.uri?.toString() == currentUri
+    val playerOwner = remember { PlayerOwner(activity?.taskId ?: -1) }
     val backgroundPlayback by viewModel.backgroundPlayback.collectAsState()
     val subtitleStyle by viewModel.subtitleStyle.collectAsState()
     val isFavorite by viewModel.isFavorite.collectAsState()
@@ -247,7 +254,7 @@ fun PlayerScreen(
     }
 
     // Opening a video is one call so per-file state can't leak from the previous one.
-    LaunchedEffect(Unit) { viewModel.prepareFor(uri, subtitleOffsetMs, externalName) }
+    LaunchedEffect(Unit) { viewModel.prepareFor(uri, subtitleOffsetMs, externalName, playerOwner) }
 
     // Held so the screenshot capture can reach the video SurfaceView for PixelCopy.
     var playerView by remember { mutableStateOf<PlayerView?>(null) }
@@ -646,7 +653,7 @@ fun PlayerScreen(
         // prepare() so its cues parse at the right offset, not the previous file's.
         subtitleOffsetMs = viewModel.getSubtitleOffsetMs()
         showSyncHud = false
-        viewModel.prepareFor(newUri, subtitleOffsetMs)
+        viewModel.prepareFor(newUri, subtitleOffsetMs, owner = playerOwner)
         showResumeChip = false
         ended = false
         playedStamped = false
@@ -888,9 +895,43 @@ fun PlayerScreen(
             pipController?.onModeChanged = {}
         }
     }
+    // Taken over (see PlayerOwner): the player still holds this file's position, so save it
+    // in both stores first, then leave the player screen. A PiP window would go on showing
+    // the other file: when the new screen opened inside this PiP task (an "open with" that
+    // asks for a new task joins ours), the task stays in PiP, so re-launch the task's own
+    // root intent — like a launcher tap, that brings it back full screen with the new screen
+    // on top (moveTaskToFront doesn't leave PiP); when it opened elsewhere, close this activity.
+    val currentOnTakenOver by rememberUpdatedState(onTakenOver)
+    SideEffect {
+        playerOwner.onTakenOver = { byTaskId ->
+            val position = player.currentPosition
+            scope.launch {
+                if (position > 0) viewModel.persistPositionNow(position)
+                val host = activity
+                when {
+                    host == null || !pipMode -> currentOnTakenOver()
+                    byTaskId == host.taskId -> {
+                        host.taskBaseIntent()?.let { base ->
+                            runCatching {
+                                host.startActivity(
+                                    Intent(base).addFlags(
+                                        Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                                    )
+                                )
+                            }
+                        }
+                        currentOnTakenOver()
+                    }
+                    else -> host.finish()
+                }
+            }
+        }
+    }
+    DisposableEffect(Unit) { onDispose { viewModel.releaseOwner(playerOwner) } }
+
     // Keep the auto-enter predicate + params fresh with current playback state.
     LaunchedEffect(pipController, supportsPip, isPlaying, playbackError, ended, videoWidth, videoHeight) {
-        pipController?.canEnterPip = { supportsPip && isPlaying && playbackError == null && !ended }
+        pipController?.canEnterPip = { supportsPip && isPlaying && playbackError == null && !ended && ownsPlayer() }
         pipController?.buildParams = {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
                 buildPipParams(context, videoWidth, videoHeight, isPlaying)
@@ -1653,6 +1694,14 @@ private fun flushPositionFast(player: ExoPlayer, viewModel: PlayerViewModel) {
 
 /** Broadcast action for the in-PiP play/pause RemoteAction. */
 private const val ACTION_PIP_TOGGLE = "com.devbytes.vixplayer.app.action.PIP_TOGGLE"
+
+/** The intent that started this activity's task (its root), or null if the task isn't found. */
+private fun Activity.taskBaseIntent(): Intent? =
+    getSystemService(ActivityManager::class.java)?.appTasks?.firstOrNull { task ->
+        val info = task.taskInfo
+        val id = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) info.taskId else @Suppress("DEPRECATION") info.persistentId
+        id == taskId
+    }?.taskInfo?.baseIntent
 
 /**
  * PiP params: the video's aspect ratio (clamped to Android's allowed PiP range) plus a
