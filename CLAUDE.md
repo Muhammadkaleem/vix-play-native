@@ -4,9 +4,33 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-VixPlay is a native Android media player — a modern alternative to MX Player. Kotlin + Jetpack Compose, Media3/ExoPlayer + FFmpeg extension, indigo→violet dark-first design. The project is currently an empty Android scaffold; no source files exist yet beyond placeholder tests.
+VixPlay is a native Android media player — a modern alternative to MX Player. Kotlin + Jetpack Compose, Media3/ExoPlayer + an FFmpeg audio-decoder extension, indigo→violet brand. A shipping Play Store app (`com.devbytes.vixplayer.app`): video + audio libraries, full player, network streaming, Chromecast, Home dashboard, AdMob monetisation with a rewarded "Pro" tier, Firebase.
 
-Full product docs are in `vix-play-docs/media-player-docs/`. Design assets (color tokens, typography, icons, launcher icon) are in `config-vix-play/player-design-assets/`.
+Product docs are in `vix-play-docs/media-player-docs/`; design assets (colour tokens, typography, icons, launcher icon) in `config-vix-play/player-design-assets/`. Both describe the original plan — where they disagree with the code, the code wins (see below).
+
+## Standing development guidelines (mandatory)
+
+These apply to **every** feature, bug fix, UI improvement and refactor.
+
+**The current codebase is the source of truth.** It outranks this file's older sections, the product docs, earlier prompts and pasted templates. Before designing anything, inspect what the code actually does today (theme, typography, navigation, architecture, components); never act on a documented configuration without checking it still holds. When you find this file out of date, correct it in the same change.
+
+**UI / UX**
+- Respect the currently configured default theme (`ThemeMode.LIGHT`, see Theming) and make every change work in **both Light and Dark** (and AMOLED / Material You, which derive from them).
+- Reuse the typography in `ui/theme/Type.kt` (Inter; JetBrains Mono for timecodes) and the existing components, spacing, colour tokens and motion. No hardcoded colours.
+- No global design changes (theme, fonts, navigation, shared components) as a side effect of a single feature.
+
+**Working independently**
+- Given a feature name, description, screenshot, video or mockup: analyse it, explore the relevant code, and fill in missing details with reasonable decisions. Ask only when a genuinely critical requirement can't be determined from the code or the references.
+- Think the whole feature through before coding — flows, edge cases, lifecycle, performance, accessibility — then implement it; don't stop at a plan.
+- Follow the existing architecture, reuse what exists, avoid unnecessary refactoring of unrelated code.
+
+**Validation (before calling anything done)**
+- Verify in both Light and Dark.
+- Exercise the relevant user flows and edge cases, on a device/emulator where the change is visual or behavioural.
+- Run the unit tests and a build (`./gradlew test`, `./gradlew assembleDebug`); check for regressions in neighbouring features.
+- Report anything unverified or unresolved honestly.
+
+**Keep this file in sync.** When a project decision changes, update the relevant section here and add an entry to the progress log below.
 
 ## Build commands
 
@@ -14,7 +38,7 @@ Full product docs are in `vix-play-docs/media-player-docs/`. Design assets (colo
 # Assemble debug APK
 ./gradlew assembleDebug
 
-# Install on connected device
+# Install on connected device (set ANDROID_SERIAL when several are attached)
 ./gradlew installDebug
 
 # Run unit tests
@@ -24,7 +48,10 @@ Full product docs are in `vix-play-docs/media-player-docs/`. Design assets (colo
 ./gradlew connectedAndroidTest
 
 # Run a single unit test class
-./gradlew test --tests "com.devbytes.vixplay.ExampleUnitTest"
+./gradlew test --tests "com.devbytes.vixplayer.app.ads.AdFrequencyPolicyTest"
+
+# Signed release bundle (needs keystore.properties — git-ignored; versionCode must exceed the last upload)
+./gradlew bundleRelease
 
 # Lint
 ./gradlew lint
@@ -37,31 +64,27 @@ Gradle configuration cache is enabled (`gradle.properties`). If build scripts ch
 
 ## Architectural decisions
 
-These were locked in during design review — don't revisit without a specific reason:
-
 | Concern | Decision |
 |---|---|
-| **Module structure** | Single-module for now. Extract to multi-module after MVP compiles and plays a video. The tech-architecture doc shows the target multi-module layout for reference only. |
-| **DI** | Hilt. `PlayerController` scoped `@ActivityRetainedScoped` — survives rotation, torn down on back. Migrate to `MediaSessionService` when background audio lands (Roadmap Step 5). |
-| **Navigation** | Navigation Compose with `@Serializable` destination classes (2.8+). `ACTION_VIEW` external intents map to deep-link URIs. |
-| **Application ID** | `com.devbytes.vixplayer.app` — this is permanent once the Play Store listing is created. |
+| **Module structure** | Single module (`:app`). The tech-architecture doc's multi-module layout is reference only. |
+| **DI** | Hilt. `PlayerController` is an app-wide **`@Singleton`** owning the one `ExoPlayer`; `PlaybackService` (`MediaSessionService`) hosts the session for background audio, notification and lock-screen controls. UI calls the player directly (single process, no `MediaController`). |
+| **Navigation** | Navigation Compose with **string route constants** in `navigation/Routes.kt`, one nested graph per bottom-nav tab (Home · Video · Audio · Network · Settings) wired in `ui/VixPlayNavGraph.kt`. Tab switches go through `switchTab` (`popUpTo(HOME_ROUTE)` + save/restore state). External `ACTION_VIEW`/`SEND` intents are parsed in `MainActivity`. |
+| **Application ID** | `com.devbytes.vixplayer.app` — permanent (Play Store listing exists). |
 | **Storage** | MediaStore + granular media permissions as primary; SAF tree access for folder browsing; `MANAGE_EXTERNAL_STORAGE` as opt-in power mode only (with Play Console declaration). |
 | **FFmpeg** | Media3 FFmpeg extension built via Google's provided script, checked in as a local `.aar` (`app/libs/`, built by `scripts/build-ffmpeg-aar.sh`). **Audio decoders only** — that is all the Media3 extension provides; there is no software video fallback. Must be rebuilt whenever the media3 version changes. No custom FFmpeg build. |
 | **AC3/DTS** | Omitted. HW decode covers most devices. Show the codec name in the unsupported-format error; revisit licensing at 1.0. |
-| **Subtitles** | Media3 built-in renderer (SRT + basic SSA) for MVP. libass (full styled ASS/SSA) is a fast-follow once playback is stable — not a blocker. |
-| **Pro entitlement** | Local Play verification via Google Play Billing v6. No backend verification until a subscription tier exists. |
-| **Analytics** | Firebase Crashlytics + Analytics (Analytics enabled 2026-10-07 at the user's request; release-only collection). Ad revenue flows in as Firebase `ad_impression` events via `AdEvents`. `google-services.json` goes in `app/`. |
-| **Ads** | AdMob. Banners + native in library chrome; never on the player surface. **One interstitial placement (changed 2026-11-18, user-approved): leaving the video player after ≥ 60 s of real watching**, gated by `AdFrequencyPolicy` (24 h + 2-session grace, 4 min gap, 3/session, 8/day, 10 min after a rewarded ad, never after an external open, all Remote-Config tunable with kill switches). Never during playback, on launch or in PiP. Pro (rewarded-ad tier) removes every ad it didn't ask for. |
-| **Theming** | Single `PlayerTheme` composable with an internal `Build.VERSION.SDK_INT >= 31` branch for dynamic color. No hardcoded colors anywhere — every component reads semantic tokens from `Tokens.kt`. |
+| **Subtitles** | Media3 built-in renderer (SRT + basic SSA) plus user styling via `SubtitleView`. libass (full styled ASS/SSA fidelity) is a fast-follow — not a blocker. |
+| **Pro entitlement** | No Play Billing. "Pro" is a **rewarded-ad time bank** (`ProRepository`, up to 48 h) that removes ads only — every feature stays free. A paid tier would need Billing + backend verification. |
+| **Analytics** | Firebase Crashlytics + Analytics (Analytics enabled 2026-10-07 at the user's request; release-only collection). Ad revenue flows in as Firebase `ad_impression` events via `AdEvents`; product-funnel events via `analytics/Analytics.kt`. `google-services.json` goes in `app/`. |
+| **Ads** | AdMob. Banners + native in library chrome; never on the player surface. **One interstitial placement (changed 2026-11-18, user-approved): leaving the video player after ≥ 60 s of real watching**, gated by `AdFrequencyPolicy` (24 h + 2-session grace, 4 min gap, 3/session, 8/day, 10 min after a rewarded ad, never after an external open, all Remote-Config tunable with kill switches). Never during playback, on launch or in PiP. Pro removes every ad it didn't ask for. |
+| **Theming** | One `VixPlayTheme(mode, accent)` (`ui/theme/Theme.kt`) fed by `ThemeViewModel` from DataStore. `ThemeMode { SYSTEM, LIGHT, DARK, AMOLED, DYNAMIC }` — **default `LIGHT`** (changed 2026-11-18); `DYNAMIC` = Material You on API 31+. Optional accent override (`AccentChoice`). Tokens live in `ui/theme/Color.kt`; components read `MaterialTheme.colorScheme` or those tokens. The video player surface (scrims, HUD) stays dark in every theme by design. |
 | **Android TV** | Compose for TV (`androidx.tv`), not Leanback. Keeps the entire UI layer in one paradigm. |
 | **Private folder recovery** | Recovery code shown at PIN setup (hashed locally). No email recovery — that requires a backend. |
 
-## Build order
+## Roadmap
 
-**First milestone:** Steel thread — pick a file from a folder browser → hand URI to Media3 → video plays full-screen with play/pause and seek. Nothing else ships until this works on a real device. This validates Media3 + FFmpeg setup, Navigation Compose routing, and Hilt wiring end-to-end.
-
-Roadmap steps after that (from `product/04-roadmap-mvp.md`):
-1. Foundations — `PlayerTheme`, `GestureDispatcher`, Room schema, storage access layer
+Steps from `product/04-roadmap-mvp.md` (the steel-thread milestone and most of Steps 1–6 have shipped — see the progress log):
+1. Foundations — theme, gestures, Room schema, storage access layer
 2. Playable core — FFmpeg extension, folder browser, video player, resume position
 3. Subtitles — SRT/ASS via Media3, external load, sync offset
 4. Feel differentiators — precision seek + thumbnails, variable-speed hold, haptics
@@ -69,49 +92,54 @@ Roadmap steps after that (from `product/04-roadmap-mvp.md`):
 6. Reach — network streaming, Chromecast, PiP, equalizer
 7. Polish — gesture remap UI, subtitle online search, playlists, private folder, ambient backglow, TV
 
-## Tech stack (target — not yet in build.gradle.kts)
+## Tech stack
+
+In the build (`gradle/libs.versions.toml` — add every new dependency there first):
 
 | Concern | Library |
 |---|---|
-| UI | Kotlin + Jetpack Compose |
-| Player | Media3 (ExoPlayer) + `media3-decoder-ffmpeg` extension (.aar) |
-| DI | Hilt |
+| UI | Kotlin + Jetpack Compose (Material 3) |
+| Player | Media3 1.6.1 (ExoPlayer, HLS/DASH/RTSP, session, cast) + `media3-decoder-ffmpeg` (.aar, pinned to the media3 version) |
+| DI | Hilt (+ `hilt-work`) |
 | Async | Coroutines + Flow |
-| DB | Room + FTS4 |
+| DB | Room |
 | Prefs | DataStore (settings / config) · MMKV (hot paths: resume positions) |
-| Images | Coil + custom video frame fetcher |
-| Crash | Firebase Crashlytics |
-| Ads | AdMob |
-| Billing | Google Play Billing v6 |
-| Casting | Cast SDK (Chromecast) · Cling/jUPnP (DLNA) — P1 |
-| Network | OkHttp · SMBJ (SMB) · commons-net (FTP) — P1 |
+| Images | Coil + `VideoFrameDecoder` |
+| Background | WorkManager |
+| Firebase | Crashlytics (+NDK), Analytics, Messaging, Remote Config, In-App Messaging, Performance |
+| Ads | AdMob + UMP consent |
+| Play | In-App Review, In-App Updates |
+| Casting | Media3 Cast (Chromecast) + NanoHTTPD local file server |
+| Network shares | SMBJ (SMB) · commons-net (FTP) |
 
-All dependencies need to be added to `gradle/libs.versions.toml` before use.
+Not in the build yet: Play Billing, OkHttp, Cling/jUPnP (DLNA), Room FTS4 (search is in-memory).
 
 ## Design system
 
-Brand: Orbit mark, indigo→violet (`#6D5BFF → #B24BFF`), dark bg `#121316`, AMOLED `#000000`, content `#F2F3F5`. Fonts: Inter (UI), JetBrains Mono (timecodes).
+Brand: Orbit mark, indigo→violet (`#6D5BFF → #B24BFF`), dark bg `#121316`, AMOLED `#000000`. Fonts (in `res/font/`, defined in `ui/theme/Type.kt`): **Inter** for UI, **JetBrains Mono** for timecodes.
 
-Drop-in assets live in `config-vix-play/player-design-assets/`:
-- `launcher-icon/res/` → merge into `app/src/main/res/`
-- `theme/Color.kt` + `theme/colors.xml` → `designsystem` package
-- `typography/Type.kt` → `designsystem` package; add fonts per `typography/fonts/README.md`
-- `icons/svg/*.svg` → convert to VectorDrawables; tint at runtime with theme accent (`currentColor`)
-
-The existing `app/src/main/res/values/themes.xml` uses placeholder Material colors and must be replaced entirely.
+Source assets in `config-vix-play/player-design-assets/` (icons as SVG → VectorDrawables tinted at runtime; launcher icons; original colour/type specs). The launcher icon in use is `launcher-icon-v2`.
 
 ## Key constraints
 
-- **No hardcoded colors.** Every component reads semantic tokens. This is the #1 theming rule — retrofitting is the worst rewrite.
-- **No ads on the player surface.** AdMob banners only in library chrome.
+- **No hardcoded colours.** Every component reads semantic tokens / `colorScheme`. The #1 theming rule — retrofitting is the worst rewrite. Theme-independent exceptions are the over-video scrim tokens and the splash brand gradient.
+- **No ads on the player surface.** Banners/native only in library chrome; the single interstitial fires *after* leaving the player (see Ads).
 - **AC3/DTS omitted** — do not add software decoders without legal review of the Dolby/DTS license situation.
 - **FFmpeg must be LGPL build** — audit build flags before adding any GPL-only components; GPL taints the whole app.
-- `minSdk = 24`, `targetSdk = 36`. Material You (`dynamicColorScheme`) requires runtime API 31+ check; `PlayerTheme` handles this internally.
+- `minSdk = 24`, `targetSdk = 36`. Material You requires the runtime API 31+ check `VixPlayTheme` already does.
 - Resume positions use MMKV (not DataStore) — DataStore's coroutine overhead is too slow for per-seek writes.
+- Release signing reads `keystore.properties` (git-ignored); never commit keystores or passwords. Each Play upload needs a higher `versionCode`.
 
 ## Design implementation progress
 
 Running log of screen design-implementation decisions (grill-me sessions). Newest first.
+
+### 2026-11-18 → 11-20 — Translucent nav, Light default, mini-player rework, v3.1.0 (71) — DONE, **verified on a Samsung A55 (Android 16) unless noted.**
+- **Content scrolls behind the bottom chrome.** Supersedes the floating-pill entry's "content stays padded above the bar". `ui/common/BottomBarInsets.kt`: the nav graph provides the chrome height as `LocalBottomBarInset` (NavHost no longer padded); every screen Scaffold uses `contentWindowInsets = screenInsets()`; lists use `padding.withoutBottom()` + `contentPadding = padding.bottomOnly()` so the last item stays reachable. Pill opacity: 0.78 on dark, **0.95 on light** (dark text behind a light pill fought the tab labels).
+- **Default theme → `ThemeMode.LIGHT`** (user request) in `ThemeState`, the DataStore fallback and `VixPlayTheme`'s default. Users who picked a theme keep it; splash and player surface stay dark.
+- **Search → audio fixed.** `AudioPlayerViewModel.ensureQueued` only queued when the player was empty, but `stop()` keeps the last item (and other audio leaves its queue), so a search tap reopened the old item. Now it queues the tapped track (whole library, for next/prev) unless it is already the current audio item. `PlayerSeekBar` gained `timecodeColor` — the audio player's timecodes were white-on-white on Light.
+- **Mini-player swipe rebuilt** (`ui/audio/MiniPlayer.kt`). Root cause: `detectVerticalDragGestures` compared the *per-event* `dragAmount` to 48 px, so only a fast flick crossed it (density/sampling-rate dependent, could fire twice, nothing tracked the finger). Now one `draggable` outside `graphicsLayer` tracks total travel 1:1 (rubber-band upward); release commits by distance in dp (½ card height down / 40 dp up) or fling (900 dp/s with ≥ 12 dp travel); down = slide-and-fade then `stop()`, up = open player, else spring back from the release velocity; haptic tick at each commit point. "Playback stopped · Undo" snackbar restores queue/position/play state (`PlayerController.snapshotQueue`/`restoreQueue`, only if nothing else started). Also: floating rounded card matching the pill, Media3 `Util.shouldShowPlayButton`/`handlePlayPauseButtonAction`, Next disabled on the last track, progress drawn in `drawBehind` (no recomposition), TalkBack "Stop playback" action. **Verified:** partial swipe springs back and keeps playing; slow 140 px swipe tracks the finger and dismisses + stops. **Not cleanly verified:** Undo restoring position (the test run was interleaved with manual use of the phone), fast flicks, swipe-up.
+- **v3.1.0 (71)** committed. Signed AAB not yet built — `keystore.properties` passwords/alias still to be filled in by the user.
 
 ### 2026-11-18 — Floating pill bottom nav (from a reference recording) + tab back-stack fix — DONE, **emulator API 35: layout, sliding capsule (verified frame-by-frame at 10× animator scale), selection on rapid taps, Back, per-tab state. Not yet on a physical device.**
 - **Source of truth = a 10 s reference video of another app's bar**, analysed frame-by-frame (AVFoundation frame extraction; no ffmpeg on this Mac): floating, fully-rounded inset glass pill; 5 icon-over-label tabs with labels always visible; selected tab = a capsule behind it + **outline→filled glyph swap + bold label, instant on tap**; only the capsule moves — it **springs** to the new tab (≈120 ms for 1 slot, ≈175 ms for 4 — near-constant, i.e. a spring, not a tween), **stretches and thins while travelling**, then **swells slightly and settles** after arriving. No ripple (the capsule is the feedback).
