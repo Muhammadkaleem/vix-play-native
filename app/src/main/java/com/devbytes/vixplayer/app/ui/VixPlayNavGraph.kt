@@ -68,6 +68,9 @@ import com.devbytes.vixplayer.app.navigation.TAB_HOME_ROUTE
 import com.devbytes.vixplayer.app.navigation.VIDEO_LIST_ROUTE
 import com.devbytes.vixplayer.app.navigation.videoListRoute
 import com.devbytes.vixplayer.app.navigation.FOLDER_VIDEOS_ROUTE
+import com.devbytes.vixplayer.app.navigation.SHOW_ROUTE
+import com.devbytes.vixplayer.app.navigation.showRoute
+import com.devbytes.vixplayer.app.ui.shows.ShowScreen
 import com.devbytes.vixplayer.app.navigation.folderVideosRoute
 import com.devbytes.vixplayer.app.navigation.SHORTS_FEED_ROUTE
 import com.devbytes.vixplayer.app.ui.dashboard.ShortsFeedScreen
@@ -474,7 +477,20 @@ fun VixPlayNavGraph(
                             onBrowseFolders = { switchTab(navController, TAB_VIDEO_ROUTE) },
                             onViewAll = { source -> navController.navigate(videoListRoute(source.name)) },
                             onOpenShorts = { navController.navigate(SHORTS_FEED_ROUTE) },
+                            onOpenShow = { key -> navController.navigate(showRoute(Uri.encode(key))) },
                             onSearch = { navController.navigate(searchRoute()) },
+                        )
+                    }
+
+                    composable(
+                        route = SHOW_ROUTE,
+                        arguments = listOf(navArgument("showKey") { type = NavType.StringType }),
+                    ) { entry ->
+                        val showKey = entry.arguments?.getString("showKey")?.let { Uri.decode(it) } ?: return@composable
+                        ShowScreen(
+                            showKey = showKey,
+                            onPlay = { video -> navController.navigate(playerRoute(Uri.encode(video.uri.toString()))) },
+                            onBack = { navController.popBackStack() },
                         )
                     }
 

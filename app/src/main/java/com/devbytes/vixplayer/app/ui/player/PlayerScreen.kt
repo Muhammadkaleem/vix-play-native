@@ -91,7 +91,9 @@ import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.data.repository.UpNext
 import com.devbytes.vixplayer.app.data.repository.VideoFile
 import com.devbytes.vixplayer.app.player.PlaybackService
-import com.devbytes.vixplayer.app.player.autoSubtitleId
+import com.devbytes.vixplayer.app.player.candidates
+import com.devbytes.vixplayer.app.player.languageOf
+import com.devbytes.vixplayer.app.player.planTracks
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
@@ -226,6 +228,12 @@ fun PlayerScreen(
     // App-scoped player (owned by PlayerController so playback can outlive this Activity).
     // Never released here — only prepared, and paused on exit when appropriate.
     val player = viewModel.player
+
+    // The player is shared by every player screen, and an "open with" from another app stacks a
+    // second one over the first. Only the screen whose file is loaded may save its position,
+    // pause it or stop it — otherwise a screen left behind writes another file's position under
+    // its own episode, or pauses the video that just opened.
+    fun ownsPlayer() = player.currentMediaItem?.localConfiguration?.uri?.toString() == currentUri
     val backgroundPlayback by viewModel.backgroundPlayback.collectAsState()
     val subtitleStyle by viewModel.subtitleStyle.collectAsState()
     val isFavorite by viewModel.isFavorite.collectAsState()
@@ -351,7 +359,7 @@ fun PlayerScreen(
     LaunchedEffect(Unit) {
         while (true) {
             delay(5_000)
-            viewModel.savePositionFast(player.currentPosition)
+            if (ownsPlayer()) viewModel.savePositionFast(player.currentPosition)
         }
     }
 
@@ -371,8 +379,11 @@ fun PlayerScreen(
     // so the options panel's Play Next works mid-video — and refreshed when it ends.
     var ended by remember { mutableStateOf(player.playbackState == Player.STATE_ENDED) }
     var upNext by remember { mutableStateOf(UpNext.NONE) }
+    // The file [upNext] was resolved for — track choice waits until it's this one.
+    var upNextUri by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(currentUri, ended) {
         upNext = viewModel.resolveUpNext(8)
+        upNextUri = currentUri
     }
     val nextVideo = upNext.next
 
@@ -427,13 +438,13 @@ fun PlayerScreen(
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
                 // First time this file actually plays → record it as the most-recent play.
-                if (playing && !playedStamped) {
+                if (playing && !playedStamped && ownsPlayer()) {
                     playedStamped = true
                     viewModel.markPlayed()
                 }
                 // Pausing flushes the resume point immediately (steady-state 5s tick
                 // is too coarse for a pause-then-exit).
-                if (!playing) flushPositionFast(player, viewModel)
+                if (!playing && ownsPlayer()) flushPositionFast(player, viewModel)
             }
 
             override fun onPlaybackStateChanged(state: Int) {
@@ -469,7 +480,7 @@ fun PlayerScreen(
                 reason: Int,
             ) {
                 // A user seek lands the resume point somewhere new — flush at once.
-                if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+                if (reason == Player.DISCONTINUITY_REASON_SEEK && ownsPlayer()) {
                     flushPositionFast(player, viewModel)
                 }
             }
@@ -484,7 +495,7 @@ fun PlayerScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, backgroundPlayback, pipMode) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) {
+            if (event == Lifecycle.Event.ON_STOP && ownsPlayer()) {
                 flushPositionFast(player, viewModel)
                 // Default is to pause on background — this is a video player, and silent
                 // continued playback reads as a battery bug. PiP is its own case: the
@@ -500,8 +511,10 @@ fun PlayerScreen(
     // released here — it is stopped, which frees decoders while keeping it usable.
     DisposableEffect(Unit) {
         onDispose {
-            viewModel.persistPosition(player.currentPosition)
-            player.stop()
+            if (ownsPlayer()) {
+                viewModel.persistPosition(player.currentPosition)
+                player.stop()
+            }
         }
     }
 
@@ -782,16 +795,6 @@ fun PlayerScreen(
             .build()
     }
 
-    // "Turn on subtitles automatically": once per file, as soon as its subtitle tracks are
-    // known, show one if none is showing. Once only, so "Off" in the sheet holds for the file.
-    val autoSubtitles by viewModel.autoSubtitles.collectAsState()
-    var autoSubtitlesApplied by remember(currentUri) { mutableStateOf(false) }
-    LaunchedEffect(currentUri, tracks, autoSubtitles) {
-        if (!autoSubtitles || autoSubtitlesApplied || subtitleTracks.isEmpty()) return@LaunchedEffect
-        autoSubtitlesApplied = true
-        tracks.autoSubtitleId()?.let(::selectSubtitle)
-    }
-
     // Presentational audio track list, derived from the live tracks snapshot. Unlike
     // subtitles there's no "Off" (a video always plays one audio track); the picker
     // only surfaces when there's a real choice (>= 2 tracks).
@@ -823,6 +826,26 @@ fun PlayerScreen(
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
             .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, trackIndex))
             .build()
+    }
+
+    // Once per file, when its tracks are listed: the show's remembered audio/subtitle choice,
+    // else "Turn on subtitles automatically" (see planTracks). Waits until Up Next knows this
+    // file's show, and checks the tracks are this file's, not the episode just left. Once only,
+    // so a pick in the sheet holds for the rest of the file.
+    val autoSubtitles by viewModel.autoSubtitles.collectAsState()
+    var tracksPlanned by remember(currentUri) { mutableStateOf(false) }
+    LaunchedEffect(currentUri, tracks, upNextUri, autoSubtitles) {
+        val ready = upNextUri == currentUri && tracks.groups.isNotEmpty() && tracks == player.currentTracks &&
+            player.currentMediaItem?.localConfiguration?.uri?.toString() == currentUri
+        if (tracksPlanned || !ready) return@LaunchedEffect
+        tracksPlanned = true
+        val remembered = upNext.showKey?.let { viewModel.rememberedTracks(it) }
+        val plan = planTracks(
+            tracks.candidates(C.TRACK_TYPE_AUDIO), tracks.candidates(C.TRACK_TYPE_TEXT),
+            remembered, autoSubtitles, Locale.getDefault(),
+        )
+        plan.audioId?.let(::selectAudioTrack)
+        if (plan.subtitlesOff) disableSubtitles() else plan.subtitleId?.let(::selectSubtitle)
     }
 
     // Picture-in-Picture — only on API 26+ devices that advertise the feature.
@@ -1514,8 +1537,15 @@ fun PlayerScreen(
                 is PlayerSheet.Subtitles -> SubtitleSheet(
                     tracks = subtitleTracks,
                     subtitlesDisabled = subtitlesDisabled,
-                    onSelect = { selectSubtitle(it) },
-                    onDisableSubtitles = { disableSubtitles() },
+                    // A pick is remembered for the show, so its next episodes start the same way.
+                    onSelect = { id ->
+                        selectSubtitle(id)
+                        upNext.showKey?.let { viewModel.rememberSubtitles(it, on = true, language = tracks.languageOf(id)) }
+                    },
+                    onDisableSubtitles = {
+                        disableSubtitles()
+                        upNext.showKey?.let { viewModel.rememberSubtitles(it, on = false, language = null) }
+                    },
                     onLoadFromFile = { subtitlePicker.launch(arrayOf("*/*")) },
                     offsetMs = subtitleOffsetMs,
                     onSyncOffset = {
@@ -1532,7 +1562,10 @@ fun PlayerScreen(
                 )
                 is PlayerSheet.Audio     -> AudioTrackSheet(
                     tracks = audioTracks,
-                    onSelect = { selectAudioTrack(it) },
+                    onSelect = { id ->
+                        selectAudioTrack(id)
+                        upNext.showKey?.let { key -> tracks.languageOf(id)?.let { viewModel.rememberAudio(key, it) } }
+                    },
                 )
                 is PlayerSheet.SleepTimer -> SleepTimerSheet(
                     activeMode = sleepMode,

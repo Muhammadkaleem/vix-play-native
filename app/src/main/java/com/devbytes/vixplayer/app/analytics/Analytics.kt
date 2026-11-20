@@ -45,6 +45,10 @@ object Analytics {
     /** result: autoplay / play_next / pick / replay / cancel / not_now / close; episodic: true/false. */
     const val UP_NEXT_RESULT = "up_next_result"
 
+    // ── Shows (Home shelf + Show screen) ────────────────────────────────────
+    /** source: hero / episode; kind: start / resume / next / rewatch (the show's main action). */
+    const val SHOW_PLAY = "show_play"
+
     // ── Pro (rewarded ad-free) offer ────────────────────────────────────────
     const val PRO_CARD_VIEWED = "pro_card_viewed"
     const val PRO_DETAILS_OPENED = "pro_details_opened"

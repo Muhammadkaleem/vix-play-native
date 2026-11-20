@@ -7,6 +7,8 @@ import com.devbytes.vixplayer.app.data.repository.FolderEntry
 import com.devbytes.vixplayer.app.data.repository.MediaRepository
 import com.devbytes.vixplayer.app.data.repository.PlaybackRepository
 import com.devbytes.vixplayer.app.data.repository.SettingsRepository
+import com.devbytes.vixplayer.app.data.repository.ShowRepository
+import com.devbytes.vixplayer.app.data.repository.ShowWithVideos
 import com.devbytes.vixplayer.app.data.repository.VideoFile
 import com.devbytes.vixplayer.app.ui.library.VideoWithPosition
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -27,6 +29,7 @@ class DashboardViewModel @Inject constructor(
     private val mediaRepository: MediaRepository,
     private val favoritesRepository: FavoritesRepository,
     private val settingsRepository: SettingsRepository,
+    private val showRepository: ShowRepository,
 ) : ViewModel() {
 
     data class PinnableFolder(val folder: FolderEntry, val isPinned: Boolean)
@@ -56,6 +59,8 @@ class DashboardViewModel @Inject constructor(
         // Videos ≤ 8h (longest-fitting first); the "How much time do you have?" rail filters this.
         val timeWindowPool: List<VideoFile> = emptyList(),
         val favorites: List<VideoFile> = emptyList(),
+        // TV shows found in the library (episodes grouped across season folders), recently watched first.
+        val shows: List<ShowWithVideos> = emptyList(),
         val shortsCount: Int = 0,
         val shortsSamples: List<VideoFile> = emptyList(),
     )
@@ -128,6 +133,8 @@ class DashboardViewModel @Inject constructor(
             val favIds = favoritesRepository.observeIds().first()
             val favorites = runCatching { mediaRepository.queryVideosByIds(favIds) }.getOrDefault(emptyList()).take(4)
 
+            val shows = runCatching { showRepository.shows(allVideos) }.getOrDefault(emptyList()).take(10)
+
             val shortsCount = runCatching { mediaRepository.countShorts() }.getOrDefault(0)
             val shortsSamples = if (shortsCount > 0) {
                 runCatching { mediaRepository.queryShorts(3) }.getOrDefault(emptyList())
@@ -145,6 +152,7 @@ class DashboardViewModel @Inject constructor(
                 highRes = highRes,
                 timeWindowPool = timeWindowPool,
                 favorites = favorites,
+                shows = shows,
                 shortsCount = shortsCount,
                 shortsSamples = shortsSamples,
             )

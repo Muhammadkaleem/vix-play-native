@@ -43,6 +43,8 @@ data class UpNext(
     val positionLabel: String?,
     /** The show's name when the current file is one of its episodes; null for ordinary videos. */
     val showTitle: String?,
+    /** The show's identity (`EpisodeInfo.showKey`) — keys its remembered audio/subtitle choice. */
+    val showKey: String? = null,
     /** Episode codes ("S02E04") for the up-next cards, keyed by MediaStore id. */
     val codes: Map<Long, String>,
 ) {
@@ -212,6 +214,7 @@ class MediaRepository @Inject constructor(
             upcoming = plan.upcomingIds.mapNotNull(byId::get),
             positionLabel = plan.positionLabel,
             showTitle = plan.episode?.showTitle,
+            showKey = plan.episode?.showKey,
             codes = plan.codes,
         )
     }

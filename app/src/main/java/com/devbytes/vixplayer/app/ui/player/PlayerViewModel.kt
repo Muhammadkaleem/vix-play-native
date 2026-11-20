@@ -5,11 +5,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.devbytes.vixplayer.app.data.repository.MediaRepository
 import com.devbytes.vixplayer.app.data.repository.PlaybackRepository
+import com.devbytes.vixplayer.app.data.db.entity.ShowPreference
 import com.devbytes.vixplayer.app.data.repository.SettingsRepository
+import com.devbytes.vixplayer.app.data.repository.ShowRepository
 import com.devbytes.vixplayer.app.data.repository.SubtitleStyle
 import com.devbytes.vixplayer.app.data.repository.UpNext
 import com.devbytes.vixplayer.app.data.repository.VideoFile
 import com.devbytes.vixplayer.app.player.PlayerController
+import com.devbytes.vixplayer.app.player.RememberedTracks
+import com.devbytes.vixplayer.app.player.SubtitleChoice
 import com.devbytes.vixplayer.app.player.gesture.GestureBindings
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
@@ -29,6 +33,7 @@ class PlayerViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val favoritesRepository: com.devbytes.vixplayer.app.data.repository.FavoritesRepository,
     private val playerController: PlayerController,
+    private val showRepository: ShowRepository,
 ) : ViewModel() {
 
     private var currentMediaStoreId: Long? = null
@@ -122,6 +127,27 @@ class PlayerViewModel @Inject constructor(
     /** Autoplay the next video at end-of-video (single source of truth, shared with Settings). */
     val autoplayNext: StateFlow<Boolean> = settingsRepository.autoplayNext
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    /** What was last picked while watching [showKey], applied to its other episodes. */
+    suspend fun rememberedTracks(showKey: String): RememberedTracks? =
+        runCatching { showRepository.preference(showKey) }.getOrNull()?.let { preference ->
+            RememberedTracks(
+                audioLanguage = preference.audioLanguage,
+                subtitles = when (preference.subtitleMode) {
+                    ShowPreference.SUBTITLES_ON -> SubtitleChoice.On(preference.subtitleLanguage)
+                    ShowPreference.SUBTITLES_OFF -> SubtitleChoice.Off
+                    else -> null
+                },
+            )
+        }
+
+    fun rememberAudio(showKey: String, language: String) {
+        viewModelScope.launch { runCatching { showRepository.rememberAudio(showKey, language) } }
+    }
+
+    fun rememberSubtitles(showKey: String, on: Boolean, language: String?) {
+        viewModelScope.launch { runCatching { showRepository.rememberSubtitles(showKey, on, language) } }
+    }
 
     /** "Turn on subtitles automatically" (Settings › Subtitles). */
     val autoSubtitles: StateFlow<Boolean> = settingsRepository.showSubtitlesByDefault

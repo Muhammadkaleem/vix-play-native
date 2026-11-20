@@ -67,6 +67,8 @@ import coil.request.ImageRequest
 import coil.request.videoFramePercent
 import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.data.repository.VideoFile
+import com.devbytes.vixplayer.app.data.series.EpisodeParser
+import com.devbytes.vixplayer.app.ui.shows.ShowPosterCard
 import com.devbytes.vixplayer.app.ui.premium.PremiumCard
 import com.devbytes.vixplayer.app.ui.premium.PremiumViewModel
 import com.devbytes.vixplayer.app.ui.premium.ProDetailsSheet
@@ -94,6 +96,7 @@ fun DashboardScreen(
     onBrowseFolders: () -> Unit = {},
     onViewAll: (DashboardSource) -> Unit = {},
     onOpenShorts: () -> Unit = {},
+    onOpenShow: (showKey: String) -> Unit = {},
     onSearch: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel(),
     premiumViewModel: PremiumViewModel = hiltViewModel(),
@@ -194,6 +197,23 @@ fun DashboardScreen(
                     },
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                 )
+            }
+
+            // Your Shows — episodes grouped into shows across season folders; each card opens the
+            // show at the episode you're up to.
+            if (state.shows.isNotEmpty()) {
+                item { SectionHeader("Your Shows", onViewAll = null, iconRes = R.drawable.ic_playlist) }
+                item {
+                    androidx.compose.foundation.lazy.LazyRow(
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        items(state.shows.size) { i ->
+                            val entry = state.shows[i]
+                            ShowPosterCard(entry, Modifier.width(168.dp)) { onOpenShow(entry.show.key) }
+                        }
+                    }
+                }
             }
 
             // 3. How much time do you have? — pick a window, see videos that finish within it.
@@ -449,8 +469,13 @@ private fun ContinueSlide(item: VideoWithPosition, onResume: (VideoFile) -> Unit
         Column(
             modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(start = 16.dp, end = 82.dp, bottom = 30.dp),
         ) {
+            // An episode reads as "Peaky Blinders · S02E05", not its release file name.
+            val title = remember(video.mediaStoreId) {
+                EpisodeParser.parse(video.name, video.path)?.let { "${it.showTitle} · ${it.code}" }
+                    ?: video.name.substringBeforeLast('.')
+            }
             Text(
-                video.name.substringBeforeLast('.'),
+                title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = OnScrim,

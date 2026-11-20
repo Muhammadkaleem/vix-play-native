@@ -129,6 +129,21 @@ private val MIGRATION_5_6 = object : Migration(5, 6) {
     }
 }
 
+/** Adds the per-show remembered audio/subtitle choice. Additive; DDL copied from Room's schemas/7.json. */
+private val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `show_preference` (" +
+                "`showKey` TEXT NOT NULL, " +
+                "`audioLanguage` TEXT, " +
+                "`subtitleMode` TEXT, " +
+                "`subtitleLanguage` TEXT, " +
+                "`updatedAt` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`showKey`))"
+        )
+    }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
@@ -137,7 +152,7 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, "vixplay.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
             .build()
 
     @Provides
@@ -157,4 +172,7 @@ object DatabaseModule {
 
     @Provides
     fun provideFavoriteDao(db: AppDatabase) = db.favoriteDao()
+
+    @Provides
+    fun provideShowPreferenceDao(db: AppDatabase) = db.showPreferenceDao()
 }

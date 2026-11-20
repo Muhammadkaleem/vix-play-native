@@ -13,6 +13,8 @@ data class EpisodeInfo(
     val episode: Int,
     /** Last episode a double file covers (S01E01E02 → 2); equals [episode] otherwise. */
     val lastEpisode: Int = episode,
+    /** The episode's own title when the name carries one ("…S01E02.Rhaenyra.the.Realms.Delight.1080p…"). */
+    val episodeTitle: String? = null,
 ) {
     /** "S02E04" — the label people know episodes by. */
     val code: String get() = String.format(Locale.ROOT, "S%02dE%02d", season, episode)
@@ -72,6 +74,15 @@ object EpisodeParser {
         IGNORE_CASE,
     )
 
+    /** Where an episode title after the code stops: quality, source, codec, audio or language tags. */
+    private val TITLE_NOISE = Regex(
+        """(?<![a-z0-9])(?:\(?(?:19|20)\d{2}\)?|\d{3,4}p|4k|uhd|hdr\d*|10bit|8bit|x26[45]|h ?26[45]|hevc|avc|""" +
+            """web(?:rip|-?dl)?|blu-?ray|brrip|bdrip|hdrip|hdtv|dvdrip|amzn|nf|hmax|dsnp|atvp|""" +
+            """dd(?:p|\+)?\s?\d(?:\s\d)?|aac\d*|e?ac3|atmos|dts|\dch|proper|repack|internal|""" +
+            """complete|dual|multi|hindi|english|urdu|tamil|telugu|esubs?)(?![a-z0-9])""",
+        IGNORE_CASE,
+    )
+
     private val LEADING_TAGS = Regex("""^(?:\s*\[[^\]]*])+""")
     private val BRACKET_TAGS = Regex("""\[[^\]]*]""")
     private val SITE_PREFIX = Regex("""^\s*www\s+\S+(?:\s+[a-z]{2,6})?\s*-\s*""", IGNORE_CASE)
@@ -98,35 +109,36 @@ object EpisodeParser {
             val episode = match.groupValues[2].toInt()
             val second = match.groupValues[3].toIntOrNull()
             val last = if (second != null && second in episode + 1..episode + 3) second else episode
-            return episodeOf(name.substring(0, match.range.first), folders, match.groupValues[1].toInt(), episode, last)
+            return episodeOf(name, match.range, folders, match.groupValues[1].toInt(), episode, last)
         }
         SEASON_X_EPISODE.find(name)?.let { match ->
-            return episodeOf(
-                name.substring(0, match.range.first), folders,
-                match.groupValues[1].toInt(), match.groupValues[2].toInt(),
-            )
+            return episodeOf(name, match.range, folders, match.groupValues[1].toInt(), match.groupValues[2].toInt())
         }
         SEASON_EPISODE_WORDS.find(name)?.let { match ->
-            return episodeOf(
-                name.substring(0, match.range.first), folders,
-                match.groupValues[1].toInt(), match.groupValues[2].toInt(),
-            )
+            return episodeOf(name, match.range, folders, match.groupValues[1].toInt(), match.groupValues[2].toInt())
         }
         EPISODE_ONLY.find(name)?.let { match ->
             val episode = match.groupValues[1].ifEmpty { match.groupValues[2] }.toInt()
             val season = folders.firstNotNullOfOrNull(::seasonOf) ?: 1
-            return episodeOf(name.substring(0, match.range.first), folders, season, episode)
+            return episodeOf(name, match.range, folders, season, episode)
         }
         return null
     }
 
-    private fun episodeOf(prefix: String, folders: List<String>, season: Int, episode: Int, last: Int = episode): EpisodeInfo? {
-        val title = cleanTitle(prefix)?.takeUnless { keyOf(it) in GENERIC_FOLDERS }
+    /** [code] is where the episode marker sits in [name]: the show is before it, the episode's title after. */
+    private fun episodeOf(name: String, code: IntRange, folders: List<String>, season: Int, episode: Int, last: Int = episode): EpisodeInfo? {
+        val title = cleanTitle(name.substring(0, code.first))?.takeUnless { keyOf(it) in GENERIC_FOLDERS }
             ?: folders.firstNotNullOfOrNull(::titleFromFolder)
             ?: return null
         val key = keyOf(title)
         if (key.isEmpty()) return null
-        return EpisodeInfo(key, title, season, episode, last)
+        return EpisodeInfo(key, title, season, episode, last, episodeTitleAfter(name.substring(code.last + 1)))
+    }
+
+    /** "Rhaenyra the Realms Delight 1080p HMAX WEB-DL" → "Rhaenyra the Realms Delight"; tags only → null. */
+    private fun episodeTitleAfter(rest: String): String? {
+        val end = TITLE_NOISE.find(rest)?.range?.first ?: rest.length
+        return cleanTitle(rest.substring(0, end))?.takeIf { title -> title.count(Char::isLetter) >= 2 }
     }
 
     private fun seasonOf(folder: String): Int? =

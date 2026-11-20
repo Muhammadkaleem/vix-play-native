@@ -5,12 +5,14 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.devbytes.vixplayer.app.data.db.dao.EqDao
 import com.devbytes.vixplayer.app.data.db.dao.FavoriteDao
+import com.devbytes.vixplayer.app.data.db.dao.ShowPreferenceDao
 import com.devbytes.vixplayer.app.data.db.dao.NetworkServerDao
 import com.devbytes.vixplayer.app.data.db.dao.NetworkStreamDao
 import com.devbytes.vixplayer.app.data.db.dao.PlaylistDao
 import com.devbytes.vixplayer.app.data.db.dao.PlaybackPositionDao
 import com.devbytes.vixplayer.app.data.db.entity.EqPreset
 import com.devbytes.vixplayer.app.data.db.entity.Favorite
+import com.devbytes.vixplayer.app.data.db.entity.ShowPreference
 import com.devbytes.vixplayer.app.data.db.entity.EqProfile
 import com.devbytes.vixplayer.app.data.db.entity.NetworkServer
 import com.devbytes.vixplayer.app.data.db.entity.NetworkStream
@@ -28,8 +30,9 @@ import com.devbytes.vixplayer.app.data.db.entity.PlaylistItem
         NetworkStream::class,
         NetworkServer::class,
         Favorite::class,
+        ShowPreference::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 @TypeConverters(EqConverters::class)
@@ -40,4 +43,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun networkStreamDao(): NetworkStreamDao
     abstract fun networkServerDao(): NetworkServerDao
     abstract fun favoriteDao(): FavoriteDao
+    abstract fun showPreferenceDao(): ShowPreferenceDao
 }

@@ -16,6 +16,8 @@ const val VIDEO_LIST_ROUTE = "video_list/{source}"
 fun videoListRoute(source: String) = "video_list/$source"
 
 // Videos of one folder (dashboard "Your folders" tap)
+const val SHOW_ROUTE = "show/{showKey}"
+fun showRoute(encodedShowKey: String) = "show/$encodedShowKey"
 const val FOLDER_VIDEOS_ROUTE = "folder_videos/{bucketId}/{title}"
 fun folderVideosRoute(bucketId: Long, encodedTitle: String) = "folder_videos/$bucketId/$encodedTitle"
 
