@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-VixPlay is a native Android media player — a modern alternative to MX Player. Kotlin + Jetpack Compose, Media3/ExoPlayer + an FFmpeg audio-decoder extension, indigo→violet brand. A shipping Play Store app (`com.devbytes.vixplayer.app`): video + audio libraries, full player, network streaming, Chromecast, Home dashboard, AdMob monetisation with a rewarded "Pro" tier, Firebase.
+VixPlay is a native Android media player — a modern alternative to MX Player. Kotlin + Jetpack Compose, Media3/ExoPlayer + an FFmpeg audio-decoder extension, indigo→violet brand. A shipping Play Store app (`com.devbytes.vixplayer.app`): video + audio libraries, full player, network streaming (URL, SMB, FTP), Home dashboard, AdMob monetisation with a rewarded "Pro" tier, Firebase.
 
 Product docs are in `vix-play-docs/media-player-docs/`; design assets (colour tokens, typography, icons, launcher icon) in `config-vix-play/player-design-assets/`. Both describe the original plan — where they disagree with the code, the code wins (see below).
 
@@ -109,7 +109,7 @@ In the build (`gradle/libs.versions.toml` — add every new dependency there fir
 | Firebase | Crashlytics (+NDK), Analytics, Messaging, Remote Config, In-App Messaging, Performance |
 | Ads | AdMob + UMP consent |
 | Play | In-App Review, In-App Updates |
-| Casting | Media3 Cast (Chromecast) + NanoHTTPD local file server |
+| Casting | Media3 Cast (Chromecast) + NanoHTTPD local file server — **plumbing only**: no `CastPlayer` wired, the Cast screen is still a "coming soon" placeholder |
 | Network shares | SMBJ (SMB) · commons-net (FTP) |
 
 Not in the build yet: Play Billing, OkHttp, Cling/jUPnP (DLNA), Room FTS4 (search is in-memory).
@@ -133,6 +133,17 @@ Source assets in `config-vix-play/player-design-assets/` (icons as SVG → Vecto
 ## Design implementation progress
 
 Running log of screen design-implementation decisions (grill-me sessions). Newest first.
+
+### 2026-11-20 — Series Mode, phase 1: episodes in order, show-aware Up Next — DONE, **verified on emulator API 36 (season played forward, S01E03 → S02E01 across folders, finale stops, Play Next tile mid-video, lecture folder in natural order, Light + Dark).**
+- **From the feature analysis (top pick).** Root cause: `nextInFolder`/`upcomingInFolder` followed MediaStore's `DATE_MODIFIED DESC` — a season downloaded in order played **backwards** (after E05 came E04; after E01 nothing). And `nextVideo` was only resolved once a video ended, so the options panel's **Play Next tile was always disabled during playback**.
+- **Existing autoplay system, documented here for the first time** (it predates this entry and was never logged): `SettingsRepository.autoplayNext` (default **off**) + `askBeforePlayingNext` (default **on**) → Settings › Playback "Autoplay next video" / "Ask before playing next" / "Reset playback prompts"; at the end the Up Next overlay either counts down 5 s (autoplay on; Cancel / Play Now), asks (confirm mode; Not Now / Play Next + "Don't ask again"), or offers Play Again / Play Next; the header has an Autoplay switch. Phase 1 changes **what** is next, not this system — no second setting or countdown was added.
+- **New pure-Kotlin package `data/series`** (no Android types, JVM-tested): `NaturalOrder` (digit runs by value — "Ep 2" < "Ep 10"); `EpisodeParser` (S01E02 · 1x02 · "Season 1 Episode 2" · "Episode 2"/"Ep 02"/"E02" with the season from a "Season 2"/"S02" folder; show title from the name prefix, else the folder minus quality/language/year tags; fansub tags, `www.site -` prefixes and trailing years stripped; deliberately conservative — absolute "Show - 105" numbering and generic folders like Download are not guessed); `UpNextResolver`.
+- **Rules:** an episode of a show with **≥ 2 episodes** continues with the show's next episode **across season folders**; a double file (E01E02) is followed by E03; the same episode twice prefers the copy beside the current file; specials (S00) only lead to specials, so a finale never rolls into extras. Anything else — including a lone episode — follows its folder in **natural name order** (Lecture 1 → 2 → 10; timestamp names play chronologically). **`next` never wraps** (no autoplay loop back to E01); the overlay's row still wraps for ordinary folders.
+- **Wiring:** `MediaRepository.upNextFor()` replaces `nextInFolder`/`upcomingInFolder`/`folderPosition` (reads the whole library only when the current file is an episode). `PlayerScreen` resolves the plan when a file **starts** (fixes the Play Next tile) and refreshes it at the end. Overlay: explicit `next`, "Next Episode" / "Finished S01E01 · Show", "S01E02 starts in 5s", episode-code badges on cards, "That was the last episode of Show" / "That was the last video in this folder". The Play review prompt no longer fires while an autoplay countdown is about to start the next video (the completion is still counted). Name sorts in the video library and folder list use `NaturalOrder`. Settings copy: autoplay now says "the next episode of the show — or the next video in the folder".
+- **Analytics:** `up_next_result` (`result` = autoplay / play_next / pick / replay / cancel / not_now / close; `episodic`).
+- **Tests:** `NaturalOrderTest` (7), `EpisodeParserTest` (15, incl. real release names and non-episodes like camera timestamps, WhatsApp clips, `1920x1080`, `DDP5.1`), `UpNextResolverTest` (9). All 44 unit tests pass; `assembleDebug` OK.
+- **Observed, not fixed (pre-existing):** an external `ACTION_VIEW` fired *while a player screen is in the foreground* starts paused — the second `MainActivity` instance plays, then the first instance's `ON_STOP` pause rule pauses the shared player. Normal "open from another app" flows background VixPlay first and are unaffected.
+- **Next phases:** Shows shelf + Show screen and per-show language/subtitle/speed memory (phase 2); manual then automatic Skip Intro (phase 3).
 
 ### 2026-11-18 → 11-20 — Translucent nav, Light default, mini-player rework, v3.1.0 (71) — DONE, **verified on a Samsung A55 (Android 16) unless noted.**
 - **Content scrolls behind the bottom chrome.** Supersedes the floating-pill entry's "content stays padded above the bar". `ui/common/BottomBarInsets.kt`: the nav graph provides the chrome height as `LocalBottomBarInset` (NavHost no longer padded); every screen Scaffold uses `contentWindowInsets = screenInsets()`; lists use `padding.withoutBottom()` + `contentPadding = padding.bottomOnly()` so the last item stays reachable. Pill opacity: 0.78 on dark, **0.95 on light** (dark text behind a light pill fought the tab labels).

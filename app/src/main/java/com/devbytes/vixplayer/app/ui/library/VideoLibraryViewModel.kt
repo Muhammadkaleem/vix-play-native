@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.devbytes.vixplayer.app.data.repository.DeleteResult
 import com.devbytes.vixplayer.app.data.repository.MediaDeleter
 import com.devbytes.vixplayer.app.data.repository.MediaRepository
+import com.devbytes.vixplayer.app.data.series.NaturalOrder
 import com.devbytes.vixplayer.app.data.repository.PlaybackRepository
 import com.devbytes.vixplayer.app.data.repository.PrivateVault
 import com.devbytes.vixplayer.app.data.repository.SettingsRepository
@@ -219,7 +220,7 @@ class VideoLibraryViewModel @Inject constructor(
 
     private fun sortedBy(list: List<VideoFile>, order: SortOrder): List<VideoFile> = when (order) {
         SortOrder.RECENT -> list
-        SortOrder.NAME -> list.sortedBy { it.name.lowercase() }
+        SortOrder.NAME -> list.sortedWith(compareBy(NaturalOrder) { it.name })
         SortOrder.DURATION -> list.sortedByDescending { it.durationMs }
         SortOrder.SIZE -> list.sortedByDescending { it.sizeBytes }
     }

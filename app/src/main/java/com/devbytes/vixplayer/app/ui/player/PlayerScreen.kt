@@ -88,6 +88,7 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.devbytes.vixplayer.app.MainActivity
 import com.devbytes.vixplayer.app.R
+import com.devbytes.vixplayer.app.data.repository.UpNext
 import com.devbytes.vixplayer.app.data.repository.VideoFile
 import com.devbytes.vixplayer.app.player.PlaybackService
 import androidx.compose.ui.geometry.Offset
@@ -364,20 +365,15 @@ fun PlayerScreen(
     var videoWidth by remember { mutableIntStateOf(player.videoSize.width) }
     var videoHeight by remember { mutableIntStateOf(player.videoSize.height) }
 
-    // Terminal "finished" state (STATE_ENDED) + the folder-next candidate (null when
-    // there's no next). Computed once the video ends; drives the EndedOverlay.
+    // Terminal "finished" state (STATE_ENDED) + what plays next: the show's following
+    // episode, or the next file in the folder in natural order. Resolved when a file starts —
+    // so the options panel's Play Next works mid-video — and refreshed when it ends.
     var ended by remember { mutableStateOf(player.playbackState == Player.STATE_ENDED) }
-    var nextVideo by remember { mutableStateOf<VideoFile?>(null) }
-    LaunchedEffect(ended) {
-        nextVideo = if (ended) viewModel.nextInFolder() else null
+    var upNext by remember { mutableStateOf(UpNext.NONE) }
+    LaunchedEffect(currentUri, ended) {
+        upNext = viewModel.resolveUpNext(8)
     }
-    // Up-next thumbnails for the end-of-video "Up Next" screen.
-    var upcoming by remember { mutableStateOf<List<VideoFile>>(emptyList()) }
-    var playlistPosition by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(ended) {
-        upcoming = if (ended) viewModel.loadUpcoming(8) else emptyList()
-        playlistPosition = if (ended) viewModel.loadPlaylistPosition() else null
-    }
+    val nextVideo = upNext.next
 
     // Autoplay preferences (single source of truth, shared with Settings).
     val autoplayNext by viewModel.autoplayNext.collectAsState()
@@ -397,8 +393,11 @@ fun PlayerScreen(
     var reviewRequested by remember { mutableStateOf(false) }
     val reviewManager = remember { ReviewManagerFactory.create(context) }
     LaunchedEffect(ended) {
+        // Count the completion either way, but don't prompt while autoplay is about to start
+        // the next video under the sheet — a later ending without autoplay will ask instead.
         if (ended && !hadPlaybackError && !reviewRequested &&
-            viewModel.recordCompletionAndShouldAskReview()
+            viewModel.recordCompletionAndShouldAskReview() &&
+            !(autoplayNext && nextVideo != null)
         ) {
             reviewRequested = true
             activity?.let { act ->
@@ -637,7 +636,7 @@ fun PlayerScreen(
         showResumeChip = false
         ended = false
         playedStamped = false
-        nextVideo = null
+        upNext = UpNext.NONE
         autoplaySuppressed = false
         // Fresh file → fresh error-tracking for the review signal (a prior file's error
         // shouldn't suppress a prompt after this one plays cleanly to the end).
@@ -647,6 +646,11 @@ fun PlayerScreen(
         zoomScale = 1f
         zoomOffset = Offset.Zero
     }
+
+    // How the end-of-video screen was answered — Up Next acceptance, split by episodes.
+    fun logUpNext(result: String) = Analytics.log(
+        context, Analytics.UP_NEXT_RESULT, "result" to result, "episodic" to (upNext.showTitle != null),
+    )
 
     // Autoplay auto-advance: when the video ends with autoplay on and a next video exists,
     // count down (giving a Cancel/Not Now window) then advance. Suppressed per-transition by
@@ -661,7 +665,10 @@ fun PlayerScreen(
                 autoCountdown = n
             }
             autoCountdown = null
-            nextVideo?.let { playNext(it) }
+            nextVideo?.let {
+                logUpNext("autoplay")
+                playNext(it)
+            }
         } else {
             autoCountdown = null
         }
@@ -1387,13 +1394,17 @@ fun PlayerScreen(
         if (ended && playbackError == null && unsupportedVideoMime == null && !pipMode && !sleepPausedByTimer) {
             UpNextOverlay(
                 currentUri = currentUri,
-                upcoming = upcoming,
-                positionLabel = playlistPosition,
+                upcoming = upNext.upcoming,
+                next = nextVideo,
+                positionLabel = upNext.positionLabel,
+                showTitle = upNext.showTitle,
+                episodeCodes = upNext.codes,
                 autoplayEnabled = autoplayNext,
                 confirmMode = confirmMode && !autoplaySuppressed,
                 countdownSec = autoCountdown,
                 onToggleAutoplay = { viewModel.setAutoplayNext(it) },
                 onReplay = {
+                    logUpNext("replay")
                     player.seekTo(0L)
                     player.playWhenReady = true
                     ended = false
@@ -1402,9 +1413,11 @@ fun PlayerScreen(
                 onPlay = { video, dontAsk ->
                     // Don't-ask + Play Next → remember autoplay ON for next time.
                     if (dontAsk) viewModel.setAutoplayNext(true)
+                    logUpNext(if (video == nextVideo) "play_next" else "pick")
                     playNext(video)
                 },
                 onNotNow = { dontAsk ->
+                    logUpNext(if (autoCountdown != null) "cancel" else "not_now")
                     // Don't-ask + Not Now → autoplay OFF and stop prompting.
                     if (dontAsk) {
                         viewModel.setAutoplayNext(false)
@@ -1413,7 +1426,10 @@ fun PlayerScreen(
                     autoplaySuppressed = true
                     autoCountdown = null
                 },
-                onClose = onBack,
+                onClose = {
+                    logUpNext("close")
+                    onBack()
+                },
                 modifier = Modifier.fillMaxSize(),
             )
         }

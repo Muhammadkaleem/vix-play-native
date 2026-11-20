@@ -8,6 +8,10 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import androidx.annotation.RequiresApi
+import com.devbytes.vixplayer.app.data.series.EpisodeParser
+import com.devbytes.vixplayer.app.data.series.NaturalOrder
+import com.devbytes.vixplayer.app.data.series.SeriesItem
+import com.devbytes.vixplayer.app.data.series.UpNextResolver
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -27,6 +31,25 @@ data class VideoFile(
     /** Epoch millis the file was added to MediaStore (0 when unknown). */
     val dateAddedMs: Long = 0,
 )
+
+/**
+ * What plays after the current video and what the end-of-video screen offers — see
+ * [UpNextResolver]. [next] never wraps; [upcoming] is the row of choices, [next] first.
+ */
+data class UpNext(
+    val next: VideoFile?,
+    val upcoming: List<VideoFile>,
+    /** "S02E03" for an episode, "3 of 12" for a folder position. */
+    val positionLabel: String?,
+    /** The show's name when the current file is one of its episodes; null for ordinary videos. */
+    val showTitle: String?,
+    /** Episode codes ("S02E04") for the up-next cards, keyed by MediaStore id. */
+    val codes: Map<Long, String>,
+) {
+    companion object {
+        val NONE = UpNext(next = null, upcoming = emptyList(), positionLabel = null, showTitle = null, codes = emptyMap())
+    }
+}
 
 data class FolderEntry(
     val bucketId: Long,
@@ -144,7 +167,7 @@ class MediaRepository @Inject constructor(
         // Name A–Z default: a folder's position changes only when it is renamed, never
         // when a file is added, moved or removed. The VM re-sorts for other orders.
         buckets.entries
-            .sortedBy { it.value.first.lowercase() }
+            .sortedWith(compareBy(NaturalOrder) { it.value.first })
             .map { (bid, q) ->
                 FolderEntry(
                     bucketId     = bid,
@@ -164,42 +187,36 @@ class MediaRepository @Inject constructor(
         val fourth: Long,
     )
 
-    /**
-     * The next video in the same folder as [mediaStoreId], following the folder's own
-     * ordering (DATE_MODIFIED DESC — the order the folder browser lists them). Returns
-     * null when the id isn't a MediaStore item, is the last file, or is the only one.
-     */
-    suspend fun nextInFolder(mediaStoreId: Long): VideoFile? {
-        val bucketId = queryBucketId(mediaStoreId) ?: return null
-        val folder = queryVideosInFolder(bucketId)
-        val index = folder.indexOfFirst { it.mediaStoreId == mediaStoreId }
-        return if (index in 0 until folder.lastIndex) folder[index + 1] else null
-    }
-
     /** Other videos in the same folder as [mediaStoreId] (excluding it). For "From this folder". */
     suspend fun videosInFolderOf(mediaStoreId: Long): List<VideoFile> {
         val bucketId = queryBucketId(mediaStoreId) ?: return emptyList()
         return queryVideosInFolder(bucketId).filterNot { it.mediaStoreId == mediaStoreId }
     }
 
-    /** The "up next" set for the end-of-video screen: folder videos after the current one
-     *  first, then wrapping to the start (current excluded). Empty for non-MediaStore URIs. */
-    suspend fun upcomingInFolder(mediaStoreId: Long, limit: Int): List<VideoFile> {
-        val bucketId = queryBucketId(mediaStoreId) ?: return emptyList()
+    /**
+     * What plays after [mediaStoreId] and what the end-of-video screen offers. Episodes follow
+     * their show across season folders (the whole library is read only then); anything else
+     * follows its folder in natural name order. [UpNext.NONE] for non-MediaStore items.
+     */
+    suspend fun upNextFor(mediaStoreId: Long, limit: Int): UpNext {
+        val current = queryVideoById(mediaStoreId) ?: return UpNext.NONE
+        val bucketId = queryBucketId(mediaStoreId) ?: return UpNext.NONE
         val folder = queryVideosInFolder(bucketId)
-        val index = folder.indexOfFirst { it.mediaStoreId == mediaStoreId }
-        if (index < 0) return folder.take(limit)
-        return (folder.drop(index + 1) + folder.take(index)).take(limit)
+        val library = if (EpisodeParser.parse(current.name, current.path) != null) queryAllVideos() else emptyList()
+        val plan = withContext(Dispatchers.Default) {
+            UpNextResolver.resolve(current.toSeriesItem(), folder.map { it.toSeriesItem() }, library.map { it.toSeriesItem() }, limit)
+        }
+        val byId = (folder + library).associateBy { it.mediaStoreId }
+        return UpNext(
+            next = plan.nextId?.let(byId::get),
+            upcoming = plan.upcomingIds.mapNotNull(byId::get),
+            positionLabel = plan.positionLabel,
+            showTitle = plan.episode?.showTitle,
+            codes = plan.codes,
+        )
     }
 
-    /** The current video's 1-based position and the folder's total count, or null if unknown. */
-    suspend fun folderPosition(mediaStoreId: Long): Pair<Int, Int>? {
-        val bucketId = queryBucketId(mediaStoreId) ?: return null
-        val folder = queryVideosInFolder(bucketId)
-        val index = folder.indexOfFirst { it.mediaStoreId == mediaStoreId }
-        if (index < 0) return null
-        return (index + 1) to folder.size
-    }
+    private fun VideoFile.toSeriesItem() = SeriesItem(mediaStoreId, name, path)
 
     private suspend fun queryBucketId(mediaStoreId: Long): Long? = withContext(Dispatchers.IO) {
         context.contentResolver.query(

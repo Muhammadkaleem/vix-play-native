@@ -11,6 +11,7 @@ import com.devbytes.vixplayer.app.data.repository.MediaTransfer
 import com.devbytes.vixplayer.app.data.repository.TransferProgress
 import com.devbytes.vixplayer.app.data.repository.TransferResult
 import com.devbytes.vixplayer.app.data.repository.MediaRepository
+import com.devbytes.vixplayer.app.data.series.NaturalOrder
 import com.devbytes.vixplayer.app.data.repository.PlaybackRepository
 import com.devbytes.vixplayer.app.data.repository.SettingsRepository
 import com.devbytes.vixplayer.app.data.repository.RenameResult
@@ -107,7 +108,7 @@ class FolderBrowserViewModel @Inject constructor(
     }
 
     private fun sortFolders(folders: List<FolderEntry>): List<FolderEntry> = when (_folderSort.value) {
-        FolderSort.NAME -> folders.sortedBy { it.name.lowercase() }
+        FolderSort.NAME -> folders.sortedWith(compareBy(NaturalOrder) { it.name })
         FolderSort.RECENT -> folders.sortedByDescending { it.dateModified }
         FolderSort.COUNT -> folders.sortedByDescending { it.videoCount }
     }

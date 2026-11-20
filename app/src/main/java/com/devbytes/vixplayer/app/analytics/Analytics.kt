@@ -41,6 +41,10 @@ object Analytics {
     const val REVIEW_PROMPT_REQUESTED = "review_prompt_requested"
     const val REVIEW_FLOW_FINISHED = "review_flow_finished"
 
+    // ── End-of-video Up Next ────────────────────────────────────────────────
+    /** result: autoplay / play_next / pick / replay / cancel / not_now / close; episodic: true/false. */
+    const val UP_NEXT_RESULT = "up_next_result"
+
     // ── Pro (rewarded ad-free) offer ────────────────────────────────────────
     const val PRO_CARD_VIEWED = "pro_card_viewed"
     const val PRO_DETAILS_OPENED = "pro_details_opened"

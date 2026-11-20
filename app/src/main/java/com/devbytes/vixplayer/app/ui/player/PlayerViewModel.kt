@@ -7,6 +7,7 @@ import com.devbytes.vixplayer.app.data.repository.MediaRepository
 import com.devbytes.vixplayer.app.data.repository.PlaybackRepository
 import com.devbytes.vixplayer.app.data.repository.SettingsRepository
 import com.devbytes.vixplayer.app.data.repository.SubtitleStyle
+import com.devbytes.vixplayer.app.data.repository.UpNext
 import com.devbytes.vixplayer.app.data.repository.VideoFile
 import com.devbytes.vixplayer.app.player.PlayerController
 import com.devbytes.vixplayer.app.player.gesture.GestureBindings
@@ -191,22 +192,15 @@ class PlayerViewModel @Inject constructor(
     suspend fun loadFileInfo(): VideoFile? =
         currentMediaStoreId?.let { mediaRepository.queryVideoById(it) }
 
-    /** The next video in the current item's folder, or null if there's no next (last file / non-MediaStore). */
-    suspend fun nextInFolder(): VideoFile? =
-        currentMediaStoreId?.let { mediaRepository.nextInFolder(it) }
-
-    /** Up-next videos from the current folder for the end-of-video screen. */
-    suspend fun loadUpcoming(limit: Int): List<VideoFile> =
-        currentMediaStoreId?.let {
-            runCatching { mediaRepository.upcomingInFolder(it, limit) }.getOrDefault(emptyList())
-        } ?: emptyList()
-
-    /** "3 of 12" playlist position for the current video, or null if not resolvable. */
-    suspend fun loadPlaylistPosition(): String? =
+    /**
+     * What plays after the current item (the next episode of its show, or the next file in its
+     * folder in natural name order) and the end-of-video row. [UpNext.NONE] for non-MediaStore
+     * items, or if the lookup fails.
+     */
+    suspend fun resolveUpNext(limit: Int): UpNext =
         currentMediaStoreId?.let { id ->
-            runCatching { mediaRepository.folderPosition(id) }.getOrNull()
-                ?.let { (pos, total) -> "$pos of $total" }
-        }
+            runCatching { mediaRepository.upNextFor(id, limit) }.getOrNull()
+        } ?: UpNext.NONE
 
     /**
      * Records a watched-to-completion and reports whether the Play review prompt should be

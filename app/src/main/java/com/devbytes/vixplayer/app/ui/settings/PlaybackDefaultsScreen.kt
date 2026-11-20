@@ -62,7 +62,7 @@ fun PlaybackDefaultsScreen(
             ListItem(
                 headlineContent = { Text("Autoplay next video") },
                 supportingContent = {
-                    Text("Automatically play the next video in the folder when one finishes.")
+                    Text("When one finishes, play the next episode of the show — or the next video in the folder.")
                 },
                 leadingContent = {
                     Icon(

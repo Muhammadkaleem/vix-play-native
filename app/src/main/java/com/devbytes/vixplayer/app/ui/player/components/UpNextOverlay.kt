@@ -62,17 +62,23 @@ import com.devbytes.vixplayer.app.ui.theme.TimecodeStyle
 
 /**
  * End-of-video "Up Next" screen. Header carries a close (X → back) and an Autoplay toggle;
- * the body shows the playlist position, up-next thumbnails, and mode-dependent actions:
+ * the body shows where the finished video sits, up-next thumbnails, and mode-dependent actions:
  *  - [countdownSec] non-null  → autoplay is counting down ("Playing next in Ns" + Play Now/Cancel)
  *  - [confirmMode]            → autoplay off but asking ("Play Next"/"Not Now" + "Don't ask again")
  *  - otherwise                → manual Play Again / Play Next
- * Empty folder degrades to Play Again only (device back still exits).
+ * [next] is the one true next (never wraps); with none — a series finale, the last file — only
+ * Play Again remains, though [upcoming] may still offer other videos to pick.
+ * With [showTitle] set the finished video is an episode: the copy speaks in episodes and cards
+ * carry their [episodeCodes].
  */
 @Composable
 fun UpNextOverlay(
     currentUri: String,
     upcoming: List<VideoFile>,
+    next: VideoFile?,
     positionLabel: String?,
+    showTitle: String?,
+    episodeCodes: Map<Long, String>,
     autoplayEnabled: Boolean,
     confirmMode: Boolean,
     countdownSec: Int?,
@@ -86,7 +92,7 @@ fun UpNextOverlay(
     val accent = MaterialTheme.colorScheme.primary
     val context = LocalContext.current
     var dontAskAgain by remember { mutableStateOf(false) }
-    val next = upcoming.firstOrNull()
+    val episodic = showTitle != null
 
     Box(
         modifier = modifier
@@ -148,11 +154,19 @@ fun UpNextOverlay(
                 Icon(painterResource(R.drawable.ic_check), null, tint = OnScrim, modifier = Modifier.size(24.dp))
             }
             Spacer(Modifier.height(12.dp))
-            Text("Up Next", style = MaterialTheme.typography.headlineSmall, color = OnScrim, fontWeight = FontWeight.Bold)
+            Text(
+                if (episodic && next != null) "Next Episode" else "Up Next",
+                style = MaterialTheme.typography.headlineSmall,
+                color = OnScrim,
+                fontWeight = FontWeight.Bold,
+            )
             Spacer(Modifier.height(4.dp))
             Text(
                 text = when {
+                    episodic && next == null -> "That was the last episode of $showTitle"
+                    episodic -> listOfNotNull(positionLabel?.let { "Finished $it" }, showTitle).joinToString(" · ")
                     upcoming.isEmpty() -> "Nothing else in this folder"
+                    next == null -> "That was the last video in this folder"
                     positionLabel != null -> "Finished $positionLabel · next in this folder"
                     else -> "Continue with the next in this folder"
                 },
@@ -171,6 +185,7 @@ fun UpNextOverlay(
                         UpNextCard(
                             video = video,
                             featured = video.mediaStoreId == next?.mediaStoreId,
+                            code = episodeCodes[video.mediaStoreId],
                             accent = accent,
                             onClick = { onPlay(video, false) },
                         )
@@ -183,7 +198,8 @@ fun UpNextOverlay(
             when {
                 countdownSec != null && next != null -> {
                     Text(
-                        "Playing next in ${countdownSec}s",
+                        episodeCodes[next.mediaStoreId]?.let { "$it starts in ${countdownSec}s" }
+                            ?: "Playing next in ${countdownSec}s",
                         style = MaterialTheme.typography.bodyMedium,
                         color = OnScrim.copy(alpha = 0.85f),
                     )
@@ -241,7 +257,7 @@ private fun DontAskRow(checked: Boolean, accent: Color, onCheckedChange: (Boolea
 }
 
 @Composable
-private fun UpNextCard(video: VideoFile, featured: Boolean, accent: Color, onClick: () -> Unit) {
+private fun UpNextCard(video: VideoFile, featured: Boolean, code: String?, accent: Color, onClick: () -> Unit) {
     val context = LocalContext.current
     Column(Modifier.width(190.dp).clickable(onClick = onClick)) {
         Box(
@@ -265,6 +281,21 @@ private fun UpNextCard(video: VideoFile, featured: Boolean, accent: Color, onCli
                     ) {
                         Icon(painterResource(R.drawable.ic_play), null, tint = OnScrim, modifier = Modifier.size(22.dp))
                     }
+                }
+            }
+            // Episode code: long release names truncate before it on a 190 dp card.
+            if (code != null) {
+                Surface(
+                    modifier = Modifier.align(Alignment.TopStart).padding(6.dp),
+                    shape = RoundedCornerShape(4.dp),
+                    color = ScrimStrong,
+                ) {
+                    Text(
+                        code,
+                        style = TimecodeStyle,
+                        color = OnScrim,
+                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                    )
                 }
             }
             if (video.durationMs > 0L) {
