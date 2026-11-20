@@ -6,6 +6,7 @@ import com.devbytes.vixplayer.app.data.series.EpisodeFile
 import com.devbytes.vixplayer.app.data.series.Show
 import com.devbytes.vixplayer.app.data.series.ShowEpisode
 import com.devbytes.vixplayer.app.data.series.ShowIndex
+import com.devbytes.vixplayer.app.player.IntroWindow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -70,6 +71,19 @@ class ShowRepository @Inject constructor(
                 updatedAt = System.currentTimeMillis(),
             ),
         )
+
+    /** Marks (or with null, clears) the show's intro for all its episodes. */
+    suspend fun rememberIntro(showKey: String, window: IntroWindow?) =
+        preferences.upsert(
+            current(showKey).copy(
+                introStartMs = window?.startMs,
+                introEndMs = window?.endMs,
+                updatedAt = System.currentTimeMillis(),
+            ),
+        )
+
+    suspend fun setIntroAutoSkip(showKey: String, on: Boolean) =
+        preferences.upsert(current(showKey).copy(introAutoSkip = on, updatedAt = System.currentTimeMillis()))
 
     private suspend fun current(showKey: String) =
         preferences.get(showKey) ?: ShowPreference(showKey, null, null, null, 0L)

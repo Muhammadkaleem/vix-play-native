@@ -11,11 +11,15 @@ import com.devbytes.vixplayer.app.data.repository.ShowRepository
 import com.devbytes.vixplayer.app.data.repository.SubtitleStyle
 import com.devbytes.vixplayer.app.data.repository.UpNext
 import com.devbytes.vixplayer.app.data.repository.VideoFile
+import com.devbytes.vixplayer.app.player.IntroSettings
+import com.devbytes.vixplayer.app.player.IntroSource
+import com.devbytes.vixplayer.app.player.IntroWindow
 import com.devbytes.vixplayer.app.player.PlayerController
 import com.devbytes.vixplayer.app.player.PlayerOwner
 import com.devbytes.vixplayer.app.player.RememberedTracks
 import com.devbytes.vixplayer.app.player.SubtitleChoice
 import com.devbytes.vixplayer.app.player.gesture.GestureBindings
+import com.devbytes.vixplayer.app.player.resolveIntro
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -148,6 +152,47 @@ class PlayerViewModel @Inject constructor(
 
     fun rememberSubtitles(showKey: String, on: Boolean, language: String?) {
         viewModelScope.launch { runCatching { showRepository.rememberSubtitles(showKey, on, language) } }
+    }
+
+    /** The current episode's intro: its own override, else its show's (Series Mode phase 3a). */
+    suspend fun loadIntro(showKey: String, durationMs: Long): IntroSettings {
+        val preference = runCatching { showRepository.preference(showKey) }.getOrNull()
+        val start = preference?.introStartMs
+        val end = preference?.introEndMs
+        val showWindow = if (start != null && end != null) IntroWindow(start, end) else null
+        val episodeWindow = currentMediaStoreId?.let { playbackRepository.getIntroOverride(it) }
+        val resolved = resolveIntro(episodeWindow, showWindow, durationMs)
+        return IntroSettings(resolved?.first, resolved?.second, autoSkip = preference?.introAutoSkip == true)
+    }
+
+    /**
+     * Saves a marked intro for the whole show, or for this episode only. Saving for the show
+     * also drops this episode's own override, so what was just marked is what applies here.
+     */
+    suspend fun saveIntro(showKey: String, window: IntroWindow, episodeOnly: Boolean) {
+        val id = currentMediaStoreId
+        runCatching {
+            if (episodeOnly) {
+                id?.let { playbackRepository.saveIntroOverride(it, window) }
+            } else {
+                showRepository.rememberIntro(showKey, window)
+                id?.let { playbackRepository.saveIntroOverride(it, null) }
+            }
+        }
+    }
+
+    /** Removes the window in use: this episode's override (back to the show's), or the show's. */
+    suspend fun removeIntro(showKey: String, source: IntroSource) {
+        runCatching {
+            when (source) {
+                IntroSource.EPISODE -> currentMediaStoreId?.let { playbackRepository.saveIntroOverride(it, null) }
+                IntroSource.SHOW -> showRepository.rememberIntro(showKey, null)
+            }
+        }
+    }
+
+    suspend fun setIntroAutoSkip(showKey: String, on: Boolean) {
+        runCatching { showRepository.setIntroAutoSkip(showKey, on) }
     }
 
     /** "Turn on subtitles automatically" (Settings › Subtitles). */

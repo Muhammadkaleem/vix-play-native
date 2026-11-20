@@ -2,6 +2,7 @@ package com.devbytes.vixplayer.app.data.repository
 
 import com.devbytes.vixplayer.app.data.db.dao.PlaybackPositionDao
 import com.devbytes.vixplayer.app.data.db.entity.PlaybackPosition
+import com.devbytes.vixplayer.app.player.IntroWindow
 import com.tencent.mmkv.MMKV
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -30,6 +31,24 @@ class PlaybackRepository @Inject constructor(
 
     fun getSubtitleOffsetFast(mediaStoreId: Long): Long =
         mmkv.decodeLong("suboff_$mediaStoreId", 0L)
+
+    /**
+     * One episode's own intro window, overriding its show's (a cold open that runs longer,
+     * say). Per file like the subtitle offset, so it lives in MMKV beside it.
+     */
+    fun saveIntroOverride(mediaStoreId: Long, window: IntroWindow?) {
+        if (window == null) {
+            mmkv.removeValuesForKeys(arrayOf("intro_start_$mediaStoreId", "intro_end_$mediaStoreId"))
+        } else {
+            mmkv.encode("intro_start_$mediaStoreId", window.startMs)
+            mmkv.encode("intro_end_$mediaStoreId", window.endMs)
+        }
+    }
+
+    fun getIntroOverride(mediaStoreId: Long): IntroWindow? {
+        if (!mmkv.containsKey("intro_end_$mediaStoreId")) return null
+        return IntroWindow(mmkv.decodeLong("intro_start_$mediaStoreId", 0L), mmkv.decodeLong("intro_end_$mediaStoreId", 0L))
+    }
 
     suspend fun persistPosition(mediaStoreId: Long, positionMs: Long) {
         dao.upsert(PlaybackPosition(mediaStoreId, positionMs, System.currentTimeMillis()))

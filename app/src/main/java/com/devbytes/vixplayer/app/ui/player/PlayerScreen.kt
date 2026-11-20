@@ -95,6 +95,10 @@ import com.devbytes.vixplayer.app.data.repository.UpNext
 import com.devbytes.vixplayer.app.data.repository.VideoFile
 import com.devbytes.vixplayer.app.player.PlaybackService
 import com.devbytes.vixplayer.app.player.PlayerOwner
+import com.devbytes.vixplayer.app.player.label
+import com.devbytes.vixplayer.app.player.introMarkError
+import com.devbytes.vixplayer.app.player.IntroWindow
+import com.devbytes.vixplayer.app.player.IntroSettings
 import com.devbytes.vixplayer.app.player.candidates
 import com.devbytes.vixplayer.app.player.languageOf
 import com.devbytes.vixplayer.app.player.planTracks
@@ -142,6 +146,8 @@ import com.devbytes.vixplayer.app.ui.player.components.nearestSpeedPreset
 import com.devbytes.vixplayer.app.ui.player.components.ResumeChip
 import com.devbytes.vixplayer.app.ui.player.components.SubtitleSheet
 import com.devbytes.vixplayer.app.ui.player.components.SubtitleStyleEditor
+import com.devbytes.vixplayer.app.ui.player.components.IntroMarkHud
+import com.devbytes.vixplayer.app.ui.player.components.SkipIntroPill
 import com.devbytes.vixplayer.app.ui.player.components.SubtitleSyncHud
 import com.devbytes.vixplayer.app.ui.player.components.applySubtitleStyle
 import com.devbytes.vixplayer.app.ui.player.components.SubtitleTrackUi
@@ -151,6 +157,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -299,6 +306,17 @@ fun PlayerScreen(
     // but the re-prepare (Media3 stamps cue timings at parse time, so a new offset only
     // reaches already-buffered cues via a re-parse) waits for the user to settle.
     var showSyncHud by remember { mutableStateOf(false) }
+
+    // Skip intro (Series Mode phase 3a): the current episode's intro, the marking panel's
+    // unsaved marks, and the playhead they're judged against.
+    var intro by remember { mutableStateOf(IntroSettings.NONE) }
+    var showIntroHud by remember { mutableStateOf(false) }
+    var markStartMs by remember { mutableStateOf<Long?>(null) }
+    var markEndMs by remember { mutableStateOf<Long?>(null) }
+    var introPositionMs by remember { mutableLongStateOf(0L) }
+    // Auto-skip fires once per opened file, so seeking back to watch the intro sticks.
+    var autoSkippedUri by remember { mutableStateOf<String?>(null) }
+    var showIntroSkipped by remember { mutableStateOf(false) }
     var pendingOffsetKey by remember { mutableIntStateOf(0) }
     LaunchedEffect(pendingOffsetKey) {
         if (pendingOffsetKey > 0) {
@@ -393,6 +411,56 @@ fun PlayerScreen(
         upNextUri = currentUri
     }
     val nextVideo = upNext.next
+
+    // ── Skip intro ───────────────────────────────────────────────────────────────────────
+    // Only episodes of a show (Up Next resolved a show key for this very file) have one.
+    suspend fun reloadIntro() {
+        val key = upNext.showKey.takeIf { upNextUri == currentUri }
+        intro = if (key == null) IntroSettings.NONE else viewModel.loadIntro(key, player.duration)
+    }
+    fun saveIntroMarks(episodeOnly: Boolean) {
+        val key = upNext.showKey ?: return
+        val start = markStartMs ?: return
+        val end = markEndMs ?: return
+        if (introMarkError(start, end, player.duration) != null) return
+        scope.launch {
+            viewModel.saveIntro(key, IntroWindow(start, end), episodeOnly)
+            Analytics.log(context, Analytics.INTRO_MARKED, "scope" to if (episodeOnly) "episode" else "show")
+            reloadIntro()
+            showIntroHud = false
+            // Just marked while watching it — don't immediately auto-skip what was marked.
+            autoSkippedUri = currentUri
+        }
+    }
+    // Load once Up Next knows the show and the duration is known (the window must fit in it).
+    LaunchedEffect(currentUri, upNextUri) {
+        if (upNextUri != currentUri) return@LaunchedEffect
+        withTimeoutOrNull(5_000) { while (player.duration <= 0) delay(200) }
+        reloadIntro()
+    }
+    // The playhead, while there's an intro to judge it against or the marking panel is open.
+    LaunchedEffect(intro.window, showIntroHud) {
+        while (intro.window != null || showIntroHud) {
+            if (ownsPlayer()) introPositionMs = player.currentPosition
+            delay(250)
+        }
+    }
+    // Auto-skip: once per opened file, when the playhead first lands inside the intro.
+    LaunchedEffect(introPositionMs) {
+        val window = intro.window ?: return@LaunchedEffect
+        if (intro.autoSkip && !showIntroHud && autoSkippedUri != currentUri && window.offersSkipAt(introPositionMs)) {
+            autoSkippedUri = currentUri
+            player.seekTo(window.endMs)
+            Analytics.log(context, Analytics.INTRO_SKIP, "source" to "auto")
+            showIntroSkipped = true
+        }
+    }
+    LaunchedEffect(showIntroSkipped) {
+        if (showIntroSkipped) {
+            delay(4_000)
+            showIntroSkipped = false
+        }
+    }
 
     // Autoplay preferences (single source of truth, shared with Settings).
     val autoplayNext by viewModel.autoplayNext.collectAsState()
@@ -601,7 +669,7 @@ fun PlayerScreen(
     var speedPillOpen by remember { mutableStateOf(false) }
     var seekBarDragging by remember { mutableStateOf(false) }
     val sheetOpen = currentSheet != null
-    val controlsHeldOpen = sheetOpen || optionsPanelOpen || speedPillOpen || seekBarDragging
+    val controlsHeldOpen = sheetOpen || optionsPanelOpen || speedPillOpen || seekBarDragging || showIntroHud
 
     // Centralized overlay coordination: the user only sees the control they're using. Any of
     // these "exclusive" surfaces suppresses the standard HUD controls and the resume chip, so
@@ -653,6 +721,9 @@ fun PlayerScreen(
         // prepare() so its cues parse at the right offset, not the previous file's.
         subtitleOffsetMs = viewModel.getSubtitleOffsetMs()
         showSyncHud = false
+        intro = IntroSettings.NONE
+        showIntroHud = false
+        showIntroSkipped = false
         viewModel.prepareFor(newUri, subtitleOffsetMs, owner = playerOwner)
         showResumeChip = false
         ended = false
@@ -1074,6 +1145,7 @@ fun PlayerScreen(
         canFavorite = canFavorite,
         hasNext = nextVideo != null,
         supportsPip = supportsPip,
+        introLabel = if (upNext.showKey != null) intro.window?.label() ?: "Not set" else null,
     )
 
     // Screenshot — clean-frame PixelCopy off the video SurfaceView (no chrome/subs),
@@ -1389,6 +1461,59 @@ fun PlayerScreen(
             modifier = Modifier.fillMaxSize(),
         )
 
+        // Skip intro: the marking panel (interactive, like sync) and the skip pill.
+        val showKey = upNext.showKey
+        IntroMarkHud(
+            visible = showIntroHud && showKey != null && !locked && !pipMode && playbackError == null,
+            positionMs = introPositionMs,
+            startMs = markStartMs,
+            endMs = markEndMs,
+            error = introMarkError(markStartMs, markEndMs, player.duration),
+            existing = intro.source,
+            autoSkip = intro.autoSkip,
+            onSetStart = { markStartMs = player.currentPosition },
+            onSetEnd = { markEndMs = player.currentPosition },
+            onSaveForShow = { saveIntroMarks(episodeOnly = false) },
+            onSaveForEpisode = { saveIntroMarks(episodeOnly = true) },
+            onRemove = {
+                val source = intro.source ?: return@IntroMarkHud
+                scope.launch {
+                    showKey?.let { viewModel.removeIntro(it, source) }
+                    Analytics.log(context, Analytics.INTRO_MARKED, "scope" to "removed")
+                    reloadIntro()
+                    markStartMs = intro.window?.startMs
+                    markEndMs = intro.window?.endMs
+                }
+            },
+            onToggleAutoSkip = {
+                scope.launch {
+                    showKey?.let { viewModel.setIntroAutoSkip(it, !intro.autoSkip) }
+                    reloadIntro()
+                }
+            },
+            onClose = { showIntroHud = false },
+            modifier = Modifier.fillMaxSize(),
+        )
+        val introChromeAllowed = !showIntroHud && !locked && !pipMode && playbackError == null && !ended
+        val offerSkip = intro.window?.offersSkipAt(introPositionMs) == true && !showIntroSkipped
+        SkipIntroPill(
+            visible = introChromeAllowed && (offerSkip || showIntroSkipped),
+            label = if (showIntroSkipped) "Intro skipped" else "Skip intro",
+            actionLabel = if (showIntroSkipped) "Watch" else null,
+            onClick = {
+                val window = intro.window ?: return@SkipIntroPill
+                if (showIntroSkipped) {
+                    showIntroSkipped = false
+                    player.seekTo(window.startMs)
+                } else {
+                    player.seekTo(window.endMs)
+                    Analytics.log(context, Analytics.INTRO_SKIP, "source" to "button")
+                }
+                introPositionMs = player.currentPosition
+            },
+            modifier = Modifier.fillMaxSize(),
+        )
+
         // Buffering spinner — hidden once the first frame is ready or on error.
         if (isBuffering && playbackError == null && !pipMode) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1565,6 +1690,11 @@ fun PlayerScreen(
             onFavorite = { viewModel.toggleFavorite() },
             onPlayNext = { nextVideo?.let { playNext(it) } },
             onShare = { shareVideo() },
+            onIntro = {
+                markStartMs = intro.window?.startMs
+                markEndMs = intro.window?.endMs
+                showIntroHud = true
+            },
             modifier = Modifier.fillMaxSize(),
         )
     }

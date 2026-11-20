@@ -32,7 +32,7 @@ import com.devbytes.vixplayer.app.data.db.entity.PlaylistItem
         Favorite::class,
         ShowPreference::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 @TypeConverters(EqConverters::class)

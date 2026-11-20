@@ -65,6 +65,8 @@ data class PlayerOptionsValues(
     val canFavorite: Boolean,
     val hasNext: Boolean,
     val supportsPip: Boolean,
+    /** The marked intro ("0:42–1:52" / "Not set"); null hides the tile — not a show's episode. */
+    val introLabel: String? = null,
 )
 
 // Reference palette: bright white content over a frosted, translucent dark panel.
@@ -102,6 +104,7 @@ fun PlayerOptionsPanel(
     onFavorite: () -> Unit,
     onPlayNext: () -> Unit,
     onShare: () -> Unit,
+    onIntro: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val accent = MaterialTheme.colorScheme.primary
@@ -191,6 +194,9 @@ fun PlayerOptionsPanel(
                         Section("Playback Options", gap) {
                             Tile(R.drawable.ic_repeat, "Repeat Mode", values.repeatLabel, tileWidth, onClick = onRepeat)
                             Tile(R.drawable.ic_timer, "Sleep Timer", values.sleepLabel, tileWidth) { close(onDismiss, onSleepTimer) }
+                            if (values.introLabel != null) {
+                                Tile(R.drawable.ic_skip_next, "Skip Intro", values.introLabel, tileWidth) { close(onDismiss, onIntro) }
+                            }
                             Tile(R.drawable.ic_lock, "Lock Screen", tileWidth = tileWidth) { close(onDismiss, onLock) }
                             Tile(R.drawable.ic_background, "Background Play", if (values.backgroundOn) "On" else "Off", tileWidth, onClick = onBackgroundPlay)
                             Tile(R.drawable.ic_rotate, "Orientation", values.orientationLabel, tileWidth, onClick = onOrientation)

@@ -130,6 +130,15 @@ private val MIGRATION_5_6 = object : Migration(5, 6) {
 }
 
 /** Adds the per-show remembered audio/subtitle choice. Additive; DDL copied from Room's schemas/7.json. */
+// Series Mode phase 3a: a show's intro window and auto-skip choice. Additive.
+private val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `show_preference` ADD COLUMN `introStartMs` INTEGER")
+        db.execSQL("ALTER TABLE `show_preference` ADD COLUMN `introEndMs` INTEGER")
+        db.execSQL("ALTER TABLE `show_preference` ADD COLUMN `introAutoSkip` INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
 private val MIGRATION_6_7 = object : Migration(6, 7) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL(
@@ -152,7 +161,7 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, "vixplay.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
             .build()
 
     @Provides
