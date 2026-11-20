@@ -88,8 +88,13 @@ class SettingsRepository @Inject constructor(
         )
     }
 
+    /**
+     * "Turn on subtitles automatically". Off by default, which keeps Media3's own behaviour
+     * (only tracks a file marks as default or forced appear) — on shows a track whenever a
+     * video has one.
+     */
     val showSubtitlesByDefault: Flow<Boolean> = context.dataStore.data
-        .map { it[Keys.SHOW_SUBTITLES_DEFAULT] ?: true }
+        .map { it[Keys.SHOW_SUBTITLES_DEFAULT] ?: false }
 
     /**
      * Keep playing audio when the app goes to background. Defaults to **off**: this is a

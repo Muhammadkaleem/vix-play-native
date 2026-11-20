@@ -22,4 +22,12 @@ class SubtitleDefaultsViewModel @Inject constructor(
     fun setStyle(style: SubtitleStyle) {
         viewModelScope.launch { settingsRepository.setSubtitleStyle(style) }
     }
+
+    /** "Turn on subtitles automatically" — the player shows a track whenever a video has one. */
+    val autoSubtitles: StateFlow<Boolean> = settingsRepository.showSubtitlesByDefault
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    fun setAutoSubtitles(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setShowSubtitlesByDefault(enabled) }
+    }
 }

@@ -91,6 +91,7 @@ import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.data.repository.UpNext
 import com.devbytes.vixplayer.app.data.repository.VideoFile
 import com.devbytes.vixplayer.app.player.PlaybackService
+import com.devbytes.vixplayer.app.player.autoSubtitleId
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
@@ -779,6 +780,16 @@ fun PlayerScreen(
             .clearOverridesOfType(C.TRACK_TYPE_TEXT)
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
             .build()
+    }
+
+    // "Turn on subtitles automatically": once per file, as soon as its subtitle tracks are
+    // known, show one if none is showing. Once only, so "Off" in the sheet holds for the file.
+    val autoSubtitles by viewModel.autoSubtitles.collectAsState()
+    var autoSubtitlesApplied by remember(currentUri) { mutableStateOf(false) }
+    LaunchedEffect(currentUri, tracks, autoSubtitles) {
+        if (!autoSubtitles || autoSubtitlesApplied || subtitleTracks.isEmpty()) return@LaunchedEffect
+        autoSubtitlesApplied = true
+        tracks.autoSubtitleId()?.let(::selectSubtitle)
     }
 
     // Presentational audio track list, derived from the live tracks snapshot. Unlike

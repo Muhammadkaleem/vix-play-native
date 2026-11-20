@@ -50,7 +50,8 @@ private val Context.vaultStore: DataStore<Preferences> by preferencesDataStore("
  * **What this is not:** encryption. The PIN gates *access*; a PIN is only ever *verified*,
  * never read back, so it is stored as a salted PBKDF2 hash. Someone with the unlocked
  * device and ADB/root can still reach the files — per-item encryption is the PRD's P2.
- * The vault is also removed with the app on uninstall.
+ * The vault is removed with the app on uninstall unless the user keeps the app's data — the
+ * manifest's `hasFragileUserData` makes Android offer that choice (API 29+).
  */
 @Singleton
 class PrivateVault @Inject constructor(

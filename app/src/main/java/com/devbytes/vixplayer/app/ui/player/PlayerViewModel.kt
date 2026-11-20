@@ -123,6 +123,10 @@ class PlayerViewModel @Inject constructor(
     val autoplayNext: StateFlow<Boolean> = settingsRepository.autoplayNext
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    /** "Turn on subtitles automatically" (Settings › Subtitles). */
+    val autoSubtitles: StateFlow<Boolean> = settingsRepository.showSubtitlesByDefault
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     /** When autoplay is off, whether to show the end-of-video "Play next?" confirmation. */
     val askBeforePlayingNext: StateFlow<Boolean> = settingsRepository.askBeforePlayingNext
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
