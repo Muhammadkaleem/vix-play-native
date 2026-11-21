@@ -11,6 +11,7 @@ import com.devbytes.vixplayer.app.data.repository.ShowRepository
 import com.devbytes.vixplayer.app.data.repository.SubtitleStyle
 import com.devbytes.vixplayer.app.data.repository.UpNext
 import com.devbytes.vixplayer.app.data.repository.VideoFile
+import com.devbytes.vixplayer.app.player.CreditsSource
 import com.devbytes.vixplayer.app.player.CreditsWindow
 import com.devbytes.vixplayer.app.player.DetectedCredits
 import com.devbytes.vixplayer.app.player.DetectedIntro
@@ -23,6 +24,7 @@ import com.devbytes.vixplayer.app.player.RememberedTracks
 import com.devbytes.vixplayer.app.player.SubtitleChoice
 import com.devbytes.vixplayer.app.player.gesture.GestureBindings
 import com.devbytes.vixplayer.app.player.intro.IntroDetection
+import com.devbytes.vixplayer.app.player.resolveCredits
 import com.devbytes.vixplayer.app.player.resolveIntro
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
@@ -199,11 +201,38 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    /** Where the current episode's end credits start (Series Mode phase 4); null if none were found. */
-    fun loadCredits(durationMs: Long): CreditsWindow? {
+    /**
+     * The current episode's end credits (Series Mode phase 4) and where they came from: marked
+     * for this episode, found in its audio, or marked for the show. Null when there are none.
+     */
+    fun loadCredits(showKey: String, durationMs: Long): Pair<CreditsWindow, CreditsSource>? {
         val id = currentMediaStoreId ?: return null
-        val window = (playbackRepository.getDetectedCredits(id) as? DetectedCredits.Found)?.window ?: return null
-        return window.takeIf { durationMs <= 0 || it.startMs < durationMs }
+        val detected = (playbackRepository.getDetectedCredits(id) as? DetectedCredits.Found)?.window
+        return resolveCredits(playbackRepository.getCreditsOverride(id), detected, playbackRepository.getShowCredits(showKey), durationMs)
+    }
+
+    /**
+     * Saves a hand-marked credits start for the whole show — as time before the end, so it
+     * fits episodes of other lengths — or for this episode only. Saving for the show also
+     * drops this episode's own mark, so what was just marked is what applies here.
+     */
+    fun saveCredits(showKey: String, startMs: Long, durationMs: Long, episodeOnly: Boolean) {
+        val id = currentMediaStoreId
+        if (episodeOnly) {
+            id?.let { playbackRepository.saveCreditsOverride(it, startMs) }
+        } else if (durationMs > 0) {
+            playbackRepository.saveShowCredits(showKey, durationMs - startMs)
+            id?.let { playbackRepository.saveCreditsOverride(it, null) }
+        }
+    }
+
+    /** Removes the credits in use: this episode's mark, the show's, or what was found ("Not the credits"). */
+    fun removeCredits(showKey: String, source: CreditsSource) {
+        when (source) {
+            CreditsSource.EPISODE -> currentMediaStoreId?.let { playbackRepository.saveCreditsOverride(it, null) }
+            CreditsSource.SHOW -> playbackRepository.saveShowCredits(showKey, null)
+            CreditsSource.DETECTED -> currentMediaStoreId?.let { playbackRepository.saveDetectedCredits(it, DetectedCredits.Rejected) }
+        }
     }
 
     /**

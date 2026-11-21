@@ -47,6 +47,10 @@ android {
             "AD_TEST_DEVICE_IDS",
             "\"${localProps.getProperty("admob.testDeviceIds", "")}\"",
         )
+        // Debug builds only: `ump.debugGeography=eea` (or `us`) in local.properties makes Google's
+        // consent service treat this device as in the EEA (or a regulated US state), so those
+        // privacy messages can be checked from elsewhere.
+        buildConfigField("String", "UMP_DEBUG_GEOGRAPHY", "\"${localProps.getProperty("ump.debugGeography", "")}\"")
     }
 
     signingConfigs {

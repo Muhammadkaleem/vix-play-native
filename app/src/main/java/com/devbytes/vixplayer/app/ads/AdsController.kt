@@ -6,6 +6,7 @@ import com.devbytes.vixplayer.app.BuildConfig
 import com.devbytes.vixplayer.app.data.repository.ProRepository
 import com.google.android.gms.ads.MobileAds
 import com.google.android.gms.ads.RequestConfiguration
+import com.google.android.ump.ConsentDebugSettings
 import com.google.android.ump.ConsentInformation
 import com.google.android.ump.ConsentRequestParameters
 import com.google.android.ump.UserMessagingPlatform
@@ -89,7 +90,24 @@ class AdsController @Inject constructor(
      */
     fun ensureConsentAndInit(activity: Activity) {
         val consentInfo = UserMessagingPlatform.getConsentInformation(activity)
-        val params = ConsentRequestParameters.Builder().build()
+        val params = ConsentRequestParameters.Builder().apply {
+            // Opt-in, debug builds only: act as if in the EEA or a regulated US state, so those
+            // messages can be checked from elsewhere. Emulators are UMP test devices already;
+            // phones need their hash.
+            val geography = when (BuildConfig.UMP_DEBUG_GEOGRAPHY) {
+                "eea" -> ConsentDebugSettings.DebugGeography.DEBUG_GEOGRAPHY_EEA
+                "us" -> ConsentDebugSettings.DebugGeography.DEBUG_GEOGRAPHY_REGULATED_US_STATE
+                else -> null
+            }
+            if (BuildConfig.DEBUG && geography != null) {
+                setConsentDebugSettings(
+                    ConsentDebugSettings.Builder(activity)
+                        .setDebugGeography(geography)
+                        .apply { BuildConfig.AD_TEST_DEVICE_IDS.split(',').map { it.trim() }.filter { it.isNotEmpty() }.forEach(::addTestDeviceHashedId) }
+                        .build(),
+                )
+            }
+        }.build()
         consentInfo.requestConsentInfoUpdate(
             activity,
             params,

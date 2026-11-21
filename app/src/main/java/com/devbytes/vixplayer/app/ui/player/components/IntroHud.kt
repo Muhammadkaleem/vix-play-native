@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.devbytes.vixplayer.app.R
+import com.devbytes.vixplayer.app.player.CreditsSource
 import com.devbytes.vixplayer.app.player.IntroSource
 import com.devbytes.vixplayer.app.player.formatIntroTime
 import com.devbytes.vixplayer.app.ui.theme.AmoledBackground
@@ -123,6 +124,84 @@ fun IntroMarkHud(
                                 IntroSource.EPISODE -> "Remove for episode"
                                 IntroSource.DETECTED -> "Not the intro"
                                 IntroSource.SHOW -> "Remove"
+                            },
+                            onClick = onRemove,
+                        )
+                    }
+                    HudButton("Close", onClick = onClose)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Marks where an episode's end credits start, over the video like [IntroMarkHud] — for shows
+ * where detection found none, or found the wrong place. Saved for the whole show (as time
+ * before the end, so episodes of other lengths line up) or for this episode only.
+ */
+@Composable
+fun CreditsMarkHud(
+    visible: Boolean,
+    positionMs: Long,
+    startMs: Long?,
+    /** Why the mark can't be saved yet; null when it can. */
+    error: String?,
+    /** Where the credits currently in use came from; null when there are none. */
+    existing: CreditsSource?,
+    /** A scan of this season is under way. */
+    detecting: Boolean,
+    onSetStart: () -> Unit,
+    onSaveForShow: () -> Unit,
+    onSaveForEpisode: () -> Unit,
+    onRemove: () -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+        AnimatedVisibility(visible = visible, enter = fadeIn(), exit = fadeOut()) {
+            Column(
+                modifier = Modifier
+                    .navigationBarsPadding()
+                    .padding(start = 16.dp, end = 16.dp, bottom = 104.dp)
+                    .widthIn(max = 460.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(ScrimStrong)
+                    .padding(horizontal = 18.dp, vertical = 14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text("Mark end credits", style = MaterialTheme.typography.labelMedium, color = OnScrim.copy(alpha = 0.7f))
+                val origin = when (existing) {
+                    CreditsSource.DETECTED -> "Found automatically"
+                    CreditsSource.SHOW -> "Marked for this show"
+                    CreditsSource.EPISODE -> "Marked for this episode"
+                    null -> if (detecting) "Looking for the credits in this season…" else null
+                }
+                if (origin != null) {
+                    Text(origin, style = MaterialTheme.typography.labelSmall, color = DarkAccent)
+                }
+                Spacer(Modifier.height(10.dp))
+                MarkColumn("Credits start", startMs, "Set to ${formatIntroTime(positionMs)}", onSetStart)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    error ?: if (existing == CreditsSource.DETECTED) "Found in this episode's audio — set a new time to correct it"
+                    else "Episodes of this show will offer “Next episode” here",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = OnScrim.copy(alpha = 0.6f),
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    HudButton("Save for show", enabled = error == null, accent = true, onClick = onSaveForShow)
+                    HudButton("This episode only", enabled = error == null, onClick = onSaveForEpisode)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (existing != null) {
+                        HudButton(
+                            when (existing) {
+                                CreditsSource.EPISODE -> "Remove for episode"
+                                CreditsSource.DETECTED -> "Not the credits"
+                                CreditsSource.SHOW -> "Remove"
                             },
                             onClick = onRemove,
                         )

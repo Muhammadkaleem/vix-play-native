@@ -67,6 +67,8 @@ data class PlayerOptionsValues(
     val supportsPip: Boolean,
     /** The marked intro ("0:42–1:52" / "Not set"); null hides the tile — not a show's episode. */
     val introLabel: String? = null,
+    /** End credits value ("From 45:10", "Not set"); null hides the tile — only a show's episodes have one. */
+    val creditsLabel: String? = null,
 )
 
 // Reference palette: bright white content over a frosted, translucent dark panel.
@@ -105,6 +107,7 @@ fun PlayerOptionsPanel(
     onPlayNext: () -> Unit,
     onShare: () -> Unit,
     onIntro: () -> Unit = {},
+    onCredits: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val accent = MaterialTheme.colorScheme.primary
@@ -196,6 +199,9 @@ fun PlayerOptionsPanel(
                             Tile(R.drawable.ic_timer, "Sleep Timer", values.sleepLabel, tileWidth) { close(onDismiss, onSleepTimer) }
                             if (values.introLabel != null) {
                                 Tile(R.drawable.ic_skip_next, "Skip Intro", values.introLabel, tileWidth) { close(onDismiss, onIntro) }
+                            }
+                            if (values.creditsLabel != null) {
+                                Tile(R.drawable.ic_list, "End Credits", values.creditsLabel, tileWidth) { close(onDismiss, onCredits) }
                             }
                             Tile(R.drawable.ic_lock, "Lock Screen", tileWidth = tileWidth) { close(onDismiss, onLock) }
                             Tile(R.drawable.ic_background, "Background Play", if (values.backgroundOn) "On" else "Off", tileWidth, onClick = onBackgroundPlay)

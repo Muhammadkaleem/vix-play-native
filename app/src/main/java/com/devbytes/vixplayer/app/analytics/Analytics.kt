@@ -52,6 +52,7 @@ object Analytics {
     const val INTRO_SKIP = "intro_skip"
     /** scope: show / episode / removed. */
     const val INTRO_MARKED = "intro_marked"
+    const val CREDITS_MARKED = "credits_marked"
 
     // ── Pro (rewarded ad-free) offer ────────────────────────────────────────
     const val PRO_CARD_VIEWED = "pro_card_viewed"

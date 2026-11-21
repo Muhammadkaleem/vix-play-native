@@ -98,7 +98,9 @@ import com.devbytes.vixplayer.app.player.PlayerOwner
 import com.devbytes.vixplayer.app.player.label
 import com.devbytes.vixplayer.app.player.introMarkError
 import com.devbytes.vixplayer.app.player.CREDITS_COUNTDOWN_S
+import com.devbytes.vixplayer.app.player.CreditsSource
 import com.devbytes.vixplayer.app.player.CreditsWindow
+import com.devbytes.vixplayer.app.player.creditsMarkError
 import com.devbytes.vixplayer.app.player.offersNextEpisode
 import com.devbytes.vixplayer.app.player.IntroWindow
 import com.devbytes.vixplayer.app.player.IntroSettings
@@ -151,6 +153,7 @@ import com.devbytes.vixplayer.app.ui.player.components.SubtitleSheet
 import com.devbytes.vixplayer.app.ui.player.components.SubtitleStyleEditor
 import com.devbytes.vixplayer.app.ui.player.components.IntroMarkHud
 import com.devbytes.vixplayer.app.ui.player.components.NextEpisodePill
+import com.devbytes.vixplayer.app.ui.player.components.CreditsMarkHud
 import com.devbytes.vixplayer.app.ui.player.components.SkipIntroPill
 import com.devbytes.vixplayer.app.ui.player.components.SubtitleSyncHud
 import com.devbytes.vixplayer.app.ui.player.components.applySubtitleStyle
@@ -327,6 +330,10 @@ fun PlayerScreen(
     // End credits (phase 4): where they start in this episode, whether the viewer chose to
     // watch them (once per opened file), and the autoplay countdown while it runs.
     var credits by remember { mutableStateOf<CreditsWindow?>(null) }
+    var creditsSource by remember { mutableStateOf<CreditsSource?>(null) }
+    // The credits marking card and its unsaved mark.
+    var showCreditsHud by remember { mutableStateOf(false) }
+    var markCreditsStartMs by remember { mutableStateOf<Long?>(null) }
     var watchingCreditsUri by remember { mutableStateOf<String?>(null) }
     var creditsCountdown by remember { mutableStateOf<Int?>(null) }
     var pendingOffsetKey by remember { mutableIntStateOf(0) }
@@ -430,7 +437,9 @@ fun PlayerScreen(
     suspend fun reloadIntro() {
         val key = upNext.showKey.takeIf { upNextUri == currentUri }
         intro = if (key == null) IntroSettings.NONE else viewModel.loadIntro(key, player.duration)
-        credits = if (key == null) null else viewModel.loadCredits(player.duration)
+        val found = key?.let { viewModel.loadCredits(it, player.duration) }
+        credits = found?.first
+        creditsSource = found?.second
     }
     fun saveIntroMarks(episodeOnly: Boolean) {
         val key = upNext.showKey ?: return
@@ -467,8 +476,8 @@ fun PlayerScreen(
         }
     }
     // The playhead, while there's an intro or credits to judge it against, or the marking panel is open.
-    LaunchedEffect(intro.window, showIntroHud, credits) {
-        while (intro.window != null || showIntroHud || credits != null) {
+    LaunchedEffect(intro.window, showIntroHud, credits, showCreditsHud) {
+        while (intro.window != null || showIntroHud || credits != null || showCreditsHud) {
             if (ownsPlayer()) introPositionMs = player.currentPosition
             delay(250)
         }
@@ -697,7 +706,7 @@ fun PlayerScreen(
     var speedPillOpen by remember { mutableStateOf(false) }
     var seekBarDragging by remember { mutableStateOf(false) }
     val sheetOpen = currentSheet != null
-    val controlsHeldOpen = sheetOpen || optionsPanelOpen || speedPillOpen || seekBarDragging || showIntroHud
+    val controlsHeldOpen = sheetOpen || optionsPanelOpen || speedPillOpen || seekBarDragging || showIntroHud || showCreditsHud
 
     // Centralized overlay coordination: the user only sees the control they're using. Any of
     // these "exclusive" surfaces suppresses the standard HUD controls and the resume chip, so
@@ -753,6 +762,8 @@ fun PlayerScreen(
         showIntroHud = false
         showIntroSkipped = false
         credits = null
+        creditsSource = null
+        showCreditsHud = false
         creditsCountdown = null
         viewModel.prepareFor(newUri, subtitleOffsetMs, owner = playerOwner)
         showResumeChip = false
@@ -1129,7 +1140,7 @@ fun PlayerScreen(
         durationMs = player.duration,
         hasNext = nextVideo != null && upNext.showKey != null,
         watchingCredits = watchingCreditsUri == currentUri,
-    ) && !showIntroHud && !locked && !pipMode && playbackError == null && !ended
+    ) && !showIntroHud && !showCreditsHud && !locked && !pipMode && playbackError == null && !ended
     fun nextFromCredits(result: String) {
         val next = nextVideo ?: return
         // Hide the pill and stop the countdown now, so a second tap during the save can't start it twice.
@@ -1213,6 +1224,9 @@ fun PlayerScreen(
         supportsPip = supportsPip,
         introLabel = if (upNext.showKey != null) {
             intro.window?.label() ?: if (introDetecting) "Finding…" else "Not set"
+        } else null,
+        creditsLabel = if (upNext.showKey != null) {
+            credits?.label() ?: if (introDetecting) "Finding…" else "Not set"
         } else null,
     )
 
@@ -1563,6 +1577,40 @@ fun PlayerScreen(
             onClose = { showIntroHud = false },
             modifier = Modifier.fillMaxSize(),
         )
+        // End credits: the marking card, for shows where detection found none or the wrong place.
+        fun saveCreditsMark(episodeOnly: Boolean) {
+            val key = showKey ?: return
+            val start = markCreditsStartMs ?: return
+            if (creditsMarkError(start, player.duration) != null) return
+            viewModel.saveCredits(key, start, player.duration, episodeOnly)
+            Analytics.log(context, Analytics.CREDITS_MARKED, "scope" to if (episodeOnly) "episode" else "show")
+            scope.launch { reloadIntro() }
+            showCreditsHud = false
+            // Marked while sitting in them — don't start counting down to the next episode now.
+            watchingCreditsUri = currentUri
+        }
+        CreditsMarkHud(
+            visible = showCreditsHud && showKey != null && !locked && !pipMode && playbackError == null,
+            positionMs = introPositionMs,
+            startMs = markCreditsStartMs,
+            error = creditsMarkError(markCreditsStartMs, player.duration),
+            existing = creditsSource,
+            detecting = introDetecting,
+            onSetStart = { markCreditsStartMs = player.currentPosition },
+            onSaveForShow = { saveCreditsMark(episodeOnly = false) },
+            onSaveForEpisode = { saveCreditsMark(episodeOnly = true) },
+            onRemove = {
+                val source = creditsSource ?: return@CreditsMarkHud
+                showKey?.let { viewModel.removeCredits(it, source) }
+                Analytics.log(context, Analytics.CREDITS_MARKED, "scope" to "removed")
+                scope.launch {
+                    reloadIntro()
+                    markCreditsStartMs = credits?.startMs
+                }
+            },
+            onClose = { showCreditsHud = false },
+            modifier = Modifier.fillMaxSize(),
+        )
         val introChromeAllowed = !showIntroHud && !locked && !pipMode && playbackError == null && !ended
         val offerSkip = intro.window?.offersSkipAt(introPositionMs) == true && !showIntroSkipped
         SkipIntroPill(
@@ -1775,6 +1823,10 @@ fun PlayerScreen(
                 markStartMs = intro.window?.startMs
                 markEndMs = intro.window?.endMs
                 showIntroHud = true
+            },
+            onCredits = {
+                markCreditsStartMs = credits?.startMs
+                showCreditsHud = true
             },
             modifier = Modifier.fillMaxSize(),
         )

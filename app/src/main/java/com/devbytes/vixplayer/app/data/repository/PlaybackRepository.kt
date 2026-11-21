@@ -88,19 +88,42 @@ class PlaybackRepository @Inject constructor(
         when (val value = mmkv.decodeString("$CREDITS_KEY$mediaStoreId")) {
             null -> null
             "none" -> DetectedCredits.None
+            "rejected" -> DetectedCredits.Rejected
             else -> value.split(',').mapNotNull { it.toLongOrNull() }.takeIf { it.size == 2 }
                 ?.let { DetectedCredits.Found(CreditsWindow(it[0], it[1])) }
         }
 
+    /** Saves a detection result, but never over the user's rejection of an earlier one. */
     fun saveDetectedCredits(mediaStoreId: Long, result: DetectedCredits) {
+        if (result !is DetectedCredits.Rejected && getDetectedCredits(mediaStoreId) == DetectedCredits.Rejected) return
         mmkv.encode(
             "$CREDITS_KEY$mediaStoreId",
             when (result) {
                 is DetectedCredits.Found -> "${result.window.startMs},${result.window.endMs}"
                 DetectedCredits.None -> "none"
+                DetectedCredits.Rejected -> "rejected"
             },
         )
     }
+
+    /** Where one episode's credits start, marked by hand for it alone; null to clear. */
+    fun saveCreditsOverride(mediaStoreId: Long, startMs: Long?) {
+        if (startMs == null) mmkv.remove("credits_start_$mediaStoreId") else mmkv.encode("credits_start_$mediaStoreId", startMs)
+    }
+
+    fun getCreditsOverride(mediaStoreId: Long): Long? =
+        if (mmkv.containsKey("credits_start_$mediaStoreId")) mmkv.decodeLong("credits_start_$mediaStoreId", 0L) else null
+
+    /**
+     * A show's credits, marked by hand, as time before the end of each episode — per show
+     * like the season scan markers, so MMKV rather than a Room column. Null to clear.
+     */
+    fun saveShowCredits(showKey: String, fromEndMs: Long?) {
+        if (fromEndMs == null) mmkv.remove("creditsshow_$showKey") else mmkv.encode("creditsshow_$showKey", fromEndMs)
+    }
+
+    fun getShowCredits(showKey: String): Long? =
+        if (mmkv.containsKey("creditsshow_$showKey")) mmkv.decodeLong("creditsshow_$showKey", 0L) else null
 
     /** Like [scannedSeason], for the credits — kept apart so seasons scanned for intros before get a credits-only pass. */
     fun creditsScannedSeason(showKey: String, season: Int): String? = mmkv.decodeString("$CREDITS_SCANNED_KEY$showKey|$season")
