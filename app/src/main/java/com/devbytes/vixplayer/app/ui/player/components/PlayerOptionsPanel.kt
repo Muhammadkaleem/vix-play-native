@@ -207,7 +207,8 @@ fun PlayerOptionsPanel(
                             Tile(R.drawable.ic_info, "Video Info", tileWidth = tileWidth) { close(onDismiss, onVideoInfo) }
                             Tile(R.drawable.ic_equalizer, "Equalizer", tileWidth = tileWidth, iconTint = accent) { close(onDismiss, onEqualizer) }
                             if (values.supportsPip) {
-                                Tile(R.drawable.ic_pip, "Picture-in-Picture", tileWidth = tileWidth) { close(onDismiss, onPip) }
+                                // Spaces, not hyphens: the line breaker split "Picture-in-Pictu/re" mid-word in a narrow tile.
+                                Tile(R.drawable.ic_pip, "Picture in Picture", tileWidth = tileWidth) { close(onDismiss, onPip) }
                             }
                         }
 

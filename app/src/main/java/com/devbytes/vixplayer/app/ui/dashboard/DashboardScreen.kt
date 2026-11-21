@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -57,6 +58,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.min
 import androidx.compose.ui.unit.sp
 import com.devbytes.vixplayer.app.ui.library.VideoWithPosition
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -204,14 +206,18 @@ fun DashboardScreen(
             if (state.shows.isNotEmpty()) {
                 item { SectionHeader("Your Shows", onViewAll = null, iconRes = R.drawable.ic_playlist) }
                 item {
-                    androidx.compose.foundation.lazy.LazyRow(
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        items(state.shows.size) { i ->
-                            val entry = state.shows[i]
-                            // 80 % of the row: one show fills the shelf and the next one peeks in.
-                            ShowPosterCard(entry, Modifier.fillParentMaxWidth(0.8f)) { onOpenShow(entry.show.key) }
+                    // 80 % of the row on a phone — one show fills the shelf, the next peeks in —
+                    // capped on tablets, where 80 % of the screen would be a giant card.
+                    BoxWithConstraints {
+                        val cardWidth = min(maxWidth * 0.8f, 440.dp)
+                        androidx.compose.foundation.lazy.LazyRow(
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            items(state.shows.size) { i ->
+                                val entry = state.shows[i]
+                                ShowPosterCard(entry, Modifier.width(cardWidth)) { onOpenShow(entry.show.key) }
+                            }
                         }
                     }
                 }
