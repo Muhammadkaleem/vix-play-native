@@ -11,6 +11,7 @@ import com.devbytes.vixplayer.app.data.repository.ShowRepository
 import com.devbytes.vixplayer.app.data.repository.SubtitleStyle
 import com.devbytes.vixplayer.app.data.repository.UpNext
 import com.devbytes.vixplayer.app.data.repository.VideoFile
+import com.devbytes.vixplayer.app.player.DetectedIntro
 import com.devbytes.vixplayer.app.player.IntroSettings
 import com.devbytes.vixplayer.app.player.IntroSource
 import com.devbytes.vixplayer.app.player.IntroWindow
@@ -19,6 +20,7 @@ import com.devbytes.vixplayer.app.player.PlayerOwner
 import com.devbytes.vixplayer.app.player.RememberedTracks
 import com.devbytes.vixplayer.app.player.SubtitleChoice
 import com.devbytes.vixplayer.app.player.gesture.GestureBindings
+import com.devbytes.vixplayer.app.player.intro.IntroDetection
 import com.devbytes.vixplayer.app.player.resolveIntro
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
@@ -39,6 +41,7 @@ class PlayerViewModel @Inject constructor(
     private val favoritesRepository: com.devbytes.vixplayer.app.data.repository.FavoritesRepository,
     private val playerController: PlayerController,
     private val showRepository: ShowRepository,
+    private val introDetection: IntroDetection,
 ) : ViewModel() {
 
     private var currentMediaStoreId: Long? = null
@@ -161,7 +164,8 @@ class PlayerViewModel @Inject constructor(
         val end = preference?.introEndMs
         val showWindow = if (start != null && end != null) IntroWindow(start, end) else null
         val episodeWindow = currentMediaStoreId?.let { playbackRepository.getIntroOverride(it) }
-        val resolved = resolveIntro(episodeWindow, showWindow, durationMs)
+        val detected = currentMediaStoreId?.let { playbackRepository.getDetectedIntro(it) as? DetectedIntro.Found }?.window
+        val resolved = resolveIntro(episodeWindow, showWindow, durationMs, detected)
         return IntroSettings(resolved?.first, resolved?.second, autoSkip = preference?.introAutoSkip == true)
     }
 
@@ -187,9 +191,27 @@ class PlayerViewModel @Inject constructor(
             when (source) {
                 IntroSource.EPISODE -> currentMediaStoreId?.let { playbackRepository.saveIntroOverride(it, null) }
                 IntroSource.SHOW -> showRepository.rememberIntro(showKey, null)
+                // "That's not the intro" — never offered again for this file, even after a rescan.
+                IntroSource.DETECTED -> currentMediaStoreId?.let { playbackRepository.saveDetectedIntro(it, DetectedIntro.Rejected) }
             }
         }
     }
+
+    /** Scans this episode's season for its intro in the background, unless already done. */
+    suspend fun startIntroDetection(showKey: String) {
+        val id = currentMediaStoreId ?: return
+        runCatching {
+            val show = showRepository.show(showKey)?.show ?: return
+            val season = show.episodes.firstOrNull { it.file.id == id }?.info?.season ?: return
+            introDetection.ensureScanned(showKey, season, show.episodes.filter { it.info.season == season }.map { it.file.id }, id)
+        }
+    }
+
+    /** True while a scan of [showKey] is queued or running. */
+    fun introDetecting(showKey: String) = introDetection.running(showKey)
+
+    /** Ticks when the episode being watched has its scan result, ahead of the rest of the season. */
+    fun introEpisodeReady(showKey: String) = introDetection.episodeReady(showKey)
 
     suspend fun setIntroAutoSkip(showKey: String, on: Boolean) {
         runCatching { showRepository.setIntroAutoSkip(showKey, on) }

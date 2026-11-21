@@ -26,7 +26,16 @@ data class IntroWindow(val startMs: Long, val endMs: Long) {
 }
 
 /** Where the window in use came from — shown in the marking panel. */
-enum class IntroSource { SHOW, EPISODE }
+enum class IntroSource { SHOW, EPISODE, DETECTED }
+
+/** What automatic detection (phase 3b) concluded for one file. */
+sealed interface DetectedIntro {
+    data class Found(val window: IntroWindow) : DetectedIntro
+    /** Scanned; nothing it shares with the other episodes looks like an intro. */
+    data object None : DetectedIntro
+    /** The user removed what was found — never offered again for this file. */
+    data object Rejected : DetectedIntro
+}
 
 /** What the player knows about the current episode's intro. */
 data class IntroSettings(
@@ -41,12 +50,20 @@ data class IntroSettings(
 }
 
 /**
- * The window to use for one episode: its own override first, else the show's — and only
- * if it fits inside the episode ([durationMs] ≤ 0 means not known yet, so don't judge).
+ * The window to use for one episode: one marked for it, else one detected in it, else the
+ * show's mark — and only if it fits inside the episode ([durationMs] ≤ 0 means not known yet,
+ * so don't judge). Detection beats the show-wide mark because it's found in this very file,
+ * so a longer cold open moves it; the show's fixed offsets are the fallback when it finds none.
  */
-fun resolveIntro(episode: IntroWindow?, show: IntroWindow?, durationMs: Long): Pair<IntroWindow, IntroSource>? {
+fun resolveIntro(
+    episode: IntroWindow?,
+    show: IntroWindow?,
+    durationMs: Long,
+    detected: IntroWindow? = null,
+): Pair<IntroWindow, IntroSource>? {
     val (window, source) = when {
         episode != null -> episode to IntroSource.EPISODE
+        detected != null -> detected to IntroSource.DETECTED
         show != null -> show to IntroSource.SHOW
         else -> return null
     }

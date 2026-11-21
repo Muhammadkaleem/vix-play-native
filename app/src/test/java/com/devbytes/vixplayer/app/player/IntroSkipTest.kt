@@ -25,6 +25,12 @@ class IntroSkipTest {
     @Test fun otherwiseTheShowsIntroApplies() =
         assertEquals(intro to IntroSource.SHOW, resolveIntro(null, intro, durationMs = 3_000_000))
 
+    @Test fun aDetectedIntroBeatsTheShowsMarkButNotTheEpisodes() {
+        val detected = IntroWindow(startMs = 95_000, endMs = 150_000)
+        assertEquals(detected to IntroSource.DETECTED, resolveIntro(null, intro, 3_000_000, detected))
+        assertEquals(episode to IntroSource.EPISODE, resolveIntro(episode, intro, 3_000_000, detected))
+    }
+
     @Test fun noIntroMarkedMeansNone() = assertNull(resolveIntro(null, null, durationMs = 3_000_000))
 
     @Test fun anIntroPastTheEpisodesEndIsDropped() =

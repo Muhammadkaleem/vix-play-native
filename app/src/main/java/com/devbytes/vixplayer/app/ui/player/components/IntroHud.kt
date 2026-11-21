@@ -56,6 +56,8 @@ fun IntroMarkHud(
     error: String?,
     /** Where the intro currently in use came from; null when none is marked. */
     existing: IntroSource?,
+    /** A scan of this season for its intro is under way. */
+    detecting: Boolean,
     autoSkip: Boolean,
     onSetStart: () -> Unit,
     onSetEnd: () -> Unit,
@@ -79,6 +81,15 @@ fun IntroMarkHud(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text("Mark intro", style = MaterialTheme.typography.labelMedium, color = OnScrim.copy(alpha = 0.7f))
+                val origin = when (existing) {
+                    IntroSource.DETECTED -> "Found automatically"
+                    IntroSource.SHOW -> "Marked for this show"
+                    IntroSource.EPISODE -> "Marked for this episode"
+                    null -> if (detecting) "Looking for the intro in this season…" else null
+                }
+                if (origin != null) {
+                    Text(origin, style = MaterialTheme.typography.labelSmall, color = DarkAccent)
+                }
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     MarkColumn("Starts", startMs, "Set to ${formatIntroTime(positionMs)}", onSetStart)
@@ -86,7 +97,8 @@ fun IntroMarkHud(
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    error ?: "Episodes of this show will offer “Skip intro” here",
+                    error ?: if (existing == IntroSource.DETECTED) "Found in this episode's audio — set new times to correct it"
+                    else "Episodes of this show will offer “Skip intro” here",
                     style = MaterialTheme.typography.labelSmall,
                     color = OnScrim.copy(alpha = 0.6f),
                     textAlign = TextAlign.Center,
@@ -99,7 +111,14 @@ fun IntroMarkHud(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     HudButton(if (autoSkip) "Auto-skip: On" else "Auto-skip: Off", onClick = onToggleAutoSkip)
                     if (existing != null) {
-                        HudButton(if (existing == IntroSource.EPISODE) "Remove for episode" else "Remove", onClick = onRemove)
+                        HudButton(
+                            when (existing) {
+                                IntroSource.EPISODE -> "Remove for episode"
+                                IntroSource.DETECTED -> "Not the intro"
+                                IntroSource.SHOW -> "Remove"
+                            },
+                            onClick = onRemove,
+                        )
                     }
                     HudButton("Close", onClick = onClose)
                 }

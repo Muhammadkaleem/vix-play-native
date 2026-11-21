@@ -155,6 +155,7 @@ import com.devbytes.vixplayer.app.ui.theme.AmoledBackground
 import com.devbytes.vixplayer.app.ui.theme.OnScrim
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -317,6 +318,8 @@ fun PlayerScreen(
     // Auto-skip fires once per opened file, so seeking back to watch the intro sticks.
     var autoSkippedUri by remember { mutableStateOf<String?>(null) }
     var showIntroSkipped by remember { mutableStateOf(false) }
+    // A background scan of this season for its intro is queued or running (phase 3b).
+    var introDetecting by remember { mutableStateOf(false) }
     var pendingOffsetKey by remember { mutableIntStateOf(0) }
     LaunchedEffect(pendingOffsetKey) {
         if (pendingOffsetKey > 0) {
@@ -437,6 +440,20 @@ fun PlayerScreen(
         if (upNextUri != currentUri) return@LaunchedEffect
         withTimeoutOrNull(5_000) { while (player.duration <= 0) delay(200) }
         reloadIntro()
+        upNext.showKey?.let { viewModel.startIntroDetection(it) }
+    }
+    // As soon as this episode's result is in (before the rest of the season), pick it up.
+    LaunchedEffect(upNext.showKey, upNextUri == currentUri) {
+        val key = upNext.showKey.takeIf { upNextUri == currentUri } ?: return@LaunchedEffect
+        viewModel.introEpisodeReady(key).drop(1).collect { reloadIntro() }
+    }
+    // When a scan finishes, pick up what it found for this episode.
+    LaunchedEffect(upNext.showKey, upNextUri == currentUri) {
+        val key = upNext.showKey.takeIf { upNextUri == currentUri } ?: return@LaunchedEffect
+        viewModel.introDetecting(key).collect { running ->
+            if (introDetecting && !running) reloadIntro()
+            introDetecting = running
+        }
     }
     // The playhead, while there's an intro to judge it against or the marking panel is open.
     LaunchedEffect(intro.window, showIntroHud) {
@@ -1145,7 +1162,9 @@ fun PlayerScreen(
         canFavorite = canFavorite,
         hasNext = nextVideo != null,
         supportsPip = supportsPip,
-        introLabel = if (upNext.showKey != null) intro.window?.label() ?: "Not set" else null,
+        introLabel = if (upNext.showKey != null) {
+            intro.window?.label() ?: if (introDetecting) "Finding…" else "Not set"
+        } else null,
     )
 
     // Screenshot — clean-frame PixelCopy off the video SurfaceView (no chrome/subs),
@@ -1470,6 +1489,7 @@ fun PlayerScreen(
             endMs = markEndMs,
             error = introMarkError(markStartMs, markEndMs, player.duration),
             existing = intro.source,
+            detecting = introDetecting,
             autoSkip = intro.autoSkip,
             onSetStart = { markStartMs = player.currentPosition },
             onSetEnd = { markEndMs = player.currentPosition },

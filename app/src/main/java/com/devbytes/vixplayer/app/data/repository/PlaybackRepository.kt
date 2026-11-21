@@ -2,6 +2,7 @@ package com.devbytes.vixplayer.app.data.repository
 
 import com.devbytes.vixplayer.app.data.db.dao.PlaybackPositionDao
 import com.devbytes.vixplayer.app.data.db.entity.PlaybackPosition
+import com.devbytes.vixplayer.app.player.DetectedIntro
 import com.devbytes.vixplayer.app.player.IntroWindow
 import com.tencent.mmkv.MMKV
 import javax.inject.Inject
@@ -50,6 +51,36 @@ class PlaybackRepository @Inject constructor(
         return IntroWindow(mmkv.decodeLong("intro_start_$mediaStoreId", 0L), mmkv.decodeLong("intro_end_$mediaStoreId", 0L))
     }
 
+    /** What intro detection found in this file; null = not scanned yet. */
+    fun getDetectedIntro(mediaStoreId: Long): DetectedIntro? =
+        when (val value = mmkv.decodeString("$DETECTED_KEY$mediaStoreId")) {
+            null -> null
+            "none" -> DetectedIntro.None
+            "rejected" -> DetectedIntro.Rejected
+            else -> value.split(',').mapNotNull { it.toLongOrNull() }.takeIf { it.size == 2 }
+                ?.let { DetectedIntro.Found(IntroWindow(it[0], it[1])) }
+        }
+
+    /** Saves a detection result, but never over the user's rejection of an earlier one. */
+    fun saveDetectedIntro(mediaStoreId: Long, result: DetectedIntro) {
+        if (result !is DetectedIntro.Rejected && getDetectedIntro(mediaStoreId) == DetectedIntro.Rejected) return
+        mmkv.encode(
+            "$DETECTED_KEY$mediaStoreId",
+            when (result) {
+                is DetectedIntro.Found -> "${result.window.startMs},${result.window.endMs}"
+                DetectedIntro.None -> "none"
+                DetectedIntro.Rejected -> "rejected"
+            },
+        )
+    }
+
+    /** The episodes a show's season was last scanned with — a new one means scan again. */
+    fun scannedSeason(showKey: String, season: Int): String? = mmkv.decodeString("$SCANNED_KEY$showKey|$season")
+
+    fun markSeasonScanned(showKey: String, season: Int, episodes: String) {
+        mmkv.encode("$SCANNED_KEY$showKey|$season", episodes)
+    }
+
     suspend fun persistPosition(mediaStoreId: Long, positionMs: Long) {
         dao.upsert(PlaybackPosition(mediaStoreId, positionMs, System.currentTimeMillis()))
     }
@@ -85,5 +116,11 @@ class PlaybackRepository @Inject constructor(
     suspend fun clearAll() {
         dao.getAll().forEach { mmkv.remove("pos_${it.mediaStoreId}") }
         dao.clearAll()
+    }
+
+    private companion object {
+        /** Versioned, so a better detector can rescan everything by bumping it. */
+        const val DETECTED_KEY = "introauto_v2_"
+        const val SCANNED_KEY = "introscan_v2_"
     }
 }
