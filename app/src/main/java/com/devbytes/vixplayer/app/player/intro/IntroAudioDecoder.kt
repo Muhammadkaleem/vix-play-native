@@ -22,7 +22,15 @@ object IntroAudioDecoder {
     private const val TIMEOUT_US = 2_000L
 
     /** Fingerprints the first [limitMs] of [uri]; [keepGoing] is polled so the job can stop. */
-    fun fingerprint(context: Context, uri: Uri, limitMs: Long, keepGoing: () -> Boolean): IntArray? {
+    fun fingerprint(context: Context, uri: Uri, limitMs: Long, keepGoing: () -> Boolean): IntArray? =
+        fingerprintSpan(context, uri, fromMs = 0, toMs = limitMs, keepGoing)?.codes
+
+    /**
+     * Fingerprints [uri] from [fromMs] to [toMs] — an episode's ending, for its credits. The
+     * codes start where the seek actually landed ([AudioPrint.startMs]): some containers seek
+     * to an earlier cluster, and the credits' position is worked out from it.
+     */
+    fun fingerprintSpan(context: Context, uri: Uri, fromMs: Long, toMs: Long, keepGoing: () -> Boolean): AudioPrint? {
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
         try {
@@ -31,6 +39,9 @@ object IntroAudioDecoder {
                 extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
             } ?: return null
             extractor.selectTrack(track)
+            if (fromMs > 0) extractor.seekTo(fromMs * 1000, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
+            val startMs = extractor.sampleTime.takeIf { it >= 0 }?.div(1000) ?: return null
+            val limitMs = toMs
             val format = extractor.getTrackFormat(track)
             val mime = format.getString(MediaFormat.KEY_MIME) ?: return null
             // FFmpeg in-process first (AAC, MP3, Opus, FLAC, …): a few seconds where MediaCodec,
@@ -50,13 +61,13 @@ object IntroAudioDecoder {
                     }
                     ds.feed(mono, frames, fingerprinter)
                 }
-                return if (done) fingerprinter.codes() else null
+                return if (done) AudioPrint(fingerprinter.codes(), startMs) else null
             }
             codec = MediaCodec.createDecoderByType(mime).apply {
                 configure(format, null, null, 0)
                 start()
             }
-            return decode(extractor, codec, format, limitMs * 1000, keepGoing)
+            return decode(extractor, codec, format, limitMs * 1000, keepGoing)?.let { AudioPrint(it, startMs) }
         } catch (e: Exception) {
             Log.i(TAG, "can't decode $uri: ${e.message}")
             return null
@@ -140,6 +151,9 @@ object IntroAudioDecoder {
         return fingerprinter.codes()
     }
 }
+
+/** Fingerprint codes of a stretch of audio; code 0 covers the sound at [startMs] into the file. */
+class AudioPrint(val codes: IntArray, val startMs: Long)
 
 /**
  * Brings mono audio down to [AudioFingerprinter.SAMPLE_RATE] by averaging each output

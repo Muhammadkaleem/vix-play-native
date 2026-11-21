@@ -7,6 +7,7 @@ import com.devbytes.vixplayer.app.BuildConfig
 import com.devbytes.vixplayer.app.data.repository.PlaybackRepository
 import com.devbytes.vixplayer.app.data.repository.ShowRepository
 import com.devbytes.vixplayer.app.data.series.ShowEpisode
+import com.devbytes.vixplayer.app.player.DetectedCredits
 import com.devbytes.vixplayer.app.player.DetectedIntro
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -28,10 +29,12 @@ import javax.inject.Singleton
 import kotlin.coroutines.coroutineContext
 
 /**
- * Finds the intro in every episode of one season of a show (Series Mode phase 3b): decodes
- * each episode's opening, fingerprints it, and asks [IntroMatcher] what it shares with its
- * neighbours. Results land per file in [PlaybackRepository]; the season is then marked as
- * scanned with its episode list, so a newly added episode triggers a fresh scan.
+ * Finds the intro and the end credits in every episode of one season of a show (Series Mode
+ * phases 3b and 4): decodes each episode's opening and ending, fingerprints them, and asks
+ * [IntroMatcher] what they share with their neighbours. Results land per file in
+ * [PlaybackRepository]; the season is then marked as scanned with its episode list — intros
+ * and credits separately — so a newly added episode triggers a fresh scan, and a season
+ * scanned for intros before credits existed gets a credits-only pass.
  *
  * Runs in the app's own process, started when an episode opens — not a WorkManager job: a
  * deferred job can wait minutes on some phones, and an expedited one needs quotas and (below
@@ -49,7 +52,8 @@ class IntroDetection @Inject constructor(
 
     /** Scans [season] of [showKey] unless it was already scanned with these [episodeIds]. */
     fun ensureScanned(showKey: String, season: Int, episodeIds: List<Long>, currentId: Long?) {
-        if (playback.scannedSeason(showKey, season) == episodeIds.sorted().joinToString(",")) return
+        val signature = episodeIds.sorted().joinToString(",")
+        if (playback.scannedSeason(showKey, season) == signature && playback.creditsScannedSeason(showKey, season) == signature) return
         // One scan per show at a time; another season is picked up the next time one of its episodes opens.
         var started = false
         scanning.update { if (showKey in it) it else { started = true; it + showKey } }
@@ -78,7 +82,9 @@ class IntroDetection @Inject constructor(
         val inSeason = entry.show.episodes.filter { it.info.season == season }
         if (inSeason.isEmpty()) return@coroutineScope
         val signature = signature(inSeason)
-        if (playback.scannedSeason(showKey, season) == signature) return@coroutineScope
+        val needIntros = playback.scannedSeason(showKey, season) != signature
+        val needCredits = playback.creditsScannedSeason(showKey, season) != signature
+        if (!needIntros && !needCredits) return@coroutineScope
 
         // A season of one is compared with the show's other episodes — themes rarely change.
         val references = if (inSeason.size >= 2) emptyList()
@@ -87,7 +93,8 @@ class IntroDetection @Inject constructor(
         val episodes = targets + references
         val started = SystemClock.elapsedRealtime()
         val job = coroutineContext[Job]
-        val prints = arrayOfNulls<IntArray>(episodes.size)
+        val openings = arrayOfNulls<IntArray>(episodes.size)
+        val endings = arrayOfNulls<AudioPrint>(episodes.size)
         val attempted = BooleanArray(episodes.size)
         // A few episodes decode side by side: ~6 s each with FFmpeg, and the MediaCodec
         // fallback (AC-3) is mostly waiting on the system's codec process anyway.
@@ -100,28 +107,54 @@ class IntroDetection @Inject constructor(
                     if (job?.isActive == false) return@withPermit
                     val episode = episodes[i]
                     val uri = entry.videoOf(episode)?.uri ?: return@withPermit
-                    val limitMs = minOf(SCAN_MS, episode.file.durationMs / 2).takeIf { it > 0 } ?: SCAN_MS
+                    val durationMs = episode.file.durationMs
+                    val keepGoing = { job?.isActive != false }
                     val t0 = SystemClock.elapsedRealtime()
-                    prints[i] = IntroAudioDecoder.fingerprint(context, uri, limitMs) { job?.isActive != false }
-                    Log.i(TAG, "${episode.info.code}: ${prints[i]?.size ?: "no audio"} codes in ${SystemClock.elapsedRealtime() - t0} ms")
-                    if (BuildConfig.DEBUG) prints[i]?.let { dumpForTuning(episode, it) }
+                    if (needIntros) {
+                        val limitMs = minOf(OPENING_MS, durationMs / 2).takeIf { it > 0 } ?: OPENING_MS
+                        openings[i] = IntroAudioDecoder.fingerprint(context, uri, limitMs, keepGoing)
+                        if (BuildConfig.DEBUG) openings[i]?.let { dumpForTuning(episode, "", it) }
+                    }
+                    // The ending — never more than the second half, so short episodes don't overlap the opening scan.
+                    if (needCredits && durationMs > 0) {
+                        val fromMs = maxOf(durationMs - ENDING_MS, durationMs / 2)
+                        endings[i] = IntroAudioDecoder.fingerprintSpan(context, uri, fromMs, Long.MAX_VALUE / 1000, keepGoing)
+                        if (BuildConfig.DEBUG) endings[i]?.let { dumpForTuning(episode, "_end", it.codes) }
+                    }
+                    Log.i(TAG, "${episode.info.code}: opening ${openings[i]?.size ?: "-"} / ending ${endings[i]?.codes?.size ?: "-"} codes in ${SystemClock.elapsedRealtime() - t0} ms")
                 }
             }
         }.awaitAll()
 
-        fun detect(i: Int) {
-            if (prints[i] == null) return
-            // The nearest fingerprinted episodes on either side — and the references for a lone episode.
-            val usable = prints.indices.filter { prints[it] != null }
+        // The nearest fingerprinted episodes on either side — and the references for a lone episode.
+        fun neighbours(i: Int, has: (Int) -> Boolean): List<Int> {
+            val usable = episodes.indices.filter(has)
             val position = usable.indexOf(i)
-            val neighbours = (usable.subList(maxOf(0, position - 2), minOf(usable.size, position + 3)) +
+            return (usable.subList(maxOf(0, position - 2), minOf(usable.size, position + 3)) +
                 usable.filter { it >= targets.size }).distinct().filter { it != i }.take(NEIGHBOURS)
-            val window = IntroMatcher.introOf(i, prints.map { it ?: IntArray(0) }, neighbours)
-            playback.saveDetectedIntro(targets[i].file.id, window?.let { DetectedIntro.Found(it) } ?: DetectedIntro.None)
-            Log.i(TAG, "${targets[i].info.code}: ${window ?: "none"}")
         }
 
-        // First the episode being watched and its nearest neighbours, so its intro is ready
+        fun detect(i: Int) {
+            val episode = targets[i]
+            if (needIntros && openings[i] != null) {
+                val window = IntroMatcher.introOf(i, openings.map { it ?: IntArray(0) }, neighbours(i) { openings[it] != null })
+                playback.saveDetectedIntro(episode.file.id, window?.let { DetectedIntro.Found(it) } ?: DetectedIntro.None)
+                Log.i(TAG, "${episode.info.code} intro: ${window ?: "none"}")
+            }
+            if (needCredits && endings[i] != null) {
+                val credits = IntroMatcher.creditsOf(
+                    i,
+                    endings.map { it?.codes ?: IntArray(0) },
+                    endings.map { it?.startMs ?: 0L },
+                    episode.file.durationMs,
+                    neighbours(i) { endings[it] != null },
+                )
+                playback.saveDetectedCredits(episode.file.id, credits?.let { DetectedCredits.Found(it) } ?: DetectedCredits.None)
+                Log.i(TAG, "${episode.info.code} credits: ${credits ?: "none"}")
+            }
+        }
+
+        // First the episode being watched and its nearest neighbours, so its result is ready
         // after one round of decoding rather than after the whole season.
         val current = targets.indexOfFirst { it.file.id == currentId }
         if (current >= 0) {
@@ -133,15 +166,16 @@ class IntroDetection @Inject constructor(
         fingerprint(episodes.indices.toList())
         if (job?.isActive == false) return@coroutineScope
         targets.indices.forEach(::detect)
-        playback.markSeasonScanned(showKey, season, signature)
+        if (needIntros) playback.markSeasonScanned(showKey, season, signature)
+        if (needCredits) playback.markCreditsScanned(showKey, season, signature)
         Log.i(TAG, "$showKey S$season done in ${SystemClock.elapsedRealtime() - started} ms")
     }
 
     /** Debug builds only: keeps each fingerprint in the cache so detection can be tuned offline. */
-    private fun dumpForTuning(episode: ShowEpisode, codes: IntArray) {
+    private fun dumpForTuning(episode: ShowEpisode, suffix: String, codes: IntArray) {
         runCatching {
             val dir = java.io.File(context.cacheDir, "intro").apply { mkdirs() }
-            java.io.DataOutputStream(java.io.File(dir, "${episode.info.showKey}_${episode.info.code}.bin").outputStream().buffered())
+            java.io.DataOutputStream(java.io.File(dir, "${episode.info.showKey}_${episode.info.code}$suffix.bin").outputStream().buffered())
                 .use { out -> codes.forEach { out.writeInt(it) } }
         }
     }
@@ -151,7 +185,9 @@ class IntroDetection @Inject constructor(
     private companion object {
         const val TAG = "IntroDetect"
         /** Intros sit near the start; ten minutes covers long cold opens. */
-        const val SCAN_MS = 10 * 60_000L
+        const val OPENING_MS = 10 * 60_000L
+        /** Credits sit at the end; six minutes covers long rolls plus a tag or preview after them. */
+        const val ENDING_MS = 6 * 60_000L
         const val MAX_EPISODES = 16
         const val NEIGHBOURS = 4
         const val PARALLEL = 4

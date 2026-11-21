@@ -1,5 +1,6 @@
 package com.devbytes.vixplayer.app.player.intro
 
+import com.devbytes.vixplayer.app.player.CreditsWindow
 import com.devbytes.vixplayer.app.player.IntroWindow
 
 /** A stretch two episodes share: frames [aStart, aEnd) of one at [bStart, bEnd) of the other. */
@@ -7,10 +8,14 @@ data class SharedSegment(val aStart: Int, val aEnd: Int, val bStart: Int, val bE
     val length: Int get() = aEnd - aStart
 }
 
+/** How long a shared stretch may be to count, in fingerprint frames. */
+class MatchBounds(val minFrames: Int, val maxFrames: Int)
+
 /**
  * Finds a show's intro from the audio fingerprints ([AudioFingerprinter]) of its episodes'
  * openings: the theme is the longest stretch of near-identical sound that episodes share,
- * wherever it sits in each one (cold opens vary in length). Pure — unit-tested on the JVM.
+ * wherever it sits in each one (cold opens vary in length). The end credits are found the
+ * same way in the episodes' endings ([creditsOf]). Pure — unit-tested on the JVM.
  */
 object IntroMatcher {
 
@@ -24,6 +29,14 @@ object IntroMatcher {
     const val MIN_FRAMES = 15 * FPS
     /** Longer ones are a mistake (the same episode twice, a recap of the whole thing). */
     const val MAX_FRAMES = 3 * 60 * FPS
+    val INTRO = MatchBounds(MIN_FRAMES, MAX_FRAMES)
+    /** Credit rolls run longer than title sequences; a stretch the length of the whole scanned ending is a duplicate file. */
+    val CREDITS = MatchBounds(MIN_FRAMES, 5 * 60 * FPS)
+    /**
+     * Credits run to the end of the file, give or take a short tag or a "next time" preview.
+     * Something shared that stops earlier than this is a recurring music cue, not the credits.
+     */
+    const val CREDITS_END_SLACK_MS = 2 * 60_000L
     /** Average differing bits (of 32) under which two stretches count as the same sound. */
     private const val MATCH_BITS = 10.0
     /** Smoothing window for the bit error, and the largest gap bridged inside one match. */
@@ -37,11 +50,11 @@ object IntroMatcher {
     /** Music repeats (bars, choruses), so shifted alignments match too: try several, keep the longest. */
     private const val CANDIDATE_OFFSETS = 12
 
-    /** The longest stretch [a] and [b] share, or null if there's none of intro length. */
-    fun shared(a: IntArray, b: IntArray): SharedSegment? {
+    /** The longest stretch [a] and [b] share, or null if there's none within [bounds]. */
+    fun shared(a: IntArray, b: IntArray, bounds: MatchBounds = INTRO): SharedSegment? {
         var best: SharedSegment? = null
         for (offset in candidateOffsets(a, b)) {
-            val segment = longestMatch(a, b, offset) ?: continue
+            val segment = longestMatch(a, b, offset, bounds) ?: continue
             if (best == null || segment.length > best.length) best = segment
         }
         return best
@@ -53,7 +66,27 @@ object IntroMatcher {
      * agree on. Null when nothing is shared, or the comparisons disagree.
      */
     fun introOf(index: Int, episodes: List<IntArray>, others: List<Int>): IntroWindow? {
-        val found = others.filter { it != index }.mapNotNull { other -> shared(episodes[index], episodes[other]) }
+        val (start, end) = agreedRange(index, episodes, others, INTRO) ?: return null
+        return IntroWindow(start * AudioFingerprinter.HOP_MS, end * AudioFingerprinter.HOP_MS)
+    }
+
+    /**
+     * The end credits of episode [index], from [endings] — fingerprints of each episode's
+     * last minutes, code 0 at [startsMs] into that file — and the [others] it's compared
+     * against: the shared stretch most of them agree on, provided it runs to within
+     * [CREDITS_END_SLACK_MS] of the episode's end ([durationMs]). Null otherwise.
+     */
+    fun creditsOf(index: Int, endings: List<IntArray>, startsMs: List<Long>, durationMs: Long, others: List<Int>): CreditsWindow? {
+        val (start, end) = agreedRange(index, endings, others, CREDITS) ?: return null
+        val startMs = startsMs[index] + start * AudioFingerprinter.HOP_MS
+        val endMs = startsMs[index] + end * AudioFingerprinter.HOP_MS
+        if (durationMs > 0 && durationMs - endMs > CREDITS_END_SLACK_MS) return null
+        return CreditsWindow(startMs, endMs)
+    }
+
+    /** Frames [start, end) of [index] that most of the comparisons with [others] agree are shared. */
+    private fun agreedRange(index: Int, episodes: List<IntArray>, others: List<Int>, bounds: MatchBounds): Pair<Int, Int>? {
+        val found = others.filter { it != index }.mapNotNull { other -> shared(episodes[index], episodes[other], bounds) }
         if (found.isEmpty()) return null
         val ranges = found.map { it.aStart to it.aEnd }
         // Each candidate's support: the others that cover at least half of it.
@@ -63,8 +96,8 @@ object IntroMatcher {
         val group = supported[pick] + ranges[pick]
         val start = group.map { it.first }.sorted()[group.size / 2]
         val end = group.map { it.second }.sorted()[group.size / 2]
-        if (end - start < MIN_FRAMES) return null
-        return IntroWindow(start * AudioFingerprinter.HOP_MS, end * AudioFingerprinter.HOP_MS)
+        if (end - start < bounds.minFrames) return null
+        return start to end
     }
 
     /**
@@ -105,10 +138,10 @@ object IntroMatcher {
     }
 
     /** The longest run where [a] and [b] (shifted by [offset]) sound the same. */
-    private fun longestMatch(a: IntArray, b: IntArray, offset: Int): SharedSegment? {
+    private fun longestMatch(a: IntArray, b: IntArray, offset: Int, bounds: MatchBounds): SharedSegment? {
         val from = maxOf(0, -offset)
         val to = minOf(a.size, b.size - offset)
-        if (to - from < MIN_FRAMES) return null
+        if (to - from < bounds.minFrames) return null
         val bits = IntArray(to - from) { Integer.bitCount(a[from + it] xor b[from + it + offset]) }
         // Moving average over [SMOOTH] frames, centred.
         val half = SMOOTH / 2
@@ -131,7 +164,7 @@ object IntroMatcher {
                 bestEnd = i + 1
             }
         }
-        if (bestStart < 0 || bestEnd - bestStart < MIN_FRAMES || bestEnd - bestStart > MAX_FRAMES) return null
+        if (bestStart < 0 || bestEnd - bestStart < bounds.minFrames || bestEnd - bestStart > bounds.maxFrames) return null
         val aStart = from + bestStart
         val aEnd = from + bestEnd
         return SharedSegment(aStart, aEnd, aStart + offset, aEnd + offset)

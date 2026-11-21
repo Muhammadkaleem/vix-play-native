@@ -17,8 +17,9 @@ class IntroTuningTest {
     @Test fun detectOnRealEpisodes() {
         val dir = System.getenv("INTRO_TUNING_DIR")?.let(::File)
         assumeTrue(dir != null && dir.isDirectory)
-        // WAVs, or fingerprints a debug build dumped (`cache/intro/*.bin`, big-endian ints).
-        val files = dir!!.listFiles { f -> f.extension == "wav" || f.extension == "bin" }!!.sortedBy { it.name }
+        // WAVs, or fingerprints a debug build dumped (`cache/intro/*.bin`, big-endian ints) —
+        // openings only; the endings it dumps for credits (`*_end.bin`) are left out.
+        val files = dir!!.listFiles { f -> (f.extension == "wav" || f.extension == "bin") && !f.nameWithoutExtension.endsWith("_end") }!!.sortedBy { it.name }
         val prints = files.map { if (it.extension == "bin") readCodes(it) else fingerprint(it) }
         for (i in files.indices) for (j in files.indices) if (i < j) {
             println("${files[i].name} × ${files[j].name}: ${IntroMatcher.shared(prints[i], prints[j])?.let(::describe) ?: "nothing"}")

@@ -2,6 +2,8 @@ package com.devbytes.vixplayer.app.data.repository
 
 import com.devbytes.vixplayer.app.data.db.dao.PlaybackPositionDao
 import com.devbytes.vixplayer.app.data.db.entity.PlaybackPosition
+import com.devbytes.vixplayer.app.player.CreditsWindow
+import com.devbytes.vixplayer.app.player.DetectedCredits
 import com.devbytes.vixplayer.app.player.DetectedIntro
 import com.devbytes.vixplayer.app.player.IntroWindow
 import com.tencent.mmkv.MMKV
@@ -81,6 +83,32 @@ class PlaybackRepository @Inject constructor(
         mmkv.encode("$SCANNED_KEY$showKey|$season", episodes)
     }
 
+    /** Where this file's end credits were found; null = not scanned yet. */
+    fun getDetectedCredits(mediaStoreId: Long): DetectedCredits? =
+        when (val value = mmkv.decodeString("$CREDITS_KEY$mediaStoreId")) {
+            null -> null
+            "none" -> DetectedCredits.None
+            else -> value.split(',').mapNotNull { it.toLongOrNull() }.takeIf { it.size == 2 }
+                ?.let { DetectedCredits.Found(CreditsWindow(it[0], it[1])) }
+        }
+
+    fun saveDetectedCredits(mediaStoreId: Long, result: DetectedCredits) {
+        mmkv.encode(
+            "$CREDITS_KEY$mediaStoreId",
+            when (result) {
+                is DetectedCredits.Found -> "${result.window.startMs},${result.window.endMs}"
+                DetectedCredits.None -> "none"
+            },
+        )
+    }
+
+    /** Like [scannedSeason], for the credits — kept apart so seasons scanned for intros before get a credits-only pass. */
+    fun creditsScannedSeason(showKey: String, season: Int): String? = mmkv.decodeString("$CREDITS_SCANNED_KEY$showKey|$season")
+
+    fun markCreditsScanned(showKey: String, season: Int, episodes: String) {
+        mmkv.encode("$CREDITS_SCANNED_KEY$showKey|$season", episodes)
+    }
+
     suspend fun persistPosition(mediaStoreId: Long, positionMs: Long) {
         dao.upsert(PlaybackPosition(mediaStoreId, positionMs, System.currentTimeMillis()))
     }
@@ -122,5 +150,7 @@ class PlaybackRepository @Inject constructor(
         /** Versioned, so a better detector can rescan everything by bumping it. */
         const val DETECTED_KEY = "introauto_v2_"
         const val SCANNED_KEY = "introscan_v2_"
+        const val CREDITS_KEY = "creditsauto_v1_"
+        const val CREDITS_SCANNED_KEY = "creditsscan_v1_"
     }
 }

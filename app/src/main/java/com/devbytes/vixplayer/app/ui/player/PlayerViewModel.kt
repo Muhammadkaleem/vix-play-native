@@ -11,6 +11,8 @@ import com.devbytes.vixplayer.app.data.repository.ShowRepository
 import com.devbytes.vixplayer.app.data.repository.SubtitleStyle
 import com.devbytes.vixplayer.app.data.repository.UpNext
 import com.devbytes.vixplayer.app.data.repository.VideoFile
+import com.devbytes.vixplayer.app.player.CreditsWindow
+import com.devbytes.vixplayer.app.player.DetectedCredits
 import com.devbytes.vixplayer.app.player.DetectedIntro
 import com.devbytes.vixplayer.app.player.IntroSettings
 import com.devbytes.vixplayer.app.player.IntroSource
@@ -197,7 +199,27 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    /** Scans this episode's season for its intro in the background, unless already done. */
+    /** Where the current episode's end credits start (Series Mode phase 4); null if none were found. */
+    fun loadCredits(durationMs: Long): CreditsWindow? {
+        val id = currentMediaStoreId ?: return null
+        val window = (playbackRepository.getDetectedCredits(id) as? DetectedCredits.Found)?.window ?: return null
+        return window.takeIf { durationMs <= 0 || it.startMs < durationMs }
+    }
+
+    /**
+     * Records the current episode as watched to the end — moving on at its credits leaves the
+     * playhead short of the "watched" mark, and Your Shows would otherwise offer to resume it.
+     */
+    suspend fun finishEpisode(durationMs: Long) {
+        val id = currentMediaStoreId ?: return
+        if (durationMs <= 0) return
+        runCatching { playbackRepository.persistPosition(id, durationMs) }
+        // The fast store last: a 5 s save tick can land while Room writes, and the caller
+        // moves on to the next episode straight after this returns.
+        playbackRepository.savePositionFast(id, durationMs)
+    }
+
+    /** Scans this episode's season for its intro and end credits in the background, unless already done. */
     suspend fun startIntroDetection(showKey: String) {
         val id = currentMediaStoreId ?: return
         runCatching {

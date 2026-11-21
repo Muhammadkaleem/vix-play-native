@@ -3,6 +3,9 @@ package com.devbytes.vixplayer.app.ui.player.components
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,9 +26,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -34,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.player.IntroSource
 import com.devbytes.vixplayer.app.player.formatIntroTime
+import com.devbytes.vixplayer.app.ui.theme.AmoledBackground
 import com.devbytes.vixplayer.app.ui.theme.DarkAccent
 import com.devbytes.vixplayer.app.ui.theme.OnScrim
 import com.devbytes.vixplayer.app.ui.theme.ScrimStrong
@@ -200,6 +207,70 @@ fun SkipIntroPill(
                 } else {
                     Spacer(Modifier.width(8.dp))
                     Icon(painterResource(R.drawable.ic_skip_next), contentDescription = null, tint = OnScrim, modifier = Modifier.size(16.dp))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * At the end credits (Series Mode phase 4): "Watch credits" and "Next episode", where the
+ * skip-intro pill sits. With autoplay on, Next episode fills up as [countdownProgress] runs
+ * (0 → 1) and plays when full; null means no countdown — just the button.
+ */
+@Composable
+fun NextEpisodePill(
+    visible: Boolean,
+    countdownSeconds: Int?,
+    countdownProgress: Float?,
+    onNext: () -> Unit,
+    onWatchCredits: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // Eases each one-second step so the fill moves continuously rather than in jumps.
+    val fill by animateFloatAsState(
+        targetValue = countdownProgress ?: 1f,
+        animationSpec = tween(durationMillis = if (countdownProgress == null) 0 else 1_000, easing = LinearEasing),
+        label = "nextEpisodeFill",
+    )
+    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.BottomEnd) {
+        AnimatedVisibility(visible = visible, enter = fadeIn(), exit = fadeOut()) {
+            Row(
+                modifier = Modifier
+                    .navigationBarsPadding()
+                    .padding(end = 24.dp, bottom = 112.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Watch credits",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = OnScrim,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(ScrimStrong)
+                        .border(1.dp, OnScrim.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
+                        .clickable(role = Role.Button, onClick = onWatchCredits)
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                )
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(OnScrim.copy(alpha = 0.6f))
+                        .drawBehind { drawRect(OnScrim, size = Size(size.width * fill, size.height)) }
+                        .clickable(role = Role.Button, onClick = onNext)
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(painterResource(R.drawable.ic_play), contentDescription = null, tint = AmoledBackground, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        if (countdownSeconds != null) "Next episode in ${countdownSeconds}s" else "Next episode",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AmoledBackground,
+                    )
                 }
             }
         }

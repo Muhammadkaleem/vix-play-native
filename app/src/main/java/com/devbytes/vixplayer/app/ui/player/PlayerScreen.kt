@@ -97,6 +97,9 @@ import com.devbytes.vixplayer.app.player.PlaybackService
 import com.devbytes.vixplayer.app.player.PlayerOwner
 import com.devbytes.vixplayer.app.player.label
 import com.devbytes.vixplayer.app.player.introMarkError
+import com.devbytes.vixplayer.app.player.CREDITS_COUNTDOWN_S
+import com.devbytes.vixplayer.app.player.CreditsWindow
+import com.devbytes.vixplayer.app.player.offersNextEpisode
 import com.devbytes.vixplayer.app.player.IntroWindow
 import com.devbytes.vixplayer.app.player.IntroSettings
 import com.devbytes.vixplayer.app.player.candidates
@@ -147,6 +150,7 @@ import com.devbytes.vixplayer.app.ui.player.components.ResumeChip
 import com.devbytes.vixplayer.app.ui.player.components.SubtitleSheet
 import com.devbytes.vixplayer.app.ui.player.components.SubtitleStyleEditor
 import com.devbytes.vixplayer.app.ui.player.components.IntroMarkHud
+import com.devbytes.vixplayer.app.ui.player.components.NextEpisodePill
 import com.devbytes.vixplayer.app.ui.player.components.SkipIntroPill
 import com.devbytes.vixplayer.app.ui.player.components.SubtitleSyncHud
 import com.devbytes.vixplayer.app.ui.player.components.applySubtitleStyle
@@ -320,6 +324,11 @@ fun PlayerScreen(
     var showIntroSkipped by remember { mutableStateOf(false) }
     // A background scan of this season for its intro is queued or running (phase 3b).
     var introDetecting by remember { mutableStateOf(false) }
+    // End credits (phase 4): where they start in this episode, whether the viewer chose to
+    // watch them (once per opened file), and the autoplay countdown while it runs.
+    var credits by remember { mutableStateOf<CreditsWindow?>(null) }
+    var watchingCreditsUri by remember { mutableStateOf<String?>(null) }
+    var creditsCountdown by remember { mutableStateOf<Int?>(null) }
     var pendingOffsetKey by remember { mutableIntStateOf(0) }
     LaunchedEffect(pendingOffsetKey) {
         if (pendingOffsetKey > 0) {
@@ -416,10 +425,12 @@ fun PlayerScreen(
     val nextVideo = upNext.next
 
     // ── Skip intro ───────────────────────────────────────────────────────────────────────
-    // Only episodes of a show (Up Next resolved a show key for this very file) have one.
+    // Only episodes of a show (Up Next resolved a show key for this very file) have one —
+    // and end credits, found by the same scan, load alongside.
     suspend fun reloadIntro() {
         val key = upNext.showKey.takeIf { upNextUri == currentUri }
         intro = if (key == null) IntroSettings.NONE else viewModel.loadIntro(key, player.duration)
+        credits = if (key == null) null else viewModel.loadCredits(player.duration)
     }
     fun saveIntroMarks(episodeOnly: Boolean) {
         val key = upNext.showKey ?: return
@@ -455,9 +466,9 @@ fun PlayerScreen(
             introDetecting = running
         }
     }
-    // The playhead, while there's an intro to judge it against or the marking panel is open.
-    LaunchedEffect(intro.window, showIntroHud) {
-        while (intro.window != null || showIntroHud) {
+    // The playhead, while there's an intro or credits to judge it against, or the marking panel is open.
+    LaunchedEffect(intro.window, showIntroHud, credits) {
+        while (intro.window != null || showIntroHud || credits != null) {
             if (ownsPlayer()) introPositionMs = player.currentPosition
             delay(250)
         }
@@ -741,6 +752,8 @@ fun PlayerScreen(
         intro = IntroSettings.NONE
         showIntroHud = false
         showIntroSkipped = false
+        credits = null
+        creditsCountdown = null
         viewModel.prepareFor(newUri, subtitleOffsetMs, owner = playerOwner)
         showResumeChip = false
         ended = false
@@ -1104,6 +1117,42 @@ fun PlayerScreen(
             sleepHudKey++
             sleepMode = SleepTimerMode.Off
         }
+    }
+
+    // ── End credits → next episode (phase 4) ──────────────────────────────────────────────
+    // From the credits' start: "Watch credits" / "Next episode". With autoplay on, Next episode
+    // counts down — only while the video plays, and not when the sleep timer is set to stop
+    // at the end of this one. Moving on saves this episode as watched to the end.
+    val offerNextEpisode = offersNextEpisode(
+        credits = credits,
+        positionMs = introPositionMs,
+        durationMs = player.duration,
+        hasNext = nextVideo != null && upNext.showKey != null,
+        watchingCredits = watchingCreditsUri == currentUri,
+    ) && !showIntroHud && !locked && !pipMode && playbackError == null && !ended
+    fun nextFromCredits(result: String) {
+        val next = nextVideo ?: return
+        // Hide the pill and stop the countdown now, so a second tap during the save can't start it twice.
+        credits = null
+        scope.launch {
+            viewModel.finishEpisode(player.duration)
+            logUpNext(result)
+            playNext(next)
+        }
+    }
+    LaunchedEffect(offerNextEpisode, autoplayNext, sleepMode) {
+        if (!offerNextEpisode || !autoplayNext || sleepMode is SleepTimerMode.EndOfVideo) {
+            creditsCountdown = null
+            return@LaunchedEffect
+        }
+        var left = CREDITS_COUNTDOWN_S
+        creditsCountdown = left
+        while (left > 0) {
+            delay(1_000)
+            if (player.isPlaying) left--
+            creditsCountdown = left
+        }
+        nextFromCredits("credits_autoplay")
     }
 
     // Self-describing overflow label: idle name, or the live remaining / mode when armed.
@@ -1530,6 +1579,18 @@ fun PlayerScreen(
                     Analytics.log(context, Analytics.INTRO_SKIP, "source" to "button")
                 }
                 introPositionMs = player.currentPosition
+            },
+            modifier = Modifier.fillMaxSize(),
+        )
+
+        NextEpisodePill(
+            visible = offerNextEpisode,
+            countdownSeconds = creditsCountdown,
+            countdownProgress = creditsCountdown?.let { 1f - it.toFloat() / CREDITS_COUNTDOWN_S },
+            onNext = { nextFromCredits("credits_next") },
+            onWatchCredits = {
+                watchingCreditsUri = currentUri
+                logUpNext("watch_credits")
             },
             modifier = Modifier.fillMaxSize(),
         )

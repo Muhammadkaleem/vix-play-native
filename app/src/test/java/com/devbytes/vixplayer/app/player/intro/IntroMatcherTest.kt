@@ -23,9 +23,9 @@ class IntroMatcherTest {
      * A theme as real ones are: a melody that doesn't simply loop, over a broadband bed (a
      * fixed noise pattern, like percussion) — the same samples in every episode.
      */
-    private fun theme(seconds: Int): FloatArray {
-        val notes = Random(99).let { r -> DoubleArray(seconds * 3) { 330.0 + r.nextInt(12) * 40.0 } }
-        val bed = Random(98)
+    private fun theme(seconds: Int, seed: Int = 99): FloatArray {
+        val notes = Random(seed).let { r -> DoubleArray(seconds * 3) { 330.0 + r.nextInt(12) * 40.0 } }
+        val bed = Random(seed - 1)
         return FloatArray(seconds * rate) { i ->
             val t = i.toDouble() / rate
             val f = notes[(t * 3).toInt() % notes.size]
@@ -86,4 +86,44 @@ class IntroMatcherTest {
     }
 
     @Test fun noOthersMeansNoIntro() = assertNull(IntroMatcher.introOf(0, listOf(episode(10, 1)), listOf(0)))
+
+    // ── End credits ───────────────────────────────────────────────────────────────────────
+
+    /** The scanned ending of an episode: its own story, the shared credits music, then an optional tag. */
+    private fun ending(story: Int, credits: Int, tag: Int, seed: Int): IntArray {
+        val parts = listOf(story(story, seed), theme(credits, seed = 77), story(tag, seed + 50)).filter { it.isNotEmpty() }
+        return AudioFingerprinter().apply { parts.forEach { add(it) } }.codes()
+    }
+
+    @Test fun creditsAreFoundInEachEpisodesEnding() {
+        // (story before the credits, tag after) — every ending a different shape.
+        val shapes = listOf(120 to 0, 150 to 20, 90 to 45, 140 to 10)
+        val endings = shapes.mapIndexed { i, (story, tag) -> ending(story, credits = 60, tag = tag, seed = 20 + i) }
+        val scanStart = 40 * 60_000L // each ending was decoded from 40:00 into its file
+        shapes.forEachIndexed { i, (story, tag) ->
+            val duration = scanStart + (story + 60 + tag) * 1000L
+            val credits = IntroMatcher.creditsOf(i, endings, endings.map { scanStart }, duration, endings.indices.toList())
+            assertNotNull("episode $i", credits)
+            val expected = scanStart + story * 1000L
+            assertTrue("episode $i credits start at ${credits!!.startMs}, expected $expected", credits.startMs - expected in -1000..2500)
+        }
+    }
+
+    @Test fun aLongCreditRollIsStillFound() {
+        // Longer than an intro may be (3 min): credits use their own bounds.
+        val endings = listOf(60, 80, 40).mapIndexed { i, story -> ending(story, credits = 200, tag = 0, seed = 40 + i) }
+        val credits = IntroMatcher.creditsOf(0, endings, listOf(0L, 0L, 0L), 260_000L, listOf(1, 2))
+        assertNotNull(credits)
+        assertEquals(60_000.0, credits!!.startMs.toDouble(), 2_500.0)
+    }
+
+    @Test fun sharedMusicFarFromTheEndIsNotCredits() {
+        // The same 40 s cue, then three minutes of each episode's own story: a recurring
+        // score cue, not the credits — nothing should offer to cut those minutes.
+        val endings = listOf(30, 50, 20).mapIndexed { i, story -> ending(story, credits = 40, tag = 180, seed = 60 + i) }
+        val durations = listOf(30, 50, 20).map { (it + 40 + 180) * 1000L }
+        endings.indices.forEach { i ->
+            assertNull("episode $i", IntroMatcher.creditsOf(i, endings, endings.map { 0L }, durations[i], endings.indices.toList()))
+        }
+    }
 }
