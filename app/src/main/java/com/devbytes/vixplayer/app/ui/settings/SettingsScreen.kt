@@ -21,12 +21,14 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.devbytes.vixplayer.app.BuildConfig
+import com.devbytes.vixplayer.app.ads.rememberAdsSupported
+import com.devbytes.vixplayer.app.ui.common.LocalIsTv
 import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.ads.AdsViewModel
 import com.devbytes.vixplayer.app.ui.premium.findActivity
@@ -67,18 +69,20 @@ private data class SettingsItem(
     val route: String,
 )
 
-private val SETTINGS_ITEMS = listOfNotNull(
-    // Pro only removes ads, so the ad-free Amazon build doesn't offer it.
+private fun settingsItems(adsSupported: Boolean, isTv: Boolean) = listOfNotNull(
+    // Pro only removes ads, so where there are none (the Amazon build, TVs) it isn't offered.
     SettingsItem("Vix Pro Rewards", "Watch ads to earn Pro time, status, and history", R.drawable.ic_crown, PRO_REWARDS_ROUTE)
-        .takeIf { BuildConfig.HAS_ADS },
-    SettingsItem("Gestures", "Remap taps and swipes, sensitivity, and haptics", R.drawable.ic_settings, GESTURE_REMAP_ROUTE),
+        .takeIf { adsSupported },
+    // Touch gestures; a TV is driven by its remote.
+    SettingsItem("Gestures", "Remap taps and swipes, sensitivity, and haptics", R.drawable.ic_settings, GESTURE_REMAP_ROUTE)
+        .takeIf { !isTv },
     SettingsItem("Theme & Skins", "Base theme, accent color, and player skins", R.drawable.ic_eye, THEME_SKINS_ROUTE),
     SettingsItem("Subtitles", "Default language, styling, and encoding", R.drawable.ic_subtitles, SUBTITLE_DEFAULTS_ROUTE),
     SettingsItem("Playback", "Speed, decoder, resume, and autoplay", R.drawable.ic_speed, PLAYBACK_DEFAULTS_ROUTE),
     SettingsItem("Private Folder", "Lock videos behind a PIN", R.drawable.ic_lock, PRIVATE_FOLDER_ROUTE),
     SettingsItem("Notifications", "Resume reminders, new videos, weekly recap", R.drawable.ic_timer, NOTIFICATIONS_ROUTE),
     SettingsItem("Daily Briefing", "A short brief of your day each morning", R.drawable.ic_timer, BRIEFING_SETTINGS_ROUTE),
-    SettingsItem(if (BuildConfig.HAS_ADS) "About / Pro" else "About", "Version, licenses, and app info", R.drawable.ic_info, ABOUT_PRO_ROUTE),
+    SettingsItem(if (adsSupported) "About / Pro" else "About", "Version, licenses, and app info", R.drawable.ic_info, ABOUT_PRO_ROUTE),
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -89,6 +93,9 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val privacyOptionsRequired by adsViewModel.privacyOptionsRequired.collectAsStateWithLifecycle()
+    val adsSupported = rememberAdsSupported()
+    val isTv = LocalIsTv.current
+    val settingsItems = remember(adsSupported, isTv) { settingsItems(adsSupported, isTv) }
     Scaffold(
         contentWindowInsets = screenInsets(),
         topBar = {
@@ -181,7 +188,7 @@ fun SettingsScreen(
                 }
             }
 
-            items(SETTINGS_ITEMS) { item ->
+            items(settingsItems) { item ->
                 ListItem(
                     leadingContent = {
                         Icon(

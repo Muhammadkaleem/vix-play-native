@@ -2,18 +2,25 @@ package com.devbytes.vixplayer.app.ui.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.material.ripple.RippleAlpha
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LocalRippleConfiguration
+import androidx.compose.material3.RippleConfiguration
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import com.devbytes.vixplayer.app.ui.common.FocusRingIndication
 
 private val VixPlayDarkColors = darkColorScheme(
     primary = DarkAccent,
@@ -84,6 +91,19 @@ private fun ThemeMode.isDark(): Boolean = when (this) {
     ThemeMode.SYSTEM, ThemeMode.DYNAMIC -> isSystemInDarkTheme()
 }
 
+/**
+ * Material's ripple alphas, except focus: its default 10 % state layer is too faint to follow from
+ * a sofa, so D-pad / remote focus on Material components (buttons, icon buttons, chips) shows at
+ * 32 %. Touch never focuses these, so pressed feedback is unchanged.
+ */
+private val VixRippleAlpha = RippleAlpha(
+    draggedAlpha = 0.16f,
+    focusedAlpha = 0.32f,
+    hoveredAlpha = 0.08f,
+    pressedAlpha = 0.10f,
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VixPlayTheme(
     mode: ThemeMode = ThemeMode.LIGHT,
@@ -108,6 +128,12 @@ fun VixPlayTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = PlayerTypography,
-        content = content,
-    )
+    ) {
+        // Every clickable without its own indication gets a focus ring for remote / D-pad use.
+        CompositionLocalProvider(
+            LocalIndication provides FocusRingIndication(colorScheme.primary),
+            LocalRippleConfiguration provides RippleConfiguration(rippleAlpha = VixRippleAlpha),
+            content = content,
+        )
+    }
 }

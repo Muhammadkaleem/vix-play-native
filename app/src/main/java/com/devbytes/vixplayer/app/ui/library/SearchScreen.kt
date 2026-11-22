@@ -74,6 +74,7 @@ import com.devbytes.vixplayer.app.ui.library.components.LibraryEmptyState
 import com.devbytes.vixplayer.app.ui.theme.OnScrim
 import com.devbytes.vixplayer.app.ui.theme.ScrimStrong
 import com.devbytes.vixplayer.app.ui.common.screenInsets
+import com.devbytes.vixplayer.app.ui.common.focusRing
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -392,6 +393,7 @@ private fun ResultRow(onClick: () -> Unit, content: @Composable RowScope.() -> U
         Modifier.fillMaxWidth()
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(RoundedCornerShape(14.dp))
+            .focusRing(interaction, RoundedCornerShape(14.dp))
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,

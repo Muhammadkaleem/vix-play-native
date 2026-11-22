@@ -29,6 +29,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.remember
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
@@ -264,6 +267,8 @@ fun SkipIntroPill(
     label: String,
     actionLabel: String?,
     onClick: () -> Unit,
+    /** Lets the player hand the pill remote focus when it appears (TV). */
+    focusRequester: FocusRequester = remember { FocusRequester() },
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.BottomEnd) {
@@ -275,6 +280,7 @@ fun SkipIntroPill(
                     .clip(RoundedCornerShape(12.dp))
                     .background(ScrimStrong)
                     .border(1.dp, OnScrim.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
+                    .focusRequester(focusRequester)
                     .clickable(role = Role.Button, onClick = onClick)
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -304,6 +310,8 @@ fun NextEpisodePill(
     countdownProgress: Float?,
     onNext: () -> Unit,
     onWatchCredits: () -> Unit,
+    /** On Next episode, so the player can hand it remote focus when it appears (TV). */
+    focusRequester: FocusRequester = remember { FocusRequester() },
     modifier: Modifier = Modifier,
 ) {
     // Eases each one-second step so the fill moves continuously rather than in jumps.
@@ -338,6 +346,7 @@ fun NextEpisodePill(
                         .clip(RoundedCornerShape(12.dp))
                         .background(OnScrim.copy(alpha = 0.6f))
                         .drawBehind { drawRect(OnScrim, size = Size(size.width * fill, size.height)) }
+                        .focusRequester(focusRequester)
                         .clickable(role = Role.Button, onClick = onNext)
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,

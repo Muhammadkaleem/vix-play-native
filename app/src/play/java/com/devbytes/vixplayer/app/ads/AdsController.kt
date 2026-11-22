@@ -3,6 +3,7 @@ package com.devbytes.vixplayer.app.ads
 import android.app.Activity
 import android.content.Context
 import com.devbytes.vixplayer.app.BuildConfig
+import com.devbytes.vixplayer.app.TvDevice
 import com.devbytes.vixplayer.app.data.repository.ProRepository
 import com.google.android.gms.ads.MobileAds
 import com.google.android.gms.ads.RequestConfiguration
@@ -48,9 +49,16 @@ class AdsController @Inject constructor(
     val isPro: StateFlow<Boolean> = pro.isProActive
         .stateIn(scope, SharingStarted.Eagerly, false)
 
-    /** Not Pro and not remotely disabled. Pro activating drops this to false live. */
+    /**
+     * No ads on TV: the Mobile Ads SDK doesn't support it, and a full-screen ad a remote can't
+     * close would trap the viewer. Without ads there's nothing for Pro to remove, so Pro UI hides
+     * too (see `rememberAdsSupported`).
+     */
+    private val onTv = TvDevice.isTv(context)
+
+    /** Not Pro, not on TV and not remotely disabled. Pro activating drops this to false live. */
     val adsEnabled: StateFlow<Boolean> = isPro
-        .map { !it && config.current().adsEnabled }
+        .map { !it && !onTv && config.current().adsEnabled }
         .stateIn(scope, SharingStarted.Eagerly, false)
 
     private val _canRequestAds = MutableStateFlow(false)
@@ -89,6 +97,7 @@ class AdsController @Inject constructor(
      * one. Safe to call repeatedly (SDK init is guarded).
      */
     fun ensureConsentAndInit(activity: Activity) {
+        if (onTv) return
         val consentInfo = UserMessagingPlatform.getConsentInformation(activity)
         val params = ConsentRequestParameters.Builder().apply {
             // Opt-in, debug builds only: act as if in the EEA or a regulated US state, so those

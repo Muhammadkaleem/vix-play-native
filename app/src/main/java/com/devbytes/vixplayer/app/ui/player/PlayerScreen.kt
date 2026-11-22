@@ -28,6 +28,22 @@ import android.util.Rational
 import android.view.PixelCopy
 import android.view.SurfaceView
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
+import com.devbytes.vixplayer.app.ui.common.LocalIsTv
+import com.devbytes.vixplayer.app.ui.player.components.KEY_STEP_MS
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -184,6 +200,7 @@ fun PlayerScreen(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+    val isTv = LocalIsTv.current
 
     // System hooks for vertical-drag gestures.
     val activity = remember { context.findActivity() }
@@ -668,6 +685,7 @@ fun PlayerScreen(
     // override hard-pins the device (sensor out), winning over the auto mapping
     // even after a Play-next swap re-fires this effect.
     LaunchedEffect(videoWidth, videoHeight, orientationMode) {
+        if (isTv) return@LaunchedEffect // a TV screen doesn't rotate
         activity?.requestedOrientation = when (orientationMode) {
             OrientationMode.LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
             OrientationMode.PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
@@ -702,6 +720,8 @@ fun PlayerScreen(
     //  - "held open" = an open sheet, the overflow menu, or an active seek-bar
     //    scrub — any user engagement that must not vanish mid-interaction.
     var controlsVisible by remember { mutableStateOf(true) }
+    // Bumped by every remote key, so the controls stay up while the remote is in use.
+    var remoteActivity by remember { mutableIntStateOf(0) }
     var optionsPanelOpen by remember { mutableStateOf(false) }
     var speedPillOpen by remember { mutableStateOf(false) }
     var seekBarDragging by remember { mutableStateOf(false) }
@@ -717,7 +737,7 @@ fun PlayerScreen(
     val gestureSliderActive = hudKind != null
     val exclusiveOverlayActive =
         optionsPanelOpen || speedPillOpen || sheetOpen || gestureSliderActive || scrubbing
-    LaunchedEffect(controlsVisible, isPlaying, controlsHeldOpen, locked) {
+    LaunchedEffect(controlsVisible, isPlaying, controlsHeldOpen, locked, remoteActivity) {
         if (controlsVisible && isPlaying && !controlsHeldOpen && !locked) {
             delay(3_000)
             controlsVisible = false
@@ -1217,6 +1237,7 @@ fun PlayerScreen(
             SleepTimerMode.EndOfVideo -> "End"
         },
         orientationLabel = orientationMode.label,
+        touchControls = !isTv,
         backgroundOn = backgroundPlayback,
         isFavorite = isFavorite,
         canFavorite = canFavorite,
@@ -1299,12 +1320,156 @@ fun PlayerScreen(
         captureScreenshot()
     }
 
+    /** Seeks by [skipMs] towards [side], adding up repeats into one "+30s" badge. */
+    fun seekWithFeedback(side: SeekSide, skipMs: Long) {
+        val delta = if (side == SeekSide.LEFT) -skipMs else skipMs
+        val now = System.currentTimeMillis()
+        accumulatedSeekMs = if (lastTapSide == side && now - lastTapTime < 800L) accumulatedSeekMs + delta else delta
+        lastTapSide = side
+        lastTapTime = now
+        doubleTapSide = side
+        doubleTapKey++
+        val max = player.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
+        player.seekTo((player.currentPosition + delta).coerceIn(0L, max))
+    }
+
+    // ── TV remote ────────────────────────────────────────────────────────────────────────
+    // On TV the screen itself holds focus whenever nothing else does, so the remote always has a
+    // target. With the controls hidden, OK plays/pauses, ←/→ seek 10 s and ↑/↓ bring the controls
+    // up with Play/Pause focused; any other surface (Up Next, the options panel, a marking card)
+    // gets focus as it opens. Media keys work in every state, and Menu opens the options panel.
+    //
+    // The key handler reads these through functions over the screen's state, never as captured
+    // values: Compose can keep a handler (and the local functions it calls) from an earlier
+    // composition, since references to the same local function compare equal.
+    fun overlayActiveNow() =
+        optionsPanelOpen || speedPillOpen || currentSheet != null || hudKind != null || scrubbing
+    fun hudShownNow() = controlsVisible && !locked && playbackError == null && !pipMode &&
+        !ended && !overlayActiveNow()
+    // Playing with nothing on top but the controls (or not even those).
+    fun bareSurfaceNow() = !ended && playbackError == null && unsupportedVideoMime == null && !locked &&
+        !overlayActiveNow() && !showSyncHud && !showIntroHud && !showCreditsHud
+    val hudShown = hudShownNow()
+    val bareSurface = bareSurfaceNow()
+    val rootFocus = remember { FocusRequester() }
+    val playFocus = remember { FocusRequester() }
+    val skipIntroFocus = remember { FocusRequester() }
+    val nextEpisodeFocus = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    var rootFocused by remember { mutableStateOf(false) }
+    var rootHasFocus by remember { mutableStateOf(false) }
+
+    fun togglePlay() = if (player.isPlaying) player.pause() else player.play()
+
+    /** Back closes what's open, then hides the controls while playing, then leaves. */
+    fun closeTopLayer(allowHide: Boolean): Boolean {
+        when {
+            speedPillOpen -> { speedPillOpen = false; speedPreview = null }
+            optionsPanelOpen -> optionsPanelOpen = false
+            showSyncHud -> showSyncHud = false
+            showIntroHud -> showIntroHud = false
+            showCreditsHud -> showCreditsHud = false
+            allowHide && hudShownNow() && isPlaying -> controlsVisible = false
+            else -> return false
+        }
+        return true
+    }
+    // A Back handled on key-down; its key-up is swallowed too, or the activity would act on it.
+    var remoteBackDown by remember { mutableStateOf(false) }
+
+    @OptIn(ExperimentalComposeUiApi::class)
+    fun onRemoteKey(event: KeyEvent): Boolean {
+        // Compose would spend Back on moving focus out of the focused control, so on TV the player
+        // takes it first.
+        if (isTv && event.key == Key.Back) {
+            if (event.type == KeyEventType.KeyDown) {
+                if (event.nativeKeyEvent.repeatCount == 0) {
+                    remoteBackDown = true
+                    if (!closeTopLayer(allowHide = true)) onBack()
+                }
+                return true
+            }
+            if (event.type == KeyEventType.KeyUp && remoteBackDown) {
+                remoteBackDown = false
+                return true
+            }
+        }
+        if (event.type != KeyEventType.KeyDown) return false
+        remoteActivity++
+        when (event.key) {
+            Key.MediaPlayPause -> { togglePlay(); return true }
+            Key.MediaPlay -> { player.play(); return true }
+            Key.MediaPause -> { player.pause(); return true }
+            Key.MediaFastForward -> { seekWithFeedback(SeekSide.RIGHT, KEY_STEP_MS); return true }
+            Key.MediaRewind -> { seekWithFeedback(SeekSide.LEFT, KEY_STEP_MS); return true }
+            Key.Menu -> if (bareSurfaceNow()) { optionsPanelOpen = true; return true }
+        }
+        val select = event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter
+        val arrow = event.key == Key.DirectionLeft || event.key == Key.DirectionRight ||
+            event.key == Key.DirectionUp || event.key == Key.DirectionDown
+        if (!select && !arrow) return false
+        val bareSurface = bareSurfaceNow()
+        if (bareSurface && !hudShownNow()) {
+            when (event.key) {
+                Key.DirectionLeft -> seekWithFeedback(SeekSide.LEFT, KEY_STEP_MS)
+                Key.DirectionRight -> seekWithFeedback(SeekSide.RIGHT, KEY_STEP_MS)
+                Key.DirectionUp, Key.DirectionDown -> controlsVisible = true
+                // OK on a focused Skip intro / Next episode pill presses that instead.
+                else -> if (rootFocused) { togglePlay(); controlsVisible = true } else return false
+            }
+            return true
+        }
+        if (!rootFocused) return false // a control has focus: normal D-pad navigation
+        when {
+            bareSurface && select -> togglePlay()
+            bareSurface -> runCatching { playFocus.requestFocus() }
+            else -> focusManager.moveFocus(FocusDirection.Enter)
+        }
+        return true
+    }
+
+    // Nothing focused (a focused control just went away) → the screen takes focus back.
+    LaunchedEffect(isTv, rootHasFocus) {
+        if (isTv && !rootHasFocus) {
+            delay(100)
+            runCatching { rootFocus.requestFocus() }
+        }
+    }
+    // The controls appear, or the screen takes focus back while they're up → the remote lands on
+    // Play/Pause.
+    LaunchedEffect(isTv, hudShown, rootFocused) {
+        if (isTv && hudShown) {
+            delay(80)
+            if (rootFocused || !rootHasFocus) runCatching { playFocus.requestFocus() }
+        }
+    }
+    // Up Next, the options panel, a marking card or an error → focus moves into it.
+    val overlayUp = !bareSurface && !pipMode
+    LaunchedEffect(isTv, overlayUp, rootFocused) {
+        if (isTv && overlayUp && rootFocused) {
+            delay(150)
+            @OptIn(ExperimentalComposeUiApi::class)
+            focusManager.moveFocus(FocusDirection.Enter)
+        }
+    }
+    // The system Back (gesture or button) closes an open panel, picker or card rather than leaving
+    // the player. (A TV remote's Back is taken in onRemoteKey first.)
+    BackHandler(enabled = optionsPanelOpen || speedPillOpen || showSyncHud || showIntroHud || showCreditsHud) {
+        closeTopLayer(allowHide = false)
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(AmoledBackground)
             // Surface size, so pan can be clamped to the zoomed content's bounds.
             .onSizeChanged { containerSize = it }
+            .focusRequester(rootFocus)
+            .onFocusChanged { rootFocused = it.isFocused; rootHasFocus = it.hasFocus }
+            // A lambda, not ::onRemoteKey: references to a local function compare equal across
+            // recompositions, so Compose would keep the first one and its stale state.
+            .onPreviewKeyEvent { onRemoteKey(it) }
+            .focusable(enabled = isTv)
             // Locked → LockOverlay owns all touches; ended → the Up Next overlay owns them;
             // optionsPanelOpen → the slide-out menu owns them (so its vertical scroll can't leak
             // into volume/brightness/seek). The surface gesture layer is inert in all three.
@@ -1326,20 +1491,8 @@ fun PlayerScreen(
                         } else {
                             val skipMs = bindings.tapFor(side).skipMs
                             if (skipMs != 0L) {
-                                val delta = if (side == SeekSide.LEFT) -skipMs else skipMs
-                                val now = System.currentTimeMillis()
-                                accumulatedSeekMs =
-                                    if (lastTapSide == side && now - lastTapTime < 800L) {
-                                        accumulatedSeekMs + delta
-                                    } else {
-                                        delta
-                                    }
-                                lastTapSide = side
-                                lastTapTime = now
-                                doubleTapSide = side
-                                doubleTapKey++
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                player.seekTo((player.currentPosition + delta).coerceAtLeast(0L))
+                                seekWithFeedback(side, skipMs)
                             }
                         }
                     }
@@ -1628,6 +1781,7 @@ fun PlayerScreen(
                 }
                 introPositionMs = player.currentPosition
             },
+            focusRequester = skipIntroFocus,
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -1640,8 +1794,17 @@ fun PlayerScreen(
                 watchingCreditsUri = currentUri
                 logUpNext("watch_credits")
             },
+            focusRequester = nextEpisodeFocus,
             modifier = Modifier.fillMaxSize(),
         )
+        // On TV a pill that appears over playback takes focus, so OK presses it.
+        val skipPillUp = introChromeAllowed && (offerSkip || showIntroSkipped)
+        LaunchedEffect(isTv, skipPillUp) {
+            if (isTv && skipPillUp && !hudShown) { delay(150); runCatching { skipIntroFocus.requestFocus() } }
+        }
+        LaunchedEffect(isTv, offerNextEpisode) {
+            if (isTv && offerNextEpisode && !hudShown) { delay(150); runCatching { nextEpisodeFocus.requestFocus() } }
+        }
 
         // Buffering spinner — hidden once the first frame is ready or on error.
         if (isBuffering && playbackError == null && !pipMode) {
@@ -1655,8 +1818,7 @@ fun PlayerScreen(
             // Hidden once the video ends (Up Next owns the surface) and whenever any exclusive
             // overlay is active (panel/sheet/speed pill/gesture slider/scrub) — only the
             // actively-used control shows.
-            visible = controlsVisible && !locked && playbackError == null && !pipMode &&
-                !ended && !exclusiveOverlayActive,
+            visible = hudShown,
             title = title,
             skin = skin,
             onBack = onBack,
@@ -1688,6 +1850,8 @@ fun PlayerScreen(
             onMoreClick = { optionsPanelOpen = true },
             onScrubbingChange = { seekBarDragging = it },
             frameLoader = { thumbnails.frameAt(it) },
+            showLock = !isTv,
+            playFocusRequester = playFocus,
             modifier = Modifier.fillMaxSize(),
         )
 

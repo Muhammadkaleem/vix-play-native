@@ -7,6 +7,8 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.CompositionLocalProvider
+import com.devbytes.vixplayer.app.ui.common.LocalIsTv
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
@@ -107,19 +109,22 @@ class MainActivity : ComponentActivity() {
         // Immediate blocking flow for high-priority / very-stale releases. No-op off-Play.
         appUpdater = AppUpdater(this, updateLauncher) { updateReady.value = true }
         appUpdater.checkForUpdate()
+        val isTv = TvDevice.isTv(this)
         setContent {
             val themeState by themeViewModel.themeState.collectAsState()
             VixPlayTheme(mode = themeState.mode, accent = themeState.accent) {
-                VixPlayNavGraph(
-                    pendingExternalMedia = pendingExternalMedia.value,
-                    onExternalMediaConsumed = { pendingExternalMedia.value = emptyList() },
-                    pulsePlayUri = pendingPulsePlayUri.value,
-                    onPulsePlayConsumed = { pendingPulsePlayUri.value = null },
-                    openBriefing = pendingOpenBriefing.value,
-                    onBriefingConsumed = { pendingOpenBriefing.value = false },
-                    updateReady = updateReady.value,
-                    onInstallUpdate = { appUpdater.completeUpdate() },
-                )
+                CompositionLocalProvider(LocalIsTv provides isTv) {
+                    VixPlayNavGraph(
+                        pendingExternalMedia = pendingExternalMedia.value,
+                        onExternalMediaConsumed = { pendingExternalMedia.value = emptyList() },
+                        pulsePlayUri = pendingPulsePlayUri.value,
+                        onPulsePlayConsumed = { pendingPulsePlayUri.value = null },
+                        openBriefing = pendingOpenBriefing.value,
+                        onBriefingConsumed = { pendingOpenBriefing.value = false },
+                        updateReady = updateReady.value,
+                        onInstallUpdate = { appUpdater.completeUpdate() },
+                    )
+                }
             }
         }
     }

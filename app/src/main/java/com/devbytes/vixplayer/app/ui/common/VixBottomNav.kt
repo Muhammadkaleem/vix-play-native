@@ -34,9 +34,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.painterResource
@@ -104,6 +107,7 @@ private const val FADE_VELOCITY = 20f
  * switches to its filled glyph and the label bolds the instant the tab is tapped; only the capsule
  * travels. Every per-frame value is applied in graphics layers, so animation never recomposes.
  */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun VixBottomNav(
     currentDestination: NavDestination?,
@@ -176,7 +180,14 @@ fun VixBottomNav(
                         item = item,
                         selected = index == selectedIndex,
                         onClick = { onNavigate(item.tabRoute) },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            // A remote's ←/→ stops at the ends of the bar instead of jumping to
+                            // whatever lies that way on screen (the top bar's Search).
+                            .focusProperties {
+                                if (index == 0) left = FocusRequester.Cancel
+                                if (index == NAV_ITEMS.lastIndex) right = FocusRequester.Cancel
+                            },
                     )
                 }
             }
@@ -197,16 +208,19 @@ private fun NavTab(
         animationSpec = tween(durationMillis = 150),
         label = "nav_tint",
     )
+    val interaction = remember { MutableInteractionSource() }
     Column(
         modifier = modifier
             .fillMaxHeight()
             .clip(CircleShape)
-            // The capsule is the touch feedback (as in the reference), so no ripple.
+            // The capsule is the touch feedback (as in the reference), so no ripple; a remote
+            // or D-pad still needs to see which tab it's on.
+            .focusRing(interaction, CircleShape)
             .selectable(
                 selected = selected,
                 onClick = onClick,
                 role = Role.Tab,
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = interaction,
                 indication = null,
             ),
         horizontalAlignment = Alignment.CenterHorizontally,

@@ -38,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
@@ -69,6 +70,8 @@ data class PlayerOptionsValues(
     val introLabel: String? = null,
     /** End credits value ("From 45:10", "Not set"); null hides the tile — only a show's episodes have one. */
     val creditsLabel: String? = null,
+    /** Lock and Orientation only make sense on a touch device; a TV hides them. */
+    val touchControls: Boolean = true,
 )
 
 // Reference palette: bright white content over a frosted, translucent dark panel.
@@ -124,6 +127,8 @@ fun PlayerOptionsPanel(
                 Modifier
                     .fillMaxSize()
                     .background(Color.Black.copy(alpha = 0.12f))
+                    // Touch only: a remote must land on the tiles, not on this tap-catcher.
+                    .focusProperties { canFocus = false }
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
@@ -203,9 +208,13 @@ fun PlayerOptionsPanel(
                             if (values.creditsLabel != null) {
                                 Tile(R.drawable.ic_list, "End Credits", values.creditsLabel, tileWidth) { close(onDismiss, onCredits) }
                             }
-                            Tile(R.drawable.ic_lock, "Lock Screen", tileWidth = tileWidth) { close(onDismiss, onLock) }
+                            if (values.touchControls) {
+                                Tile(R.drawable.ic_lock, "Lock Screen", tileWidth = tileWidth) { close(onDismiss, onLock) }
+                            }
                             Tile(R.drawable.ic_background, "Background Play", if (values.backgroundOn) "On" else "Off", tileWidth, onClick = onBackgroundPlay)
-                            Tile(R.drawable.ic_rotate, "Orientation", values.orientationLabel, tileWidth, onClick = onOrientation)
+                            if (values.touchControls) {
+                                Tile(R.drawable.ic_rotate, "Orientation", values.orientationLabel, tileWidth, onClick = onOrientation)
+                            }
                         }
 
                         Section("Tools", gap) {

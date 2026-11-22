@@ -1,7 +1,10 @@
 package com.devbytes.vixplayer.app.ui.player.components
 
 import android.graphics.Bitmap
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -24,6 +27,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.Canvas
@@ -42,6 +50,11 @@ fun PlayerSeekBar(
     frameLoader: (suspend (Long) -> Bitmap?)? = null,
     // Over video by default; a surface host (the audio player) passes its own content color.
     timecodeColor: Color = OnScrim.copy(alpha = 0.8f),
+    /**
+     * Seeks by a signed amount. When set, the bar takes remote / D-pad focus and ←/→ step it by
+     * [KEY_STEP_MS] (held keys repeat).
+     */
+    onStep: ((Long) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     if (durationMs <= 0L) return
@@ -52,6 +65,9 @@ fun PlayerSeekBar(
     var dragFraction by remember { mutableFloatStateOf(fraction) }
     val displayFraction = if (isDragging) dragFraction else fraction
     val accent = MaterialTheme.colorScheme.primary
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val active = isDragging || focused
 
     val previewMs = (dragFraction * durationMs).toLong()
     var previewFrame by remember { mutableStateOf<Bitmap?>(null) }
@@ -82,6 +98,19 @@ fun PlayerSeekBar(
                 .fillMaxWidth()
                 // Comfortable scrub target; the drawn track stays 4dp, centered.
                 .height(32.dp)
+                .then(
+                    if (onStep == null) Modifier
+                    else Modifier
+                        .onKeyEvent { event ->
+                            if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                            when (event.key) {
+                                Key.DirectionLeft -> { onStep(-KEY_STEP_MS); true }
+                                Key.DirectionRight -> { onStep(KEY_STEP_MS); true }
+                                else -> false
+                            }
+                        }
+                        .focusable(interactionSource = interaction),
+                )
                 // One handler for both tap and drag: on press we jump to the touch's
                 // absolute x (so a tap seeks to that point), track the finger while held,
                 // and commit the seek on release. Absolute-position (not accumulated
@@ -107,8 +136,8 @@ fun PlayerSeekBar(
                 },
         ) {
             val trackY = size.height / 2f
-            // Slight capsule at rest; thickens while actively seeking.
-            val trackH = (if (isDragging) 9.dp else 5.dp).toPx()
+            // Slight capsule at rest; thickens while actively seeking or focused.
+            val trackH = (if (active) 9.dp else 5.dp).toPx()
             val r = CornerRadius(trackH / 2f)
 
             // Background capsule track (dark, like the gesture pill track)
@@ -133,10 +162,13 @@ fun PlayerSeekBar(
                 cornerRadius = r,
             )
             // Thumb — accent, legible on both the white fill and the dark track
+            val thumb = Offset(size.width * displayFraction, trackY)
+            // Focused: a white ring marks the thumb as the remote's target.
+            if (focused) drawCircle(color = OnScrim, radius = 11.dp.toPx(), center = thumb)
             drawCircle(
                 color = accent,
-                radius = if (isDragging) 8.dp.toPx() else 6.dp.toPx(),
-                center = Offset(size.width * displayFraction, trackY),
+                radius = if (active) 8.dp.toPx() else 6.dp.toPx(),
+                center = thumb,
             )
         }
 
@@ -157,6 +189,9 @@ fun PlayerSeekBar(
         }
     }
 }
+
+/** How far one ←/→ press moves a focused seek bar. */
+const val KEY_STEP_MS = 10_000L
 
 internal fun formatTimeMs(ms: Long): String {
     val s = ms / 1000

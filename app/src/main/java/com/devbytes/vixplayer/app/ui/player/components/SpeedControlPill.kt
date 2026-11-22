@@ -10,6 +10,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -37,6 +38,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import android.content.res.Configuration
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -119,7 +125,22 @@ fun SpeedControlPill(
                         .padding(top = 64.dp)
                         .fillMaxWidth(widthFraction)
                         // Swallow taps on the pill chrome (not a dot) so they don't dismiss.
-                        .pointerInputTap { },
+                        .pointerInputTap { }
+                        // Remote / D-pad: ←/→ step through the presets, OK closes.
+                        .onKeyEvent { event ->
+                            if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                            val step = when (event.key) {
+                                Key.DirectionLeft -> -1
+                                Key.DirectionRight -> 1
+                                Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> { onDismiss(); return@onKeyEvent true }
+                                else -> return@onKeyEvent false
+                            }
+                            val index = SPEED_PRESETS.indexOf(nearestSpeedPreset(currentSpeed))
+                            interactionKey++
+                            onSelect(SPEED_PRESETS[(index + step).coerceIn(0, SPEED_PRESETS.lastIndex)])
+                            true
+                        }
+                        .focusable(),
                 )
             }
         }

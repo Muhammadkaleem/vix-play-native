@@ -111,6 +111,7 @@ import com.devbytes.vixplayer.app.ui.audio.EqualizerScreen
 import com.devbytes.vixplayer.app.ui.audio.PlaylistDetailScreen
 import com.devbytes.vixplayer.app.ui.audio.PlaylistsScreen
 import com.devbytes.vixplayer.app.ui.common.LocalBottomBarInset
+import com.devbytes.vixplayer.app.ui.common.LocalIsTv
 import com.devbytes.vixplayer.app.ui.common.VixBottomNav
 import com.devbytes.vixplayer.app.ui.library.FolderBrowserScreen
 import com.devbytes.vixplayer.app.ui.library.HistoryScreen
@@ -385,11 +386,16 @@ fun VixPlayNavGraph(
         val slidePx = with(LocalDensity.current) { 30.dp.roundToPx() }
 
         // Screens draw behind the bottom chrome (translucent pill, clear margins) and reserve
-        // its height inside their own scrolling content — see LocalBottomBarInset.
-        CompositionLocalProvider(LocalBottomBarInset provides padding.calculateBottomPadding()) {
+        // its height inside their own scrolling content — see LocalBottomBarInset. Not on TV:
+        // there a list that runs behind the bar doesn't count as "above" it, so ↑ from the bar
+        // would skip the screen's content; the screens sit above the bar instead.
+        val bottomChrome = padding.calculateBottomPadding()
+        val isTv = LocalIsTv.current
+        CompositionLocalProvider(LocalBottomBarInset provides if (isTv) 0.dp else bottomChrome) {
             NavHost(
                 navController = navController,
                 startDestination = SPLASH_ROUTE,
+                modifier = if (isTv) Modifier.padding(bottom = bottomChrome) else Modifier,
                     enterTransition = { enterFor(classifyMotion(initialState, targetState), slidePx) },
                 exitTransition = { exitFor(classifyMotion(initialState, targetState), slidePx) },
                 popEnterTransition = { popEnterFor(classifyMotion(initialState, targetState), slidePx) },

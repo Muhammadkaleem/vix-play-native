@@ -67,7 +67,7 @@ import coil.compose.AsyncImage
 import coil.decode.VideoFrameDecoder
 import coil.request.ImageRequest
 import coil.request.videoFramePercent
-import com.devbytes.vixplayer.app.BuildConfig
+import com.devbytes.vixplayer.app.ads.rememberAdsSupported
 import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.data.repository.VideoFile
 import com.devbytes.vixplayer.app.data.series.EpisodeParser
@@ -144,13 +144,14 @@ fun DashboardScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    val adsSupported = rememberAdsSupported()
     Scaffold(
         contentWindowInsets = screenInsets(),
         topBar = {
             TopAppBar(
                 title = { VideoHeaderTitle() },
                 actions = {
-                    if (BuildConfig.HAS_ADS && isProActive) ProHeaderBadge()
+                    if (adsSupported && isProActive) ProHeaderBadge()
                     IconButton(onClick = onSearch) {
                         Icon(painterResource(R.drawable.ic_search), contentDescription = "Search")
                     }
@@ -178,8 +179,8 @@ fun DashboardScreen(
             }
 
             // 3. Pro — rewarded-ad offer (or the active-entitlement card). Pro only removes ads, so
-            // the ad-free Amazon build has none.
-            if (BuildConfig.HAS_ADS) item {
+            // the ad-free Amazon build and TVs have none.
+            if (adsSupported) item {
                 // Warm a rewarded ad only once the offer is actually on screen.
                 // Once per offer state per visit: counts how many Home visits actually see the card.
                 LaunchedEffect(isProActive) {
