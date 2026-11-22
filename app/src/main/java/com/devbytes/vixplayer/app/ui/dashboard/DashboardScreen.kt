@@ -92,6 +92,10 @@ import com.devbytes.vixplayer.app.ui.common.screenInsets
 import com.devbytes.vixplayer.app.ui.common.withoutBottom
 import com.devbytes.vixplayer.app.ui.common.bottomOnly
 import com.devbytes.vixplayer.app.ui.common.focusRow
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -147,6 +151,24 @@ fun DashboardScreen(
     }
 
     val adsSupported = rememberAdsSupported()
+    // On TV, coming back from the Shorts feed puts the remote back on the Shorts card. (Compose
+    // brings focus back for most cards on its own, but lands on the folder card above this one.)
+    val isTvHome = LocalIsTv.current
+    val shortsFocus = remember { FocusRequester() }
+    var returnToShorts by rememberSaveable { mutableStateOf(false) }
+    // Keyed on Unit: runs as Home comes back (the flag survives in saved state), not on the click.
+    LaunchedEffect(Unit) {
+        if (!returnToShorts || !isTvHome) return@LaunchedEffect
+        // The card may not be laid out yet as the screen comes back; try for a moment.
+        repeat(10) {
+            delay(50)
+            if (runCatching { shortsFocus.requestFocus() }.isSuccess) {
+                returnToShorts = false
+                return@LaunchedEffect
+            }
+        }
+        returnToShorts = false
+    }
     Scaffold(
         contentWindowInsets = screenInsets(),
         topBar = {
@@ -272,7 +294,11 @@ fun DashboardScreen(
                     ShortsCard(
                         samples = state.shortsSamples,
                         count = state.shortsCount,
-                        onClick = onOpenShorts,
+                        onClick = {
+                            returnToShorts = true
+                            onOpenShorts()
+                        },
+                        modifier = Modifier.focusRequester(shortsFocus),
                     )
                 }
             }
@@ -1158,10 +1184,11 @@ private fun FavoriteRow(video: VideoFile, onClick: () -> Unit, onUnfavorite: () 
 }
 
 @Composable
-private fun ShortsCard(samples: List<VideoFile>, count: Int, onClick: () -> Unit) {
+private fun ShortsCard(samples: List<VideoFile>, count: Int, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
             .clip(RoundedCornerShape(14.dp))
+            .then(modifier)
             .background(Brush.linearGradient(listOf(Color(0xFF3C3658), Color(0xFF272338))))
             .combinedClickableSafe(onClick)
             .padding(12.dp),

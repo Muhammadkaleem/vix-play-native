@@ -112,6 +112,8 @@ import com.devbytes.vixplayer.app.ui.audio.PlaylistDetailScreen
 import com.devbytes.vixplayer.app.ui.audio.PlaylistsScreen
 import com.devbytes.vixplayer.app.ui.common.LocalBottomBarInset
 import com.devbytes.vixplayer.app.ui.common.LocalIsTv
+import com.devbytes.vixplayer.app.ui.common.TvSafeVertical
+import com.devbytes.vixplayer.app.ui.common.TvSafeHorizontal
 import com.devbytes.vixplayer.app.ui.common.VixBottomNav
 import com.devbytes.vixplayer.app.ui.library.FolderBrowserScreen
 import com.devbytes.vixplayer.app.ui.library.HistoryScreen
@@ -340,12 +342,23 @@ fun VixPlayNavGraph(
         }
     }
 
+    // TV: keep screens inside the overscan-safe area; the player, Shorts and splash bleed to the edges.
+    // The margins go on the screens and on the bottom chrome, not on the Scaffold, which clips to its
+    // bounds and would cut the nav pill's shadow off square.
+    val tvSafe = LocalIsTv.current &&
+        currentRoute != PLAYER_ROUTE && currentRoute != SHORTS_FEED_ROUTE && currentRoute != SPLASH_ROUTE
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             // Mini-player sits above the tabs and inside the same slot, so Scaffold
             // padding accounts for both and content is never hidden behind it.
-            Column {
+            Column(
+                if (tvSafe) {
+                    Modifier.padding(start = TvSafeHorizontal, end = TvSafeHorizontal, bottom = TvSafeVertical)
+                } else {
+                    Modifier
+                },
+            ) {
                 // Anchored banner on top (furthest from the nav thumb), once consent + SDK are
                 // ready and the user isn't Pro. It stays composed everywhere and only collapses
                 // (paused) on routes without a banner, so the loaded ad survives a trip to the
@@ -395,7 +408,16 @@ fun VixPlayNavGraph(
             NavHost(
                 navController = navController,
                 startDestination = SPLASH_ROUTE,
-                modifier = if (isTv) Modifier.padding(bottom = bottomChrome) else Modifier,
+                modifier = when {
+                    tvSafe -> Modifier.padding(
+                        start = TvSafeHorizontal,
+                        top = TvSafeVertical,
+                        end = TvSafeHorizontal,
+                        bottom = bottomChrome,
+                    )
+                    isTv -> Modifier.padding(bottom = bottomChrome)
+                    else -> Modifier
+                },
                     enterTransition = { enterFor(classifyMotion(initialState, targetState), slidePx) },
                 exitTransition = { exitFor(classifyMotion(initialState, targetState), slidePx) },
                 popEnterTransition = { popEnterFor(classifyMotion(initialState, targetState), slidePx) },

@@ -51,6 +51,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.content.res.Configuration
 import com.devbytes.vixplayer.app.R
+import com.devbytes.vixplayer.app.ui.common.LocalIsTv
+import com.devbytes.vixplayer.app.ui.common.TvSafeHorizontal
 
 /** Live values shown on the option tiles (sub-labels, toggle/visibility state). */
 data class PlayerOptionsValues(
@@ -115,6 +117,7 @@ fun PlayerOptionsPanel(
 ) {
     val accent = MaterialTheme.colorScheme.primary
     val isPortrait = LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT
+    val isTv = LocalIsTv.current
     // The panel composable persists across open/close, so reset the scroll to the top (handle)
     // each time it opens rather than reopening wherever it was last left.
     val scrollState = rememberScrollState()
@@ -143,7 +146,9 @@ fun PlayerOptionsPanel(
             else (maxWidth * 0.42f).coerceIn(300.dp, 470.dp)
             val hPad = 12.dp
             val gap = 4.dp
-            val tileWidth = (panelWidth - hPad * 2 - gap * 4) / 5
+            // TV overscan: tiles keep clear of the right edge; the panel's shade still reaches it.
+            val safeEnd = if (isTv) TvSafeHorizontal else 0.dp
+            val tileWidth = (panelWidth - hPad * 2 - safeEnd - gap * 4) / 5
 
             AnimatedVisibility(
                 visible = visible,
@@ -178,7 +183,7 @@ fun PlayerOptionsPanel(
                             .fillMaxHeight()
                             .safeDrawingPadding()
                             .verticalScroll(scrollState)
-                            .padding(horizontal = hPad, vertical = 8.dp),
+                            .padding(start = hPad, end = hPad + safeEnd, top = 8.dp, bottom = 8.dp),
                     ) {
                         Box(
                             Modifier

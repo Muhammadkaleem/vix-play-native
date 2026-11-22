@@ -123,3 +123,10 @@ fun Modifier.focusRow(): Modifier = focusProperties {
         else FocusRequester.Default
     }
 }
+
+/**
+ * Android TV's overscan-safe margins: some TVs crop the picture's edges, so text and controls keep
+ * this far in. Backgrounds and video still reach the edges.
+ */
+val TvSafeHorizontal = 48.dp
+val TvSafeVertical = 27.dp

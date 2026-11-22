@@ -45,6 +45,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.media3.exoplayer.ExoPlayer
 import com.devbytes.vixplayer.app.R
+import com.devbytes.vixplayer.app.ui.common.LocalIsTv
+import com.devbytes.vixplayer.app.ui.common.TvSafeHorizontal
+import com.devbytes.vixplayer.app.ui.common.TvSafeVertical
 import com.devbytes.vixplayer.app.ui.player.PlayerSkin
 import com.devbytes.vixplayer.app.ui.theme.AmoledBackground
 import com.devbytes.vixplayer.app.ui.theme.OnScrim
@@ -86,6 +89,12 @@ fun PlayerHud(
     playFocusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier,
 ) {
+    // TV overscan: controls keep clear of edges a TV may crop; the scrim still reaches them.
+    val safeArea = if (LocalIsTv.current) {
+        Modifier.padding(horizontal = TvSafeHorizontal, vertical = TvSafeVertical)
+    } else {
+        Modifier
+    }
     var isPlaying by remember { mutableStateOf(player.isPlaying) }
     var positionMs by remember { mutableLongStateOf(player.currentPosition) }
     var durationMs by remember { mutableLongStateOf(player.duration.coerceAtLeast(0L)) }
@@ -130,6 +139,7 @@ fun PlayerHud(
                     // top controls never sit under a cutout in immersive mode or landscape.
                     .statusBarsPadding()
                     .displayCutoutPadding()
+                    .then(safeArea)
                     .padding(horizontal = 4.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -211,6 +221,7 @@ fun PlayerHud(
                     // controls aren't clipped by a cutout (esp. in landscape).
                     .navigationBarsPadding()
                     .displayCutoutPadding()
+                    .then(safeArea)
                     .padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
                 PlayerSeekBar(

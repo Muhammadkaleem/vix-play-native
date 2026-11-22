@@ -41,6 +41,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.devbytes.vixplayer.app.R
+import com.devbytes.vixplayer.app.ui.common.LocalIsTv
+import com.devbytes.vixplayer.app.ui.common.TvSafeHorizontal
 import com.devbytes.vixplayer.app.player.CreditsSource
 import com.devbytes.vixplayer.app.player.IntroSource
 import com.devbytes.vixplayer.app.player.formatIntroTime
@@ -276,7 +278,7 @@ fun SkipIntroPill(
             Row(
                 modifier = Modifier
                     .navigationBarsPadding()
-                    .padding(end = 24.dp, bottom = 112.dp)
+                    .padding(end = pillEnd(), bottom = 112.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(ScrimStrong)
                     .border(1.dp, OnScrim.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
@@ -325,7 +327,7 @@ fun NextEpisodePill(
             Row(
                 modifier = Modifier
                     .navigationBarsPadding()
-                    .padding(end = 24.dp, bottom = 112.dp),
+                    .padding(end = pillEnd(), bottom = 112.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -364,3 +366,7 @@ fun NextEpisodePill(
         }
     }
 }
+
+/** Clear of the right edge, and of a TV's overscan. */
+@Composable
+private fun pillEnd() = if (LocalIsTv.current) 24.dp + TvSafeHorizontal else 24.dp

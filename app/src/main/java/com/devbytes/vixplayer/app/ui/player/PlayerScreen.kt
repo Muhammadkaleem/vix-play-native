@@ -408,10 +408,10 @@ fun PlayerScreen(
             showResumeChip = true
         }
     }
-    // Auto-dismiss the resume chip.
+    // Auto-dismiss the resume chip — later on TV, where reaching Restart takes a couple of presses.
     LaunchedEffect(showResumeChip) {
         if (showResumeChip) {
-            delay(5_000)
+            delay(if (isTv) 8_000 else 5_000)
             showResumeChip = false
         }
     }
@@ -1871,7 +1871,9 @@ fun PlayerScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
-                .padding(bottom = 96.dp),
+                // On TV it clears the seek bar, so ↑ from the seek bar reaches Restart (focus search
+                // passes over anything overlapping the control it starts from).
+                .padding(bottom = if (isTv) 144.dp else 96.dp),
         ) {
             ResumeChip(
                 positionMs = resumePos,
