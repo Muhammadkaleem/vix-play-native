@@ -1,6 +1,8 @@
 package com.devbytes.vixplayer.app.ads
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Every interstitial rule, against the release defaults (not the shortened debug ones). */
@@ -86,5 +88,21 @@ class AdFrequencyPolicyTest {
         // Pro + inside grace + capped: Pro wins, so analytics attribute skips to the real cause.
         val s = eligible.copy(installedAt = now, sessionShownCount = 9, todayCount = 9)
         assertEquals(skip("pro"), decide(s = s, ctx = watched.copy(isPro = true)))
+    }
+
+    // ── "Go ad-free" after an interstitial ────────────────────────────────────────────────
+
+    @Test fun adFreeIsOfferedTheFirstTime() =
+        assertTrue(AdFrequencyPolicy.offersAdFree(now, lastPromptAt = 0, c = cfg, isPro = false))
+
+    @Test fun adFreeIsOfferedAtMostEveryThreeDays() {
+        assertFalse(AdFrequencyPolicy.offersAdFree(now, lastPromptAt = now - 71 * hour, c = cfg, isPro = false))
+        assertTrue(AdFrequencyPolicy.offersAdFree(now, lastPromptAt = now - 72 * hour, c = cfg, isPro = false))
+    }
+
+    @Test fun adFreeIsNeverOfferedToProOrWhenSwitchedOff() {
+        assertFalse(AdFrequencyPolicy.offersAdFree(now, 0, cfg, isPro = true))
+        assertFalse(AdFrequencyPolicy.offersAdFree(now, 0, cfg.copy(adFreePromptEnabled = false), isPro = false))
+        assertFalse(AdFrequencyPolicy.offersAdFree(now, 0, cfg.copy(adsEnabled = false), isPro = false))
     }
 }

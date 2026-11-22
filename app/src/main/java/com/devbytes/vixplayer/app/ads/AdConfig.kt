@@ -35,6 +35,10 @@ data class AdConfig(
     val nativeVideoListFirst: Int = 4,
     /** …then one every this many. */
     val nativeVideoListInterval: Int = 10,
+    /** After an interstitial closes, offer to go ad-free with a rewarded ad (a snackbar). */
+    val adFreePromptEnabled: Boolean = true,
+    /** At most one such offer this often. */
+    val adFreePromptGapMs: Long = 3 * 24 * HOUR,
 ) {
     companion object {
         /**
@@ -49,6 +53,7 @@ data class AdConfig(
                 graceSessions = 0,
                 minWatchMs = 10 * SEC,
                 rewardedCooldownMs = 60 * SEC,
+                adFreePromptGapMs = 2 * MIN,
             )
         } else {
             AdConfig()
@@ -78,6 +83,8 @@ class AdConfigProvider @Inject constructor() {
                     "ads_session_timeout_ms" to d.sessionTimeoutMs,
                     "ads_native_video_first" to d.nativeVideoListFirst.toLong(),
                     "ads_native_video_interval" to d.nativeVideoListInterval.toLong(),
+                    "ads_ad_free_prompt_enabled" to d.adFreePromptEnabled,
+                    "ads_ad_free_prompt_gap_ms" to d.adFreePromptGapMs,
                 ),
             )
         }
@@ -105,6 +112,8 @@ class AdConfigProvider @Inject constructor() {
                     .toInt().coerceAtLeast(1),
                 nativeVideoListInterval = long("ads_native_video_interval", d.nativeVideoListInterval.toLong())
                     .toInt().coerceAtLeast(2),
+                adFreePromptEnabled = r.getBoolean("ads_ad_free_prompt_enabled"),
+                adFreePromptGapMs = long("ads_ad_free_prompt_gap_ms", d.adFreePromptGapMs),
             )
         }.getOrDefault(AdConfig.DEFAULT)
     }

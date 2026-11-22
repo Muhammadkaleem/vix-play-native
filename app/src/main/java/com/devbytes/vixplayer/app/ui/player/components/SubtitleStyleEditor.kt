@@ -140,9 +140,9 @@ fun SubtitleStyleEditor(
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    text = "ASS/SSA subtitles carry their own fonts and colours. " +
-                        "Leave off to show them as authored. Text size always follows " +
-                        "your setting.",
+                    text = "ASS/SSA subtitles carry their own fonts, colours and placement. " +
+                        "Leave off to show them as the file draws them; turn on to use " +
+                        "the style above.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

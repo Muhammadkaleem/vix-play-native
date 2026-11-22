@@ -71,6 +71,17 @@ object IntroMatcher {
     }
 
     /**
+     * An episode's opening extended by a later span: [head] from the start of the file, [tail]
+     * from [tailStartMs] — where the seek landed, at or before the end of [head]. Frame 0 stays
+     * the file's start, so [introOf] still gives times in the file. Null if the two don't meet.
+     */
+    fun joinSpans(head: IntArray, tail: IntArray, tailStartMs: Long): IntArray? {
+        val cut = (tailStartMs / AudioFingerprinter.HOP_MS).toInt()
+        if (cut < 0 || cut > head.size) return null
+        return head.copyOf(cut) + tail
+    }
+
+    /**
      * The end credits of episode [index], from [endings] — fingerprints of each episode's
      * last minutes, code 0 at [startsMs] into that file — and the [others] it's compared
      * against: the shared stretch most of them agree on, provided it runs to within

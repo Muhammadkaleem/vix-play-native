@@ -87,6 +87,41 @@ class IntroMatcherTest {
 
     @Test fun noOthersMeansNoIntro() = assertNull(IntroMatcher.introOf(0, listOf(episode(10, 1)), listOf(0)))
 
+    /**
+     * A long cold open puts the titles past the first scan. Scaled down: the "first scan" here
+     * is 60 s and the theme starts at 90 s; a second listen from 50 s (where a seek might land
+     * before the 60 s asked for) joined on finds it at its time in the file.
+     */
+    @Test fun aLateIntroIsFoundOnceTheOpeningIsExtended() {
+        val samples = listOf(story(90, 21), theme(30), story(60, 121)).reduce { a, b -> a + b }
+        fun print(fromS: Int, toS: Int) = AudioFingerprinter().apply { add(samples.copyOfRange(fromS * rate, toS * rate)) }.codes()
+        val head = print(0, 60)
+        val neighbour = episode(coldOpen = 20, seed = 22)
+        assertNull(IntroMatcher.introOf(0, listOf(head, neighbour), listOf(1)))
+
+        val joined = IntroMatcher.joinSpans(head, print(50, 180), tailStartMs = 50_000)
+        assertNotNull(joined)
+        val window = IntroMatcher.introOf(0, listOf(joined!!, neighbour), listOf(1))
+        assertNotNull(window)
+        assertTrue("starts at ${window!!.startMs}", window.startMs - 90_000 in -1000..2500)
+        assertTrue("ends at ${window.endMs}", 120_000 - window.endMs in -1000..2500)
+    }
+
+    @Test fun spansThatDontMeetAreNotJoined() =
+        assertNull(IntroMatcher.joinSpans(IntArray(600), IntArray(10), tailStartMs = 70_000))
+
+    /** A second listen makes 20-minute openings; matching one against a 10-minute one must stay quick. */
+    @Test fun aTwentyMinuteOpeningMatchesQuickly() {
+        val random = Random(5)
+        val long = IntArray(12_000) { random.nextInt() }
+        val short = IntArray(6_000) { random.nextInt() }
+        val started = System.nanoTime()
+        IntroMatcher.shared(long, short)
+        val ms = (System.nanoTime() - started) / 1_000_000
+        println("20 min vs 10 min: $ms ms")
+        assertTrue("took $ms ms", ms < 20_000)
+    }
+
     // ── End credits ───────────────────────────────────────────────────────────────────────
 
     /** The scanned ending of an episode: its own story, the shared credits music, then an optional tag. */

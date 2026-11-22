@@ -13,6 +13,7 @@ import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.devbytes.vixplayer.app.player.datasource.NetworkDataSource
+import com.devbytes.vixplayer.app.player.subtitle.AssSupport
 import com.devbytes.vixplayer.app.player.subtitle.OffsetSubtitleParserFactory
 import com.devbytes.vixplayer.app.player.subtitle.SubtitleOffsetHolder
 import android.net.Uri
@@ -85,6 +86,9 @@ class PlayerController @Inject constructor(
     /** Read by the subtitle parser at parse time; see [OffsetSubtitleParserFactory]. */
     val subtitleOffset = SubtitleOffsetHolder()
 
+    /** libass for styled SSA inside MKV; see [AssSupport]. */
+    val assSupport = AssSupport()
+
     private val _kind = MutableStateFlow(PlaybackKind.NONE)
 
     /** Drives mini-player visibility: audio should surface a bar, video should not. */
@@ -120,8 +124,8 @@ class PlayerController @Inject constructor(
         .setMediaSourceFactory(
             // NetworkDataSource adds smb:// and ftp:// on top of the default schemes
             // (file/content/http/https/…) so network shares play on the same path.
-            DefaultMediaSourceFactory(NetworkDataSource.Factory(context))
-                .setSubtitleParserFactory(OffsetSubtitleParserFactory(subtitleOffset))
+            DefaultMediaSourceFactory(NetworkDataSource.Factory(context), assSupport.extractorsFactory)
+                .setSubtitleParserFactory(OffsetSubtitleParserFactory(subtitleOffset, assSupport.parserFactory))
         )
         // handleAudioFocus = true gives pause-on-transient-loss, ducking, and resume,
         // which is what the PRD's "audio focus behavior matches Android guidelines" means.
@@ -137,6 +141,7 @@ class PlayerController @Inject constructor(
         .build()
         .apply {
             setAudioSessionId(this@PlayerController.audioSessionId)
+            assSupport.attach(this)
             // Decoder names are the only way to see which path (platform vs FFmpeg) a
             // file actually took — surfaced in File Info and used to verify the extension.
             addAnalyticsListener(object : AnalyticsListener {
@@ -185,7 +190,13 @@ class PlayerController @Inject constructor(
      * `remember` went out of scope; with an app-scoped player it must be explicit, or a
      * previous video's subtitle offset silently applies to the next one.
      */
-    fun prepareFor(uri: String, subtitleOffsetMs: Long, title: String? = null, owner: PlayerOwner? = null) {
+    fun prepareFor(
+        uri: String,
+        subtitleOffsetMs: Long,
+        title: String? = null,
+        owner: PlayerOwner? = null,
+        subtitles: List<MediaItem.SubtitleConfiguration> = emptyList(),
+    ) {
         handOver(owner)
         ensureServiceRunning()
         resetDecoderNames()
@@ -196,6 +207,7 @@ class PlayerController @Inject constructor(
             MediaItem.Builder()
                 .setUri(uri)
                 .setMediaMetadata(MediaMetadata.Builder().setTitle(title).build())
+                .setSubtitleConfigurations(subtitles)
                 .build()
         )
         player.prepare()

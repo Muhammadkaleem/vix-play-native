@@ -184,6 +184,11 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
 import kotlin.math.roundToInt
+import com.devbytes.vixplayer.app.BuildConfig
+import com.devbytes.vixplayer.app.data.subtitles.OpenSubtitles
+import com.devbytes.vixplayer.app.data.subtitles.SubtitleQuery
+import com.devbytes.vixplayer.app.ui.player.components.SubtitleSearchSheet
+import android.widget.Toast
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -286,7 +291,18 @@ fun PlayerScreen(
     }
 
     // Opening a video is one call so per-file state can't leak from the previous one.
-    LaunchedEffect(Unit) { viewModel.prepareFor(uri, subtitleOffsetMs, externalName, playerOwner) }
+    // Externally side-loaded subtitle configs (survive the MediaItem rebuild).
+    val externalSubs = remember { mutableStateListOf<MediaItem.SubtitleConfiguration>() }
+    // Online subtitle search (OpenSubtitles): offered when this build has an API key.
+    val subtitleSearchAvailable = remember { BuildConfig.OPENSUBTITLES_API_KEY.isNotBlank() }
+    var subtitleSearchQuery by remember { mutableStateOf(SubtitleQuery("")) }
+
+    LaunchedEffect(Unit) {
+        // Subtitles added to this file before (from a file or OpenSubtitles) come back with it.
+        val remembered = viewModel.rememberedSubtitles()
+        externalSubs.addAll(remembered)
+        viewModel.prepareFor(uri, subtitleOffsetMs, externalName, playerOwner, remembered)
+    }
 
     // Held so the screenshot capture can reach the video SurfaceView for PixelCopy.
     var playerView by remember { mutableStateOf<PlayerView?>(null) }
@@ -305,7 +321,6 @@ fun PlayerScreen(
 
     // Externally side-loaded subtitle configs (survive the MediaItem rebuild) + a live
     // snapshot of the player's tracks, refreshed by the listener's onTracksChanged.
-    val externalSubs = remember { mutableStateListOf<MediaItem.SubtitleConfiguration>() }
     var tracks by remember { mutableStateOf(player.currentTracks) }
     // Mime of a track with no decoder on this device (see UnsupportedCodec.kt); derived
     // from `tracks` below, read by File Info and the unsupported-codec UI.
@@ -316,12 +331,11 @@ fun PlayerScreen(
     fun reloadWithSubtitles() {
         val pos = player.currentPosition
         val wasPlaying = player.playWhenReady
-        player.setMediaItem(
-            MediaItem.Builder()
-                .setUri(currentUri)
-                .setSubtitleConfigurations(externalSubs.toList())
-                .build()
-        )
+        // From the loaded item, so its title (notification, lock screen) survives the rebuild.
+        val item = (player.currentMediaItem?.buildUpon() ?: MediaItem.Builder().setUri(currentUri))
+            .setSubtitleConfigurations(externalSubs.toList())
+            .build()
+        player.setMediaItem(item)
         player.prepare()
         player.seekTo(pos)
         player.playWhenReady = wasPlaying
@@ -352,6 +366,8 @@ fun PlayerScreen(
     var showCreditsHud by remember { mutableStateOf(false) }
     var markCreditsStartMs by remember { mutableStateOf<Long?>(null) }
     var watchingCreditsUri by remember { mutableStateOf<String?>(null) }
+    // The show is set to play its credits through ("Always watch credits" in the credits card).
+    var alwaysWatchCredits by remember { mutableStateOf(false) }
     var creditsCountdown by remember { mutableStateOf<Int?>(null) }
     var pendingOffsetKey by remember { mutableIntStateOf(0) }
     LaunchedEffect(pendingOffsetKey) {
@@ -365,6 +381,14 @@ fun PlayerScreen(
     fun stepSubtitleOffset(deltaMs: Long) {
         subtitleOffsetMs = (subtitleOffsetMs + deltaMs).coerceIn(-60_000L, 60_000L)
         pendingOffsetKey++
+    }
+
+    // Styled SSA in MKV goes through libass unless the user overrides embedded styles; that's
+    // decided as the file is read, so a change re-reads a file that has SSA subtitles.
+    LaunchedEffect(subtitleStyle.overrideEmbedded) {
+        if (viewModel.setAssOverride(subtitleStyle.overrideEmbedded) && tracks.hasSsaSubtitles()) {
+            reloadWithSubtitles()
+        }
     }
 
     val subtitlePicker = rememberLauncherForActivityResult(
@@ -386,6 +410,7 @@ fun PlayerScreen(
                     .build()
             )
             reloadWithSubtitles()
+            viewModel.rememberSubtitle(picked, name, subtitleMimeFor(name))
         }
     }
 
@@ -457,6 +482,7 @@ fun PlayerScreen(
         val found = key?.let { viewModel.loadCredits(it, player.duration) }
         credits = found?.first
         creditsSource = found?.second
+        alwaysWatchCredits = key?.let { viewModel.alwaysWatchCredits(it) } == true
     }
     fun saveIntroMarks(episodeOnly: Boolean) {
         val key = upNext.showKey ?: return
@@ -785,7 +811,9 @@ fun PlayerScreen(
         creditsSource = null
         showCreditsHud = false
         creditsCountdown = null
-        viewModel.prepareFor(newUri, subtitleOffsetMs, owner = playerOwner)
+        val remembered = viewModel.rememberedSubtitles()
+        externalSubs.addAll(remembered)
+        viewModel.prepareFor(newUri, subtitleOffsetMs, owner = playerOwner, subtitles = remembered)
         showResumeChip = false
         ended = false
         playedStamped = false
@@ -1159,7 +1187,7 @@ fun PlayerScreen(
         positionMs = introPositionMs,
         durationMs = player.duration,
         hasNext = nextVideo != null && upNext.showKey != null,
-        watchingCredits = watchingCreditsUri == currentUri,
+        watchingCredits = alwaysWatchCredits || watchingCreditsUri == currentUri,
     ) && !showIntroHud && !showCreditsHud && !locked && !pipMode && playbackError == null && !ended
     fun nextFromCredits(result: String) {
         val next = nextVideo ?: return
@@ -1247,7 +1275,7 @@ fun PlayerScreen(
             intro.window?.label() ?: if (introDetecting) "Finding…" else "Not set"
         } else null,
         creditsLabel = if (upNext.showKey != null) {
-            credits?.label() ?: if (introDetecting) "Finding…" else "Not set"
+            if (alwaysWatchCredits) "Always watched" else credits?.label() ?: if (introDetecting) "Finding…" else "Not set"
         } else null,
     )
 
@@ -1749,6 +1777,13 @@ fun PlayerScreen(
             error = creditsMarkError(markCreditsStartMs, player.duration),
             existing = creditsSource,
             detecting = introDetecting,
+            alwaysWatch = alwaysWatchCredits,
+            onToggleAlwaysWatch = {
+                val key = showKey ?: return@CreditsMarkHud
+                alwaysWatchCredits = !alwaysWatchCredits
+                viewModel.setAlwaysWatchCredits(key, alwaysWatchCredits)
+                Analytics.log(context, Analytics.CREDITS_MARKED, "scope" to if (alwaysWatchCredits) "always_watch" else "always_watch_off")
+            },
             onSetStart = { markCreditsStartMs = player.currentPosition },
             onSaveForShow = { saveCreditsMark(episodeOnly = false) },
             onSaveForEpisode = { saveCreditsMark(episodeOnly = true) },
@@ -2023,6 +2058,39 @@ fun PlayerScreen(
                         showSyncHud = true
                     },
                     onStyle = { currentSheet = PlayerSheet.SubtitleStyle },
+                    onSearchOnline = if (subtitleSearchAvailable) {
+                        {
+                            scope.launch {
+                                // What the file looks like: its name (and folders) say show/episode or film/year.
+                                val file = runCatching { viewModel.loadFileInfo() }.getOrNull()
+                                subtitleSearchQuery = OpenSubtitles.queryFor(file?.name ?: title, file?.path)
+                                currentSheet = PlayerSheet.SubtitleSearch
+                            }
+                        }
+                    } else {
+                        null
+                    },
+                )
+                is PlayerSheet.SubtitleSearch -> SubtitleSearchSheet(
+                    initialQuery = subtitleSearchQuery,
+                    video = Uri.parse(currentUri),
+                    onSaved = { saved ->
+                        val subUri = Uri.fromFile(saved.file)
+                        externalSubs.add(
+                            MediaItem.SubtitleConfiguration.Builder(subUri)
+                                .setMimeType(saved.format.mimeType)
+                                .setLabel(saved.label)
+                                .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                                .build()
+                        )
+                        reloadWithSubtitles()
+                        viewModel.rememberSubtitle(subUri, saved.label, saved.format.mimeType)
+                        currentSheet = null
+                        Analytics.log(context, Analytics.SUBTITLE_DOWNLOADED, "format" to saved.format.name.lowercase())
+                        val left = saved.remaining?.let { " · $it downloads left today" }.orEmpty()
+                        Toast.makeText(context, "Subtitles added$left", Toast.LENGTH_SHORT).show()
+                    },
+                    onFailed = { message -> Toast.makeText(context, message, Toast.LENGTH_LONG).show() },
                 )
                 is PlayerSheet.SubtitleStyle -> SubtitleStyleEditor(
                     style = subtitleStyle,
@@ -2212,4 +2280,12 @@ private fun Context.findActivity(): Activity? {
         ctx = ctx.baseContext
     }
     return null
+}
+
+/** An SSA/ASS subtitle track, raw or already turned into cues during extraction. */
+private fun Tracks.hasSsaSubtitles(): Boolean = groups.any { group ->
+    (0 until group.length).any { i ->
+        val format = group.getTrackFormat(i)
+        format.sampleMimeType == MimeTypes.TEXT_SSA || format.codecs == MimeTypes.TEXT_SSA
+    }
 }

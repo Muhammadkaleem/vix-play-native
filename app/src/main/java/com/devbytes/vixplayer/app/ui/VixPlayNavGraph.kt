@@ -51,6 +51,7 @@ import com.devbytes.vixplayer.app.navigation.ABOUT_PRO_ROUTE
 import com.devbytes.vixplayer.app.navigation.PRO_REWARDS_ROUTE
 import com.devbytes.vixplayer.app.navigation.REWARD_HISTORY_ROUTE
 import com.devbytes.vixplayer.app.ui.premium.ProRewardsScreen
+import com.devbytes.vixplayer.app.ui.premium.RewardConfig
 import com.devbytes.vixplayer.app.ui.premium.RewardHistoryScreen
 import com.devbytes.vixplayer.app.navigation.BRIEFING_ROUTE
 import com.devbytes.vixplayer.app.navigation.BRIEFING_SETTINGS_ROUTE
@@ -339,6 +340,22 @@ fun VixPlayNavGraph(
                 duration = SnackbarDuration.Indefinite,
             )
             if (result == SnackbarResult.ActionPerformed) onInstallUpdate()
+        }
+    }
+
+    // Right after an interstitial closes, offer the trade it makes obvious: one rewarded ad for
+    // hours without ads. Rate-limited in AdFrequencyPolicy.offersAdFree; Play build only.
+    LaunchedEffect(Unit) {
+        adsViewModel.adFreeOffers.collect {
+            val result = snackbarHostState.showSnackbar(
+                message = "Skip ads like that: watch one short video for ${RewardConfig.REWARD_PER_AD_MS / RewardConfig.HOUR_MS} hours ad-free",
+                actionLabel = "Go ad-free",
+                withDismissAction = true,
+                duration = SnackbarDuration.Long,
+            )
+            val accepted = result == SnackbarResult.ActionPerformed
+            adsViewModel.onAdFreeOffer(accepted)
+            if (accepted) navController.navigate(PRO_REWARDS_ROUTE) { launchSingleTop = true }
         }
     }
 

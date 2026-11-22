@@ -51,6 +51,9 @@ android {
         // consent service treat this device as in the EEA (or a regulated US state), so those
         // privacy messages can be checked from elsewhere.
         buildConfigField("String", "UMP_DEBUG_GEOGRAPHY", "\"${localProps.getProperty("ump.debugGeography", "")}\"")
+        // OpenSubtitles.com API key for online subtitle search (`opensubtitles.apiKey` in the
+        // untracked local.properties). Blank → the "Search online" row isn't shown.
+        buildConfigField("String", "OPENSUBTITLES_API_KEY", "\"${localProps.getProperty("opensubtitles.apiKey", "")}\"")
     }
 
     // Where the build is sold. Play carries AdMob and the rewarded "Pro" tier; the Amazon
@@ -137,6 +140,11 @@ dependencies {
     // rebuilt whenever the media3 version changes.
     implementation(files("libs/media3-decoder-ffmpeg-1.6.1.aar"))
     implementation(libs.androidx.media3.decoder)
+    // Styled ASS/SSA subtitles through libass (see player/subtitle/AssSupport.kt). ass-media asks
+    // for media3-effect 1.6.0; pinning it to our Media3 version keeps every module in step.
+    implementation(libs.ass.media)
+    implementation(libs.ass.kt)
+    implementation(libs.androidx.media3.effect)
     // Chromecast (Default Media Receiver) + the on-phone HTTP server that feeds it local files.
     implementation(libs.androidx.media3.cast)
     implementation(libs.androidx.mediarouter)
@@ -206,6 +214,8 @@ dependencies {
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 
     testImplementation(libs.junit)
+    // Android's org.json is a stub in JVM tests; the real one for parsing tests.
+    testImplementation(libs.json)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
 }

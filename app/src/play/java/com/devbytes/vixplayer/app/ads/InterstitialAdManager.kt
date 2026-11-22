@@ -21,6 +21,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -44,6 +47,11 @@ class InterstitialAdManager @Inject constructor(
 ) {
     private val tag = "InterstitialAd"
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    private val _adFreeOffers = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    /** An interstitial just closed and the user may want the ad-free trade; see [AdFrequencyPolicy.offersAdFree]. */
+    val adFreeOffers: Flow<Unit> = _adFreeOffers.asSharedFlow()
 
     private var ad: InterstitialAd? = null
     private var loadedAt = 0L
@@ -185,6 +193,17 @@ class InterstitialAdManager @Inject constructor(
 
             override fun onAdDismissedFullScreenContent() {
                 preloadIfEligible()
+                scope.launch {
+                    val now = System.currentTimeMillis()
+                    val isPro = controller.isPro.value || !controller.adsAllowed.value
+                    val offer = AdFrequencyPolicy.offersAdFree(now, frequency.lastAdFreePromptAt(), config.current(), isPro)
+                    Log.i(tag, "closed; offer ad-free: $offer")
+                    if (offer) {
+                        frequency.recordAdFreePrompt(now)
+                        events.adFreePrompt("shown")
+                        _adFreeOffers.tryEmit(Unit)
+                    }
+                }
             }
 
             override fun onAdFailedToShowFullScreenContent(error: AdError) {

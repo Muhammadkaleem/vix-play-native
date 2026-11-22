@@ -33,6 +33,7 @@ class AdFrequencyStore @Inject constructor(
         val DAY_KEY = longPreferencesKey("day_key")
         val TODAY_COUNT = intPreferencesKey("today_count")
         val BACKGROUND_AT = longPreferencesKey("background_at")
+        val AD_FREE_PROMPT_AT = longPreferencesKey("ad_free_prompt_at")
     }
 
     private val sessionShown = AtomicInteger(0)
@@ -81,6 +82,13 @@ class AdFrequencyStore @Inject constructor(
             p[K.TODAY_COUNT] = count + 1
             p[K.LAST_FULLSCREEN] = now
         }
+    }
+
+    /** When "go ad-free" was last offered after an interstitial; 0 if never. */
+    suspend fun lastAdFreePromptAt(): Long = context.adsDataStore.data.first()[K.AD_FREE_PROMPT_AT] ?: 0L
+
+    suspend fun recordAdFreePrompt(now: Long) {
+        context.adsDataStore.edit { it[K.AD_FREE_PROMPT_AT] = now }
     }
 
     /** A rewarded ad was shown (the user chose it) — starts the rewarded cooldown. */

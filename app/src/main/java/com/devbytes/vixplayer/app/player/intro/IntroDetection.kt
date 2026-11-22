@@ -134,13 +134,17 @@ class IntroDetection @Inject constructor(
                 usable.filter { it >= targets.size }).distinct().filter { it != i }.take(NEIGHBOURS)
         }
 
+        fun detectIntro(i: Int): Boolean {
+            val episode = targets[i]
+            val window = IntroMatcher.introOf(i, openings.map { it ?: IntArray(0) }, neighbours(i) { openings[it] != null })
+            playback.saveDetectedIntro(episode.file.id, window?.let { DetectedIntro.Found(it) } ?: DetectedIntro.None)
+            Log.i(TAG, "${episode.info.code} intro: ${window ?: "none"}")
+            return window != null
+        }
+
         fun detect(i: Int) {
             val episode = targets[i]
-            if (needIntros && openings[i] != null) {
-                val window = IntroMatcher.introOf(i, openings.map { it ?: IntArray(0) }, neighbours(i) { openings[it] != null })
-                playback.saveDetectedIntro(episode.file.id, window?.let { DetectedIntro.Found(it) } ?: DetectedIntro.None)
-                Log.i(TAG, "${episode.info.code} intro: ${window ?: "none"}")
-            }
+            if (needIntros && openings[i] != null) detectIntro(i)
             if (needCredits && endings[i] != null) {
                 val credits = IntroMatcher.creditsOf(
                     i,
@@ -166,6 +170,30 @@ class IntroDetection @Inject constructor(
         fingerprint(episodes.indices.toList())
         if (job?.isActive == false) return@coroutineScope
         targets.indices.forEach(::detect)
+
+        // Some shows run a long cold open before the titles. Where the opening found nothing,
+        // listen further in and try again: the matcher tries every alignment, so a title
+        // sequence at 11:00 here still matches one at 4:00 in an episode that found it early.
+        if (needIntros) {
+            val late = targets.indices.filter { i ->
+                openings[i] != null && targets[i].file.durationMs / 2 >= OPENING_MS + LATE_MIN_MS &&
+                    playback.getDetectedIntro(targets[i].file.id) == DetectedIntro.None
+            }
+            late.map { i ->
+                async {
+                    gate.withPermit {
+                        if (job?.isActive == false) return@withPermit
+                        val episode = targets[i]
+                        val uri = entry.videoOf(episode)?.uri ?: return@withPermit
+                        val toMs = minOf(LATE_OPENING_MS, episode.file.durationMs / 2)
+                        val tail = IntroAudioDecoder.fingerprintSpan(context, uri, OPENING_MS, toMs, { job?.isActive != false }) ?: return@withPermit
+                        IntroMatcher.joinSpans(openings[i]!!, tail.codes, tail.startMs)?.let { openings[i] = it }
+                    }
+                }
+            }.awaitAll()
+            if (job?.isActive == false) return@coroutineScope
+            late.forEach(::detectIntro)
+        }
         if (needIntros) playback.markSeasonScanned(showKey, season, signature)
         if (needCredits) playback.markCreditsScanned(showKey, season, signature)
         Log.i(TAG, "$showKey S$season done in ${SystemClock.elapsedRealtime() - started} ms")
@@ -184,8 +212,12 @@ class IntroDetection @Inject constructor(
 
     private companion object {
         const val TAG = "IntroDetect"
-        /** Intros sit near the start; ten minutes covers long cold opens. */
+        /** Intros sit near the start; ten minutes covers most cold opens. */
         const val OPENING_MS = 10 * 60_000L
+        /** Where the opening finds none, how far a second listen goes (never past half the episode). */
+        const val LATE_OPENING_MS = 20 * 60_000L
+        /** A second listen shorter than this isn't worth decoding. */
+        const val LATE_MIN_MS = 2 * 60_000L
         /** Credits sit at the end; six minutes covers long rolls plus a tag or preview after them. */
         const val ENDING_MS = 6 * 60_000L
         const val MAX_EPISODES = 16

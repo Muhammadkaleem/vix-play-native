@@ -156,6 +156,9 @@ fun CreditsMarkHud(
     existing: CreditsSource?,
     /** A scan of this season is under way. */
     detecting: Boolean,
+    /** The show plays its credits through: no "Next episode" at them. */
+    alwaysWatch: Boolean,
+    onToggleAlwaysWatch: () -> Unit,
     onSetStart: () -> Unit,
     onSaveForShow: () -> Unit,
     onSaveForEpisode: () -> Unit,
@@ -189,8 +192,11 @@ fun CreditsMarkHud(
                 MarkColumn("Credits start", startMs, "Set to ${formatIntroTime(positionMs)}", onSetStart)
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    error ?: if (existing == CreditsSource.DETECTED) "Found in this episode's audio — set a new time to correct it"
-                    else "Episodes of this show will offer “Next episode” here",
+                    error ?: when {
+                        alwaysWatch -> "This show plays its credits through — the next episode follows at the end"
+                        existing == CreditsSource.DETECTED -> "Found in this episode's audio — set a new time to correct it"
+                        else -> "Episodes of this show will offer “Next episode” here"
+                    },
                     style = MaterialTheme.typography.labelSmall,
                     color = OnScrim.copy(alpha = 0.6f),
                     textAlign = TextAlign.Center,
@@ -201,6 +207,7 @@ fun CreditsMarkHud(
                     HudButton("This episode only", enabled = error == null, onClick = onSaveForEpisode)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    HudButton(if (alwaysWatch) "Always watch: On" else "Always watch: Off", onClick = onToggleAlwaysWatch)
                     if (existing != null) {
                         HudButton(
                             when (existing) {

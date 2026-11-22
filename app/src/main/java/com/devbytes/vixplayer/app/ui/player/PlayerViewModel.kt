@@ -1,10 +1,13 @@
 package com.devbytes.vixplayer.app.ui.player
 
 import android.net.Uri
+import androidx.media3.common.C
+import androidx.media3.common.MediaItem
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.devbytes.vixplayer.app.data.repository.MediaRepository
 import com.devbytes.vixplayer.app.data.repository.PlaybackRepository
+import com.devbytes.vixplayer.app.data.repository.RememberedSubtitle
 import com.devbytes.vixplayer.app.data.db.entity.ShowPreference
 import com.devbytes.vixplayer.app.data.repository.SettingsRepository
 import com.devbytes.vixplayer.app.data.repository.ShowRepository
@@ -83,6 +86,18 @@ class PlayerViewModel @Inject constructor(
     val subtitleOffset = playerController.subtitleOffset
 
     /**
+     * Chooses who draws SSA subtitles inside MKV: libass with the file's styling, or Media3 with
+     * the user's (when they override embedded styles). Read while the file is extracted, so a
+     * change only reaches a loaded file through a reload. Returns whether it changed.
+     */
+    fun setAssOverride(override: Boolean): Boolean {
+        val ass = playerController.assSupport
+        if (ass.overrideEmbeddedStyles == override) return false
+        ass.overrideEmbeddedStyles = override
+        return true
+    }
+
+    /**
      * The video's display name. Resolved from MediaStore rather than sliced off the URI —
      * a `content://` URI's last path segment is the numeric id, which was being shown as
      * the player's title and left the notification blank.
@@ -91,7 +106,13 @@ class PlayerViewModel @Inject constructor(
     val displayTitle: StateFlow<String> = _displayTitle.asStateFlow()
 
     /** Opens a video, resetting per-file state. See [PlayerController.prepareFor]. */
-    fun prepareFor(uri: String, subtitleOffsetMs: Long, resolvedName: String? = null, owner: PlayerOwner? = null) {
+    fun prepareFor(
+        uri: String,
+        subtitleOffsetMs: Long,
+        resolvedName: String? = null,
+        owner: PlayerOwner? = null,
+        subtitles: List<MediaItem.SubtitleConfiguration> = emptyList(),
+    ) {
         // Prefer a name the caller already resolved (external content:// URIs, via
         // OpenableColumns); otherwise fall back to the URI's own tail, skipping the numeric
         // id that a MediaStore URI exposes there.
@@ -101,7 +122,7 @@ class PlayerViewModel @Inject constructor(
                 ?.takeIf { it.toLongOrNull() == null }
                 .orEmpty()
         _displayTitle.value = fallback
-        playerController.prepareFor(uri, subtitleOffsetMs, fallback.ifBlank { null }, owner)
+        playerController.prepareFor(uri, subtitleOffsetMs, fallback.ifBlank { null }, owner, subtitles)
 
         viewModelScope.launch {
             val name = currentMediaStoreId
@@ -226,6 +247,11 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    /** Whether [showKey]'s episodes play their credits through instead of offering the next one. */
+    fun alwaysWatchCredits(showKey: String): Boolean = playbackRepository.alwaysWatchCredits(showKey)
+
+    fun setAlwaysWatchCredits(showKey: String, on: Boolean) = playbackRepository.setAlwaysWatchCredits(showKey, on)
+
     /** Removes the credits in use: this episode's mark, the show's, or what was found ("Not the credits"). */
     fun removeCredits(showKey: String, source: CreditsSource) {
         when (source) {
@@ -318,6 +344,29 @@ class PlayerViewModel @Inject constructor(
      */
     fun getSubtitleOffsetMs(): Long =
         currentMediaStoreId?.let { playbackRepository.getSubtitleOffsetFast(it) } ?: 0L
+
+    /**
+     * Subtitles the viewer added to this file before, ready to attach; the most recent one is
+     * flagged default so it's the one showing. Files that have since gone are dropped.
+     */
+    fun rememberedSubtitles(): List<MediaItem.SubtitleConfiguration> {
+        val id = currentMediaStoreId ?: return emptyList()
+        val remembered = playbackRepository.rememberedSubtitles(id).filter { sub ->
+            val uri = Uri.parse(sub.uri)
+            uri.scheme != "file" || uri.path?.let { java.io.File(it).exists() } == true
+        }
+        return remembered.mapIndexed { i, sub ->
+            MediaItem.SubtitleConfiguration.Builder(Uri.parse(sub.uri))
+                .setMimeType(sub.mime)
+                .setLabel(sub.label)
+                .setSelectionFlags(if (i == remembered.lastIndex) C.SELECTION_FLAG_DEFAULT else 0)
+                .build()
+        }
+    }
+
+    fun rememberSubtitle(uri: Uri, label: String, mime: String) {
+        currentMediaStoreId?.let { playbackRepository.rememberSubtitle(it, RememberedSubtitle(uri.toString(), label, mime)) }
+    }
 
     fun saveSubtitleOffsetMs(offsetMs: Long) {
         currentMediaStoreId?.let { playbackRepository.saveSubtitleOffsetFast(it, offsetMs) }

@@ -51,6 +51,9 @@ class AdEvents @Inject constructor(@ApplicationContext context: Context) {
     fun showFailed(format: AdFormat, code: Int) =
         log("ad_show_failed", "ad_format" to format.key, "error_code" to code.toLong())
 
+    /** The post-interstitial "go ad-free" offer: `shown`, `accepted` or `dismissed`. */
+    fun adFreePrompt(action: String) = log("ad_free_prompt", "action" to action)
+
     fun rewardedStart(entryPoint: String) = log("rewarded_start", "entry_point" to entryPoint)
     fun rewardedComplete(entryPoint: String) = log("rewarded_complete", "entry_point" to entryPoint)
     fun rewardedAbandon(entryPoint: String) = log("rewarded_abandon", "entry_point" to entryPoint)

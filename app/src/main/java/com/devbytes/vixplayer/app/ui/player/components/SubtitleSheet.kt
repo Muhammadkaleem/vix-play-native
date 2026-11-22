@@ -40,6 +40,8 @@ fun SubtitleSheet(
     onSyncOffset: () -> Unit,
     onStyle: () -> Unit,
     offsetMs: Long,
+    /** Opens the OpenSubtitles search; null hides the row (no API key in this build). */
+    onSearchOnline: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -98,6 +100,29 @@ fun SubtitleSheet(
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
             )
+        }
+
+        if (onSearchOnline != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onSearchOnline)
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_search),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp),
+                )
+                Spacer(Modifier.width(16.dp))
+                Text(
+                    text = "Search online",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
         }
 
         // Adjusting happens over the video (the sheet would cover the frame being

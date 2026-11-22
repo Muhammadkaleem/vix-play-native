@@ -3,6 +3,7 @@ package com.devbytes.vixplayer.app.ads
 import android.app.Activity
 import androidx.lifecycle.ViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
 
@@ -12,6 +13,7 @@ class AdsViewModel @Inject constructor(
     private val controller: AdsController,
     private val interstitials: InterstitialAdManager,
     private val config: AdConfigProvider,
+    private val events: AdEvents,
 ) : ViewModel() {
     /**
      * Ads are shown only when the user is NOT currently Pro (and not remotely disabled).
@@ -37,6 +39,12 @@ class AdsViewModel @Inject constructor(
 
     /** The video player route was left for a library screen — a natural break. */
     fun onPlayerExited(activity: Activity) = interstitials.onPlayerExit(activity)
+
+    /** Fires when an interstitial just closed and "go ad-free" should be offered. */
+    val adFreeOffers: Flow<Unit> = interstitials.adFreeOffers
+
+    /** The user's answer to that offer, for the funnel. */
+    fun onAdFreeOffer(accepted: Boolean) = events.adFreePrompt(if (accepted) "accepted" else "dismissed")
 
     /** Warm an interstitial while browsing, so a later break never waits. */
     fun preloadInterstitial() = interstitials.preloadIfEligible()

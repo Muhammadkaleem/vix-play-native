@@ -47,5 +47,13 @@ object AdFrequencyPolicy {
         else -> AdDecision.Show
     }
 
+    /**
+     * Whether to offer "go ad-free" (a rewarded ad for Pro time) right after an interstitial
+     * closed: the one moment the trade is obvious. Never to someone already Pro, and at most
+     * once per [AdConfig.adFreePromptGapMs] so it stays an offer, not a nag.
+     */
+    fun offersAdFree(now: Long, lastPromptAt: Long, c: AdConfig, isPro: Boolean): Boolean =
+        c.adsEnabled && c.adFreePromptEnabled && !isPro && now - lastPromptAt >= c.adFreePromptGapMs
+
     private fun skip(reason: String) = AdDecision.Skip(reason)
 }

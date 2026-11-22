@@ -7,6 +7,8 @@ import com.devbytes.vixplayer.app.player.DetectedCredits
 import com.devbytes.vixplayer.app.player.DetectedIntro
 import com.devbytes.vixplayer.app.player.IntroWindow
 import com.tencent.mmkv.MMKV
+import org.json.JSONArray
+import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -34,6 +36,28 @@ class PlaybackRepository @Inject constructor(
 
     fun getSubtitleOffsetFast(mediaStoreId: Long): Long =
         mmkv.decodeLong("suboff_$mediaStoreId", 0L)
+
+    /**
+     * Subtitles added to a file by hand — loaded from a file or downloaded from OpenSubtitles —
+     * re-attached whenever it opens (online downloads count against a daily quota, and the
+     * picker's grant is persistent). Most recent last. Kept by [clearAll], like the offset.
+     */
+    fun rememberedSubtitles(mediaStoreId: Long): List<RememberedSubtitle> = runCatching {
+        val array = JSONArray(mmkv.decodeString("extsubs_$mediaStoreId") ?: return emptyList())
+        (0 until array.length()).mapNotNull { i ->
+            val o = array.optJSONObject(i) ?: return@mapNotNull null
+            RememberedSubtitle(o.getString("uri"), o.optString("label"), o.getString("mime"))
+        }
+    }.getOrDefault(emptyList())
+
+    fun rememberSubtitle(mediaStoreId: Long, subtitle: RememberedSubtitle) {
+        val list = rememberedSubtitles(mediaStoreId).filterNot { it.uri == subtitle.uri } + subtitle
+        val array = JSONArray()
+        list.takeLast(MAX_REMEMBERED_SUBTITLES).forEach {
+            array.put(JSONObject().put("uri", it.uri).put("label", it.label).put("mime", it.mime))
+        }
+        mmkv.encode("extsubs_$mediaStoreId", array.toString())
+    }
 
     /**
      * One episode's own intro window, overriding its show's (a cold open that runs longer,
@@ -125,6 +149,13 @@ class PlaybackRepository @Inject constructor(
     fun getShowCredits(showKey: String): Long? =
         if (mmkv.containsKey("creditsshow_$showKey")) mmkv.decodeLong("creditsshow_$showKey", 0L) else null
 
+    /** The show's episodes play their credits through, with no "Next episode" at them. */
+    fun setAlwaysWatchCredits(showKey: String, on: Boolean) {
+        if (on) mmkv.encode("creditsalways_$showKey", true) else mmkv.remove("creditsalways_$showKey")
+    }
+
+    fun alwaysWatchCredits(showKey: String): Boolean = mmkv.decodeBool("creditsalways_$showKey", false)
+
     /** Like [scannedSeason], for the credits — kept apart so seasons scanned for intros before get a credits-only pass. */
     fun creditsScannedSeason(showKey: String, season: Int): String? = mmkv.decodeString("$CREDITS_SCANNED_KEY$showKey|$season")
 
@@ -172,8 +203,13 @@ class PlaybackRepository @Inject constructor(
     private companion object {
         /** Versioned, so a better detector can rescan everything by bumping it. */
         const val DETECTED_KEY = "introauto_v2_"
-        const val SCANNED_KEY = "introscan_v2_"
+        const val SCANNED_KEY = "introscan_v3_"
         const val CREDITS_KEY = "creditsauto_v1_"
         const val CREDITS_SCANNED_KEY = "creditsscan_v1_"
     }
 }
+
+/** A subtitle file the viewer added to a video. */
+data class RememberedSubtitle(val uri: String, val label: String, val mime: String)
+
+private const val MAX_REMEMBERED_SUBTITLES = 5
