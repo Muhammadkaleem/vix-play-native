@@ -42,6 +42,7 @@ import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.data.db.entity.AudioOutput
 import com.devbytes.vixplayer.app.ui.library.components.LibraryEmptyState
 import com.devbytes.vixplayer.app.ui.common.screenInsets
+import com.devbytes.vixplayer.app.ui.common.focusRow
 
 /**
  * Multiband EQ plus bass boost, virtualizer and preamp.
@@ -125,6 +126,7 @@ fun EqualizerScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     // Preset rows can exceed the width on small screens.
+                    .focusRow()
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -142,6 +144,7 @@ fun EqualizerScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .focusRow()
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {

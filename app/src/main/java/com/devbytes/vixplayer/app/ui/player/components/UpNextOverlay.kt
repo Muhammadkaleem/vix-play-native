@@ -59,6 +59,7 @@ import com.devbytes.vixplayer.app.ui.library.components.formatDuration
 import com.devbytes.vixplayer.app.ui.theme.OnScrim
 import com.devbytes.vixplayer.app.ui.theme.ScrimStrong
 import com.devbytes.vixplayer.app.ui.theme.TimecodeStyle
+import com.devbytes.vixplayer.app.ui.common.focusRow
 
 /**
  * End-of-video "Up Next" screen. Header carries a close (X → back) and an Autoplay toggle;
@@ -178,6 +179,7 @@ fun UpNextOverlay(
             if (upcoming.isNotEmpty()) {
                 Spacer(Modifier.height(20.dp))
                 LazyRow(
+                    modifier = Modifier.focusRow(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(horizontal = 8.dp),
                 ) {

@@ -34,6 +34,7 @@ import com.devbytes.vixplayer.app.ui.theme.OnScrim
 import com.devbytes.vixplayer.app.ui.theme.ScrimStrong
 import com.devbytes.vixplayer.app.ui.theme.TimecodeStyle
 import com.devbytes.vixplayer.app.ui.theme.TrackInactive
+import com.devbytes.vixplayer.app.ui.common.focusRow
 
 @Composable
 fun ContinueWatchingRail(
@@ -49,6 +50,7 @@ fun ContinueWatchingRail(
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
         )
         LazyRow(
+            modifier = Modifier.focusRow(),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(horizontal = 16.dp),
         ) {

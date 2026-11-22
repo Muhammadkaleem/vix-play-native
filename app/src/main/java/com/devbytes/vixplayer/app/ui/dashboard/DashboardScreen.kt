@@ -68,6 +68,7 @@ import coil.decode.VideoFrameDecoder
 import coil.request.ImageRequest
 import coil.request.videoFramePercent
 import com.devbytes.vixplayer.app.ads.rememberAdsSupported
+import com.devbytes.vixplayer.app.ui.common.LocalIsTv
 import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.data.repository.VideoFile
 import com.devbytes.vixplayer.app.data.series.EpisodeParser
@@ -90,6 +91,7 @@ import com.devbytes.vixplayer.app.ui.theme.TrackInactive
 import com.devbytes.vixplayer.app.ui.common.screenInsets
 import com.devbytes.vixplayer.app.ui.common.withoutBottom
 import com.devbytes.vixplayer.app.ui.common.bottomOnly
+import com.devbytes.vixplayer.app.ui.common.focusRow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -210,10 +212,13 @@ fun DashboardScreen(
                 item { SectionHeader("Your Shows", onViewAll = null, iconRes = R.drawable.ic_playlist) }
                 item {
                     // 80 % of the row on a phone — one show fills the shelf, the next peeks in —
-                    // capped on tablets, where 80 % of the screen would be a giant card.
+                    // capped on tablets, where 80 % of the screen would be a giant card, and lower on
+                    // a TV, whose screen is short: three shows in view rather than two.
+                    val isTv = LocalIsTv.current
                     BoxWithConstraints {
-                        val cardWidth = min(maxWidth * 0.8f, 440.dp)
+                        val cardWidth = min(maxWidth * 0.8f, if (isTv) 300.dp else 440.dp)
                         androidx.compose.foundation.lazy.LazyRow(
+                            modifier = Modifier.focusRow(),
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
@@ -409,7 +414,7 @@ private fun thumbRequest(uri: Any?) = ImageRequest.Builder(LocalContext.current)
 private fun ContinueWatchingCarousel(videos: List<VideoWithPosition>, onResume: (VideoFile) -> Unit) {
     val pager = rememberPagerState(pageCount = { videos.size })
     Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-        HorizontalPager(state = pager) { page ->
+        HorizontalPager(state = pager, modifier = Modifier.focusRow()) { page ->
             ContinueSlide(videos[page], onResume)
         }
         if (videos.size > 1) {
@@ -426,10 +431,13 @@ private fun ContinueWatchingCarousel(videos: List<VideoWithPosition>, onResume: 
 private fun ContinueSlide(item: VideoWithPosition, onResume: (VideoFile) -> Unit) {
     val video = item.video
     val accent = MaterialTheme.colorScheme.primary
+    // A TV screen is short: at 1.9:1 the slide is taller than the space above the nav bar, which
+    // also stops the remote's ↑ from reaching it. A wide banner keeps the next rows in view.
+    val aspect = if (LocalIsTv.current) 3f else 1.9f
     Box(
         Modifier
             .fillMaxWidth()
-            .aspectRatio(1.9f)
+            .aspectRatio(aspect)
             .clip(RoundedCornerShape(18.dp))
             .clickable { onResume(video) },
     ) {
@@ -546,6 +554,7 @@ private fun PagerDots(count: Int, current: Int, modifier: Modifier = Modifier) {
 @Composable
 private fun FolderPillRow(videos: List<VideoWithPosition>, onClick: (VideoFile) -> Unit) {
     androidx.compose.foundation.lazy.LazyRow(
+        modifier = Modifier.focusRow(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -613,6 +622,7 @@ private fun FolderPillCard(item: VideoWithPosition, onClick: () -> Unit) {
 @Composable
 private fun VideoRail(videos: List<VideoFile>, onClick: (VideoFile) -> Unit) {
     androidx.compose.foundation.lazy.LazyRow(
+        modifier = Modifier.focusRow(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -848,6 +858,7 @@ private fun TimeWindowSection(pool: List<VideoFile>, onClick: (VideoFile) -> Uni
             )
         } else {
             androidx.compose.foundation.lazy.LazyRow(
+                modifier = Modifier.focusRow(),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {

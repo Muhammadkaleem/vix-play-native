@@ -40,6 +40,9 @@ import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.ui.player.components.PlayerSeekBar
 import kotlinx.coroutines.delay
 import com.devbytes.vixplayer.app.ui.common.screenInsets
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import com.devbytes.vixplayer.app.ui.common.LocalIsTv
 
 /**
  * Full-screen audio player over the shared app-scoped player.
@@ -174,11 +177,21 @@ fun AudioPlayerScreen(
                 durationMs = durationMs,
                 onSeek = { player.seekTo(it) },
                 timecodeColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                focusRingColor = MaterialTheme.colorScheme.onSurface,
+                // Remote / D-pad: the bar takes focus and ←/→ step it.
+                onStep = { delta ->
+                    val max = player.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
+                    player.seekTo((player.currentPosition + delta).coerceIn(0L, max))
+                },
                 modifier = Modifier.fillMaxWidth(),
             )
 
             Spacer(Modifier.height(12.dp))
 
+            // On TV the remote starts on Play/Pause rather than the top bar's Back.
+            val isTv = LocalIsTv.current
+            val playFocus = remember { FocusRequester() }
+            LaunchedEffect(isTv) { if (isTv) runCatching { playFocus.requestFocus() } }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
@@ -200,6 +213,7 @@ fun AudioPlayerScreen(
                     description = if (isPlaying) "Pause" else "Play",
                     size = 64,
                     onClick = { if (player.isPlaying) player.pause() else player.play() },
+                    modifier = Modifier.focusRequester(playFocus),
                 )
                 TransportButton(
                     iconRes = R.drawable.ic_next,
@@ -235,8 +249,9 @@ private fun TransportButton(
     onClick: () -> Unit,
     active: Boolean = false,
     size: Int = 44,
+    modifier: Modifier = Modifier,
 ) {
-    IconButton(onClick = onClick, modifier = Modifier.size(size.dp)) {
+    IconButton(onClick = onClick, modifier = modifier.size(size.dp)) {
         Icon(
             painter = painterResource(iconRes),
             contentDescription = description,

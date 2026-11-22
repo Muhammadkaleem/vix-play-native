@@ -49,6 +49,17 @@ import coil.request.videoFramePercent
 import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.ui.library.components.LibraryEmptyState
 import com.devbytes.vixplayer.app.ui.theme.OnScrim
+import androidx.compose.foundation.focusable
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import com.devbytes.vixplayer.app.ui.common.LocalIsTv
+import kotlinx.coroutines.launch
 
 /**
  * TikTok-style Shorts feed: a full-screen vertical pager over the user's portrait videos.
@@ -99,7 +110,37 @@ fun ShortsFeedScreen(
                     paused = false
                 }
 
-                VerticalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+                // TV remote: ↑/↓ move between shorts, OK or Play/Pause pauses. The pager takes focus
+                // on TV so the keys always arrive; Back leaves as usual.
+                val isTv = LocalIsTv.current
+                val scope = rememberCoroutineScope()
+                val feedFocus = remember { FocusRequester() }
+                LaunchedEffect(isTv) { if (isTv) runCatching { feedFocus.requestFocus() } }
+                fun togglePause() {
+                    paused = !paused
+                    player.playWhenReady = !paused
+                }
+                VerticalPager(
+                    state = pagerState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .focusRequester(feedFocus)
+                        .onPreviewKeyEvent { event ->
+                            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                            val step = when (event.key) {
+                                Key.DirectionUp -> -1
+                                Key.DirectionDown -> 1
+                                Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.MediaPlayPause -> {
+                                    togglePause(); return@onPreviewKeyEvent true
+                                }
+                                else -> return@onPreviewKeyEvent false
+                            }
+                            val target = (pagerState.currentPage + step).coerceIn(0, list.lastIndex)
+                            scope.launch { pagerState.animateScrollToPage(target) }
+                            true
+                        }
+                        .focusable(enabled = isTv),
+                ) { page ->
                     val video = list[page]
                     Box(
                         Modifier
@@ -108,10 +149,7 @@ fun ShortsFeedScreen(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
                             ) {
-                                if (page == pagerState.currentPage) {
-                                    paused = !paused
-                                    player.playWhenReady = !paused
-                                }
+                                if (page == pagerState.currentPage) togglePause()
                             },
                         contentAlignment = Alignment.Center,
                     ) {

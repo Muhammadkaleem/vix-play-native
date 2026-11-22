@@ -60,6 +60,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import coil.compose.AsyncImage
 import coil.decode.VideoFrameDecoder
 import coil.request.ImageRequest
@@ -92,6 +99,11 @@ fun SearchScreen(
     val recents by viewModel.recentSearches.collectAsStateWithLifecycle()
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    // ↓ from the field lands on the selected filter chip when the chips are showing (left to
+    // itself, focus search skips the short chip row for the results below it).
+    val chipFocus = remember { FocusRequester() }
+    val chipsShown = (uiState as? SearchUiState.Results)?.isEmpty == false
 
     LaunchedEffect(Unit) {
         if (!initialQuery.isNullOrBlank()) viewModel.setQuery(initialQuery)
@@ -106,7 +118,24 @@ fun SearchScreen(
                     TextField(
                         value = query,
                         onValueChange = viewModel::setQuery,
-                        modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(focusRequester)
+                            // The field keeps ↓ as cursor movement, which would leave a remote stuck
+                            // in it; ↓ moves on to the filters and results instead.
+                            .onPreviewKeyEvent { event ->
+                                if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown) {
+                                    keyboard?.hide()
+                                    if (chipsShown) {
+                                        chipFocus.requestFocus()
+                                        true
+                                    } else {
+                                        focusManager.moveFocus(FocusDirection.Down)
+                                    }
+                                } else {
+                                    false
+                                }
+                            },
                         placeholder = { Text("Search videos, audio, folders") },
                         singleLine = true,
                         trailingIcon = if (query.isNotEmpty()) {
@@ -147,6 +176,7 @@ fun SearchScreen(
                     audioCount = results.audio.size,
                     folderCount = results.folders.size,
                     onSelect = viewModel::setCategory,
+                    activeFocus = chipFocus,
                 )
             }
 
@@ -192,6 +222,7 @@ private fun CategoryTabs(
     audioCount: Int,
     folderCount: Int,
     onSelect: (SearchCategory) -> Unit,
+    activeFocus: FocusRequester,
 ) {
     fun countFor(c: SearchCategory) = when (c) {
         SearchCategory.ALL -> videoCount + audioCount + folderCount
@@ -208,6 +239,7 @@ private fun CategoryTabs(
             Box(
                 Modifier.clip(RoundedCornerShape(50))
                     .background(if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+                    .then(if (active) Modifier.focusRequester(activeFocus) else Modifier)
                     .clickable { onSelect(c) }
                     .padding(horizontal = 14.dp, vertical = 8.dp),
             ) {

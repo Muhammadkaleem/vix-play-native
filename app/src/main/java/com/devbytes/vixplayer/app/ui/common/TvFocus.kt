@@ -10,7 +10,11 @@ import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -104,4 +108,18 @@ private class RingDrawNode(
 fun Modifier.focusRing(interactionSource: InteractionSource, shape: Shape): Modifier {
     val focused by interactionSource.collectIsFocusedAsState()
     return if (focused) border(RingWidth, MaterialTheme.colorScheme.primary, shape) else this
+}
+
+/**
+ * For a horizontally scrolling row: at either end a remote's ←/→ stays put instead of jumping to
+ * whatever lies that way on screen (the top bar's Search, typically). ↑/↓ leave as usual. A
+ * scrolling row is its own focus group, so this governs leaving the row only — moving between its
+ * items, including ones scrolled into view, is unchanged.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+fun Modifier.focusRow(): Modifier = focusProperties {
+    exit = { direction ->
+        if (direction == FocusDirection.Left || direction == FocusDirection.Right) FocusRequester.Cancel
+        else FocusRequester.Default
+    }
 }

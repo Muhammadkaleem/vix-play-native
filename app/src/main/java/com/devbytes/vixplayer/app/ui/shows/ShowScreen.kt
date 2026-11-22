@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.ui.unit.min
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -42,6 +44,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -70,6 +73,7 @@ import com.devbytes.vixplayer.app.ui.library.components.LibraryEmptyState
 import com.devbytes.vixplayer.app.ui.theme.OnScrim
 import com.devbytes.vixplayer.app.ui.theme.ScrimStrong
 import com.devbytes.vixplayer.app.ui.theme.TimecodeStyle
+import com.devbytes.vixplayer.app.ui.common.focusRow
 
 /**
  * One show: a hero with the main action (resume / next / start / watch again), season chips,
@@ -139,15 +143,18 @@ private fun ShowContent(data: ShowWithVideos, padding: PaddingValues, onPlay: (S
     var season by remember(show.key) { mutableStateOf(show.continueEpisode.info.season) }
     if (season !in show.seasons) season = show.continueEpisode.info.season
 
+    // Tablets in landscape and TVs: a full-width 16:9 hero would fill the screen, so it sits beside
+    // the summary and Play button instead.
+    val wide = LocalConfiguration.current.screenWidthDp.dp >= WideHero
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(padding.withoutBottom()),
         contentPadding = padding.bottomOnly(extra = 24.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         item {
-            Hero(data, onPlay = { onPlay(show.continueEpisode, "hero") })
+            Hero(data, wide, onPlay = { onPlay(show.continueEpisode, "hero") })
         }
-        item {
+        if (!wide) item {
             Text(
                 showSummary(show),
                 style = MaterialTheme.typography.bodyMedium,
@@ -158,6 +165,7 @@ private fun ShowContent(data: ShowWithVideos, padding: PaddingValues, onPlay: (S
         if (show.seasons.size > 1) {
             item {
                 LazyRow(
+                    modifier = Modifier.focusRow(),
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -224,14 +232,16 @@ private fun SeasonOverview(season: Int, episodes: List<ShowEpisode>) {
     }
 }
 
+/** From this width the hero sits beside its Play button rather than filling the screen. */
+private val WideHero = 600.dp
+
 @Composable
-private fun Hero(data: ShowWithVideos, onPlay: () -> Unit) {
+private fun Hero(data: ShowWithVideos, wide: Boolean, onPlay: () -> Unit) {
     val show = data.show
     val episode = show.continueEpisode
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+    val frame: @Composable (Modifier) -> Unit = { modifier ->
         Box(
-            Modifier
-                .fillMaxWidth()
+            modifier
                 .aspectRatio(16f / 9f)
                 .clip(RoundedCornerShape(18.dp))
                 .clickable(onClickLabel = continueLabel(show), onClick = onPlay),
@@ -263,11 +273,36 @@ private fun Hero(data: ShowWithVideos, onPlay: () -> Unit) {
                 }
             }
         }
-        Spacer(Modifier.height(12.dp))
-        Button(onClick = onPlay, modifier = Modifier.fillMaxWidth()) {
+    }
+    val playButton: @Composable (Modifier) -> Unit = { modifier ->
+        Button(onClick = onPlay, modifier = modifier) {
             Icon(painterResource(R.drawable.ic_play), contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Text(continueLabel(show), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+    BoxWithConstraints(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        if (wide) {
+            val frameWidth = min(maxWidth * 0.55f, 560.dp)
+            Row(verticalAlignment = Alignment.Bottom) {
+                frame(Modifier.width(frameWidth))
+                Spacer(Modifier.width(24.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        showSummary(show),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    playButton(Modifier.fillMaxWidth())
+                }
+            }
+        } else {
+            Column {
+                frame(Modifier.fillMaxWidth())
+                Spacer(Modifier.height(12.dp))
+                playButton(Modifier.fillMaxWidth())
+            }
         }
     }
 }

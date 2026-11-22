@@ -55,6 +55,8 @@ fun PlayerSeekBar(
      * [KEY_STEP_MS] (held keys repeat).
      */
     onStep: ((Long) -> Unit)? = null,
+    /** The ring round the thumb while focused: white over video; a surface host passes its own. */
+    focusRingColor: Color = OnScrim,
     modifier: Modifier = Modifier,
 ) {
     if (durationMs <= 0L) return
@@ -164,7 +166,7 @@ fun PlayerSeekBar(
             // Thumb — accent, legible on both the white fill and the dark track
             val thumb = Offset(size.width * displayFraction, trackY)
             // Focused: a white ring marks the thumb as the remote's target.
-            if (focused) drawCircle(color = OnScrim, radius = 11.dp.toPx(), center = thumb)
+            if (focused) drawCircle(color = focusRingColor, radius = 11.dp.toPx(), center = thumb)
             drawCircle(
                 color = accent,
                 radius = if (active) 8.dp.toPx() else 6.dp.toPx(),
