@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.devbytes.vixplayer.app.BuildConfig
 import com.devbytes.vixplayer.app.R
 import com.devbytes.vixplayer.app.ads.AdsViewModel
 import com.devbytes.vixplayer.app.ui.premium.findActivity
@@ -66,8 +67,10 @@ private data class SettingsItem(
     val route: String,
 )
 
-private val SETTINGS_ITEMS = listOf(
-    SettingsItem("Vix Pro Rewards", "Watch ads to earn Pro time, status, and history", R.drawable.ic_crown, PRO_REWARDS_ROUTE),
+private val SETTINGS_ITEMS = listOfNotNull(
+    // Pro only removes ads, so the ad-free Amazon build doesn't offer it.
+    SettingsItem("Vix Pro Rewards", "Watch ads to earn Pro time, status, and history", R.drawable.ic_crown, PRO_REWARDS_ROUTE)
+        .takeIf { BuildConfig.HAS_ADS },
     SettingsItem("Gestures", "Remap taps and swipes, sensitivity, and haptics", R.drawable.ic_settings, GESTURE_REMAP_ROUTE),
     SettingsItem("Theme & Skins", "Base theme, accent color, and player skins", R.drawable.ic_eye, THEME_SKINS_ROUTE),
     SettingsItem("Subtitles", "Default language, styling, and encoding", R.drawable.ic_subtitles, SUBTITLE_DEFAULTS_ROUTE),
@@ -75,7 +78,7 @@ private val SETTINGS_ITEMS = listOf(
     SettingsItem("Private Folder", "Lock videos behind a PIN", R.drawable.ic_lock, PRIVATE_FOLDER_ROUTE),
     SettingsItem("Notifications", "Resume reminders, new videos, weekly recap", R.drawable.ic_timer, NOTIFICATIONS_ROUTE),
     SettingsItem("Daily Briefing", "A short brief of your day each morning", R.drawable.ic_timer, BRIEFING_SETTINGS_ROUTE),
-    SettingsItem("About / Pro", "Version, licenses, and app info", R.drawable.ic_info, ABOUT_PRO_ROUTE),
+    SettingsItem(if (BuildConfig.HAS_ADS) "About / Pro" else "About", "Version, licenses, and app info", R.drawable.ic_info, ABOUT_PRO_ROUTE),
 )
 
 @OptIn(ExperimentalMaterial3Api::class)

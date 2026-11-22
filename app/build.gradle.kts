@@ -30,8 +30,8 @@ android {
         applicationId = "com.devbytes.vixplayer.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 73
-        versionName = "3.2.1"
+        versionCode = 74
+        versionName = "3.2.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -51,6 +51,22 @@ android {
         // consent service treat this device as in the EEA (or a regulated US state), so those
         // privacy messages can be checked from elsewhere.
         buildConfigField("String", "UMP_DEBUG_GEOGRAPHY", "\"${localProps.getProperty("ump.debugGeography", "")}\"")
+    }
+
+    // Where the build is sold. Play carries AdMob and the rewarded "Pro" tier; the Amazon
+    // Appstore rejects apps with ad-network libraries, so that build has no ads, no consent SDK
+    // and no Pro (Pro only removes ads). Ad code lives in src/play; src/amazon has no-op twins.
+    flavorDimensions += "store"
+    productFlavors {
+        create("play") {
+            dimension = "store"
+            isDefault = true
+            buildConfigField("boolean", "HAS_ADS", "true")
+        }
+        create("amazon") {
+            dimension = "store"
+            buildConfigField("boolean", "HAS_ADS", "false")
+        }
     }
 
     signingConfigs {
@@ -155,9 +171,9 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.video)
 
-    // Ads (AdMob) + EEA consent
-    implementation(libs.play.services.ads)
-    implementation(libs.user.messaging.platform)
+    // Ads (AdMob) + EEA consent — Google Play build only
+    "playImplementation"(libs.play.services.ads)
+    "playImplementation"(libs.user.messaging.platform)
 
     // Play In-App Review (post-positive-signal review prompt)
     implementation(libs.play.review)
@@ -196,4 +212,16 @@ dependencies {
 
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
+}
+
+// Amazon build: Firebase Analytics would still bring in the advertising-ID client
+// (com.google.android.gms.ads.identifier) and the Privacy Sandbox ads APIs. Amazon's review
+// flags ad libraries by package, and with ID collection off (src/amazon manifest) neither is
+// used, so they are left out — Firebase documents this exclusion for apps that must not read
+// the advertising ID.
+configurations.configureEach {
+    if (name.startsWith("amazon")) {
+        exclude(group = "com.google.android.gms", module = "play-services-ads-identifier")
+        exclude(group = "androidx.privacysandbox.ads")
+    }
 }

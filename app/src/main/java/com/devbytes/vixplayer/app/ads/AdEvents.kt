@@ -2,8 +2,6 @@ package com.devbytes.vixplayer.app.ads
 
 import android.content.Context
 import android.os.Bundle
-import com.google.android.gms.ads.AdValue
-import com.google.android.gms.ads.ResponseInfo
 import com.google.firebase.analytics.FirebaseAnalytics
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -25,15 +23,15 @@ class AdEvents @Inject constructor(@ApplicationContext context: Context) {
     private val analytics: FirebaseAnalytics? =
         runCatching { FirebaseAnalytics.getInstance(context) }.getOrNull()
 
-    fun paid(format: AdFormat, unitName: String, value: AdValue, info: ResponseInfo?) = log(
+    /** Kept free of AdMob types so this class builds without the ad SDK (Amazon flavour). */
+    fun paid(format: AdFormat, unitName: String, valueMicros: Long, currency: String, adSource: String?) = log(
         FirebaseAnalytics.Event.AD_IMPRESSION,
         FirebaseAnalytics.Param.AD_PLATFORM to "admob",
-        FirebaseAnalytics.Param.AD_SOURCE to
-            (info?.loadedAdapterResponseInfo?.adSourceName ?: "unknown"),
+        FirebaseAnalytics.Param.AD_SOURCE to (adSource ?: "unknown"),
         FirebaseAnalytics.Param.AD_FORMAT to format.key,
         FirebaseAnalytics.Param.AD_UNIT_NAME to unitName,
-        FirebaseAnalytics.Param.VALUE to value.valueMicros / 1_000_000.0,
-        FirebaseAnalytics.Param.CURRENCY to value.currencyCode,
+        FirebaseAnalytics.Param.VALUE to valueMicros / 1_000_000.0,
+        FirebaseAnalytics.Param.CURRENCY to currency,
     )
 
     fun loaded(format: AdFormat, placement: String, latencyMs: Long) =

@@ -27,19 +27,22 @@ These apply to **every** feature, bug fix, UI improvement and refactor.
 **Validation (before calling anything done)**
 - Verify in both Light and Dark.
 - Exercise the relevant user flows and edge cases, on a device/emulator where the change is visual or behavioural.
-- Run the unit tests and a build (`./gradlew test`, `./gradlew assembleDebug`); check for regressions in neighbouring features.
+- Run the unit tests and a build (`./gradlew test`, `./gradlew assemblePlayDebug assembleAmazonDebug`); check for regressions in neighbouring features.
 - Report anything unverified or unresolved honestly.
 
 **Keep this file in sync.** When a project decision changes, update the relevant section here and add an entry to the progress log below.
 
 ## Build commands
 
+Two product flavours (`store` dimension): **`play`** (Google Play — AdMob, consent, rewarded Pro; the default) and **`amazon`** (Amazon Appstore — no ad SDK, no Pro). Task names carry the flavour.
+
 ```bash
-# Assemble debug APK
-./gradlew assembleDebug
+# Assemble debug APK (Play / Amazon)
+./gradlew assemblePlayDebug
+./gradlew assembleAmazonDebug
 
 # Install on connected device (set ANDROID_SERIAL when several are attached)
-./gradlew installDebug
+./gradlew installPlayDebug
 
 # Run unit tests
 ./gradlew test
@@ -51,7 +54,8 @@ These apply to **every** feature, bug fix, UI improvement and refactor.
 ./gradlew test --tests "com.devbytes.vixplayer.app.ads.AdFrequencyPolicyTest"
 
 # Signed release bundle (needs keystore.properties — git-ignored; versionCode must exceed the last upload)
-./gradlew bundleRelease
+./gradlew bundlePlayRelease     # Google Play
+./gradlew bundleAmazonRelease   # Amazon Appstore
 
 # Lint
 ./gradlew lint
@@ -76,7 +80,7 @@ Gradle configuration cache is enabled (`gradle.properties`). If build scripts ch
 | **Subtitles** | Media3 built-in renderer (SRT + basic SSA) plus user styling via `SubtitleView`. libass (full styled ASS/SSA fidelity) is a fast-follow — not a blocker. |
 | **Pro entitlement** | No Play Billing. "Pro" is a **rewarded-ad time bank** (`ProRepository`, up to 48 h) that removes ads only — every feature stays free. A paid tier would need Billing + backend verification. |
 | **Analytics** | Firebase Crashlytics + Analytics (Analytics enabled 2026-10-07 at the user's request; release-only collection). Ad revenue flows in as Firebase `ad_impression` events via `AdEvents`; product-funnel events via `analytics/Analytics.kt`. `google-services.json` goes in `app/`. |
-| **Ads** | AdMob. Banners + native in library chrome; never on the player surface. **One interstitial placement (changed 2026-11-18, user-approved): leaving the video player after ≥ 60 s of real watching**, gated by `AdFrequencyPolicy` (24 h + 2-session grace, 4 min gap, 3/session, 8/day, 10 min after a rewarded ad, never after an external open, all Remote-Config tunable with kill switches). Never during playback, on launch or in PiP. Pro removes every ad it didn't ask for. |
+| **Ads** | AdMob. Banners + native in library chrome; never on the player surface. **One interstitial placement (changed 2026-11-18, user-approved): leaving the video player after ≥ 60 s of real watching**, gated by `AdFrequencyPolicy` (24 h + 2-session grace, 4 min gap, 3/session, 8/day, 10 min after a rewarded ad, never after an external open, all Remote-Config tunable with kill switches). Never during playback, on launch or in PiP. Pro removes every ad it didn't ask for. **Google Play build only (2026-11-22):** the `amazon` flavour ships no ad SDK, no UMP and no advertising ID, and hides Pro — Amazon rejected 3.2.1 for ad-network libraries. Ad code lives in `src/play`; `src/amazon` has no-op classes with the same API, and shared code gates Pro UI on `BuildConfig.HAS_ADS`. |
 | **Theming** | One `VixPlayTheme(mode, accent)` (`ui/theme/Theme.kt`) fed by `ThemeViewModel` from DataStore. `ThemeMode { SYSTEM, LIGHT, DARK, AMOLED, DYNAMIC }` — **default `LIGHT`** (changed 2026-11-18); `DYNAMIC` = Material You on API 31+. Optional accent override (`AccentChoice`). Tokens live in `ui/theme/Color.kt`; components read `MaterialTheme.colorScheme` or those tokens. The video player surface (scrims, HUD) stays dark in every theme by design. |
 | **Android TV** | Compose for TV (`androidx.tv`), not Leanback. Keeps the entire UI layer in one paradigm. |
 | **Private folder recovery** | Recovery code shown at PIN setup (hashed locally). No email recovery — that requires a backend. |
@@ -133,6 +137,14 @@ Source assets in `config-vix-play/player-design-assets/` (icons as SVG → Vecto
 ## Design implementation progress
 
 Running log of screen design-implementation decisions (grill-me sessions). Newest first.
+
+### 2026-11-22 — Amazon build without ads (`play` / `amazon` flavours), v3.2.2 (74) — DONE, **Amazon release build verified on the Pixel Tablet emulator (API 35): launches, Home/Settings/Video tab show no ads or Pro, a video plays and leaving it shows no interstitial, Firebase Analytics initializes without the ad-ID client; 103 unit tests pass on both flavours. Not resubmitted yet (user's step); not run on a real Fire tablet; the Play build was compiled and unit-tested but not re-run on a device.**
+- **Why:** Amazon rejected 3.2.1 (73) at Content Policy Validation for "ad network libraries" (AdMob). It asks for them to be removed, and Amazon no longer runs an ad network of its own. So the Amazon build is ad-free.
+- **How:** `flavorDimensions("store")`, `play` (default, `HAS_ADS = true`) and `amazon` (`HAS_ADS = false`). `play-services-ads` and UMP are `playImplementation`. `AdsController`, `AdBanner`, `AdNativeCard`, `NativeAdsViewModel`, `RewardedAdManager`, `InterstitialAdManager` and `AdUnits` moved to `src/play/java`, unchanged. `src/amazon/java` has `AdsController`/`InterstitialAdManager`/`RewardedAdManager` no-ops plus `AdViews.kt` (empty `AdUnits`, `AdBanner`, `AdNativeCard`), with the same API, so shared code is untouched. `AdEvents.paid` now takes plain values; the AdMob `AdValue` overload is `AdEventsPaid.kt` in play. AdMob's app-ID meta-data and the AD_ID permission moved to `src/play/AndroidManifest.xml`.
+- **Firebase in the Amazon build:** Analytics still pulled in `play-services-ads-identifier` (package `com.google.android.gms.ads.identifier`) and `androidx.privacysandbox.ads`, which a package scan could flag. Both are excluded from `amazon*` configurations (Firebase documents the ad-identifier exclusion). `src/amazon/AndroidManifest.xml` removes AD_ID / ACCESS_ADSERVICES_AD_ID / ACCESS_ADSERVICES_ATTRIBUTION and the `AD_SERVICES_CONFIG` property, and sets `google_analytics_adid_collection_enabled=false`. Checked: the Amazon APK defines **0** classes under `gms/ads`, `ump` or `privacysandbox` (dexdump), and Analytics logs "App measurement initialized" and sends events.
+- **Pro hidden on Amazon** (it only removes ads): Home's Pro card and PRO badge, Settings' "Vix Pro Rewards" row, and the "About / Pro" row reads "About". The Pro screens are still routed but unreachable.
+- **Store assets:** Amazon screenshot 01 (it showed the Pro card) was retaken from the Amazon build. The listing text's "free with ads" line now says "free, with no ads and no account needed". The AAB/APK are on the Desktop as `VixPlay-Amazon-3.2.2-74.*`.
+- **Version 3.2.2 (74)** for both stores. Remaining Google libraries in the Amazon build: Play Core review / app-update (they do nothing off Play), Cast, FCM, In-App Messaging, Crashlytics. None is an ad network; drop them if Amazon objects again.
 
 ### 2026-11-21 — Mark end credits by hand — DONE, **verified on the Pixel Tablet emulator (API 35) on the silent sample library (detection finds nothing there): End Credits tile "Not set" → card → Set to 44:48 → Save for show on S01E04 (47:00) → S01E05 (51:00) offers Next episode from 48:48 and its tile reads "From 48:48"; no countdown/buttons on the file just marked. 103 unit tests pass.**
 - **Options panel:** an **End Credits** tile beside Skip Intro (show episodes only; value "From 45:10" / "Finding…" / "Not set"; icon `ic_list` so it isn't mistaken for Skip Intro) opens **`CreditsMarkHud`** (`IntroHud.kt`, same look and parts as the intro card): Credits start → Set to <playhead>, **Save for show** / **This episode only**, Remove (**Not the credits** when detected → `DetectedCredits.Rejected`, never overwritten by a rescan), Close.

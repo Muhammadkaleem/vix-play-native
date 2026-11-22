@@ -25,9 +25,6 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    <!-- Advertising ID: matches the Play Console advertising-ID declaration. -->
-    <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
-
     <!-- Background playback: foreground service + its notification (Android 13+). -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
@@ -51,11 +48,6 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.VixPlayNative">
-
-        <!-- AdMob application ID (required by the Google Mobile Ads SDK). -->
-        <meta-data
-            android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-2601730814150494~5767568970" />
 
         <!-- Cast SDK: receiver app id + session options (Default Media Receiver, no registration). -->
         <meta-data
